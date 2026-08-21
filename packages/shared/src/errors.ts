@@ -1,0 +1,180 @@
+/**
+ * Hata sözleşmesi. TEK KAYNAK.
+ *
+ * PLAN.md D-2.2: sunucu SABİT bir `code` döner, kullanıcıya gösterilen Türkçe
+ * metin İSTEMCİDE üretilir.
+ *
+ *   { "code": "INSUFFICIENT_STOCK",         // makine okur, asla değişmez
+ *     "message": "qty 5 > available 3",     // İngilizce, sadece log
+ *     "details": { "available": 3, "requested": 5 } }
+ *
+ * Sunucu Türkçe metin dönseydi metni değiştirmek için deploy gerekirdi ve
+ * mobil uygulama kendi diline çeviremezdi. `message` ASLA doğrudan ekrana
+ * basılmaz.
+ *
+ * `retryable` alanı outbox durum makinesini besler (PLAN.md Bölüm 2):
+ *
+ *   retryable: true   → [sending] → [pending], backoff ile tekrar dene
+ *   retryable: false  → [sending] → [rejected], kullanıcıya göster
+ *
+ * Bu ayrımı istemcide "status >= 500 mü" diye tahmin etmek yerine burada
+ * açıkça yazmak, açık olanı zekice olana tercih etme ilkesi.
+ */
+
+export type ErrorDetails = Record<string, unknown>
+
+export interface ErrorMeta {
+  http: number
+  /** Outbox tekrar denemeli mi, yoksa kullanıcıya mı sormalı. */
+  retryable: boolean
+  /** Kullanıcıya gösterilecek Türkçe metin. */
+  tr: (d: ErrorDetails) => string
+}
+
+export const ERROR_CODES = {
+  // --- İş kuralı: tekrar denemek işe yaramaz, kullanıcı müdahalesi gerek ---
+  BARCODE_UNKNOWN: {
+    http: 404,
+    retryable: false,
+    tr: () => 'Bu barkod sistemde tanımlı değil',
+  },
+  PRODUCT_ARCHIVED: {
+    http: 409,
+    retryable: false,
+    tr: (d) => `"${d.name ?? 'Ürün'}" arşivde, hareket yazılamaz`,
+  },
+  INSUFFICIENT_STOCK: {
+    http: 409,
+    retryable: false,
+    tr: (d) => `Elde ${d.available} adet var, ${d.requested} adet çıkışı yapılamaz`,
+  },
+  INVALID_QUANTITY: {
+    http: 400,
+    retryable: false,
+    tr: () => 'Miktar sıfırdan büyük bir sayı olmalı',
+  },
+  VALIDATION_FAILED: {
+    http: 400,
+    retryable: false,
+    tr: () => 'Girilen bilgilerde hata var',
+  },
+  FORBIDDEN: {
+    http: 403,
+    retryable: false,
+    tr: () => 'Bu işlem için yetkiniz yok',
+  },
+  NOT_FOUND: {
+    http: 404,
+    retryable: false,
+    tr: () => 'Kayıt bulunamadı',
+  },
+
+  // --- Şeffaf: kullanıcı hiçbir şey görmez, doğru davranış budur ---
+  DUPLICATE_MOVEMENT: {
+    http: 200,
+    retryable: false,
+    tr: () => '', // gösterilmez: aynı kayıt zaten işlenmiş
+  },
+
+  // --- Geçici: tekrar denenebilir ---
+  POOL_EXHAUSTED: {
+    http: 503,
+    retryable: true,
+    tr: () => 'Sistem yoğun, tekrar deneniyor',
+  },
+  SERIALIZATION_FAILURE: {
+    http: 503,
+    retryable: true,
+    tr: () => 'Sistem yoğun, tekrar deneniyor',
+  },
+  SERVER_ERROR: {
+    http: 500,
+    retryable: true,
+    tr: () => 'Beklenmeyen bir hata oluştu, tekrar deneniyor',
+  },
+
+  // --- Oturum ve sürüm ---
+  TOKEN_EXPIRED: {
+    http: 401,
+    retryable: false, // önce yenile, sonra tekrar dene: özel akış
+    tr: () => 'Oturum süresi doldu, tekrar giriş yapın',
+  },
+  CLIENT_TOO_OLD: {
+    http: 426,
+    retryable: false,
+    tr: () => 'Uygulamanın yeni sürümü gerekli',
+  },
+
+  // --- Rapor ve donanım ---
+  EXPORT_TOO_LARGE: {
+    http: 413,
+    retryable: false,
+    tr: () => 'Rapor çok büyük, arka planda hazırlanıp e-posta ile gönderilecek',
+  },
+  PRINTER_UNAVAILABLE: {
+    http: 503,
+    retryable: false,
+    tr: () => 'Yazıcıya ulaşılamadı, PDF olarak indirebilirsiniz',
+  },
+  MAIL_DELIVERY_FAILED: {
+    http: 502,
+    retryable: true,
+    tr: () => 'E-posta gönderilemedi',
+  },
+} as const satisfies Record<string, ErrorMeta>
+
+export type ErrorCode = keyof typeof ERROR_CODES
+
+export interface ApiErrorBody {
+  code: ErrorCode
+  /** İngilizce, sadece log ve hata ayıklama. Ekrana basılmaz. */
+  message: string
+  details?: ErrorDetails
+}
+
+/**
+ * Sunucuda fırlatılan, adlandırılmış hata.
+ * PLAN.md kuralı: genel `catch (e)` yasak, her istisna adıyla yakalanır.
+ */
+export class AppError extends Error {
+  readonly code: ErrorCode
+  readonly details: ErrorDetails
+
+  constructor(code: ErrorCode, message: string, details: ErrorDetails = {}) {
+    super(message)
+    this.name = 'AppError'
+    this.code = code
+    this.details = details
+  }
+
+  get http(): number {
+    return ERROR_CODES[this.code].http
+  }
+
+  toBody(): ApiErrorBody {
+    return { code: this.code, message: this.message, details: this.details }
+  }
+}
+
+/**
+ * İstemci tarafı: hata kodunu kullanıcıya gösterilecek Türkçe metne çevirir.
+ *
+ * Parametre bilerek `string`, `ErrorCode` değil. Sunucu, istemcinin
+ * tanımadığı yeni bir kod gönderebilir (eski mobil sürüm, yeni sunucu).
+ * Tip sistemi bunu göremez, çalışma zamanı görür.
+ */
+export function errorText(code: string, details: ErrorDetails = {}): string {
+  const meta = (ERROR_CODES as Record<string, ErrorMeta | undefined>)[code]
+  if (!meta) return 'Beklenmeyen bir hata oluştu'
+  return meta.tr(details)
+}
+
+/**
+ * Outbox: bu hata tekrar denenmeli mi, yoksa kullanıcıya mı sorulmalı.
+ * Tanınmayan kod için varsayılan `true`: bilmediğimiz bir hatada kaydı
+ * atmaktansa tekrar denemek daha güvenli. Veri kaybetmemek önceliklidir.
+ */
+export function isRetryable(code: string): boolean {
+  const meta = (ERROR_CODES as Record<string, ErrorMeta | undefined>)[code]
+  return meta?.retryable ?? true
+}

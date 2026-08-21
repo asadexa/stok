@@ -1,0 +1,27 @@
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: stok-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: stok
+      # Türkçe sıralama ve karşılaştırma. Arama normalizasyonu buna
+      # güvenmiyor (bkz. PLAN.md D-4.1, tr_norm), ama ORDER BY için doğru.
+      LANG: tr_TR.utf8
+    ports:
+      # 5433: yerel bir Postgres kurulumuyla çakışmamak için.
+      # Bağlantı dizesi .env.example içinde.
+      - '5433:5432'
+    volumes:
+      - stok_pgdata:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d stok']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  stok_pgdata:

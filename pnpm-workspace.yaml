@@ -1,0 +1,7 @@
+packages:
+  - 'apps/*'
+  - 'packages/*'
+# esbuild postinstall'da kendi platform binary'sini kuruyor. Vitest'in
+# bağımlılığı; build script'i çalışmazsa test koşmaz.
+allowBuilds:
+  esbuild: true
