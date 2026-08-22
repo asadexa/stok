@@ -16,12 +16,15 @@
     "@stok/db": "workspace:*",
     "@stok/shared": "workspace:*",
     "drizzle-orm": "^0.44.0",
+    "exceljs": "^4.4.0",
     "jose": "^6.2.9",
+    "nodemailer": "^9.0.5",
     "postgres": "^3.4.5",
     "zod": "^3.24.1"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
+    "@types/nodemailer": "^8.0.1",
     "dotenv": "^16.4.7",
     "typescript": "^5.7.3",
     "vitest": "^3.0.5"

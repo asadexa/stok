@@ -1,9 +1,13 @@
 import {
   AUTH_ATTEMPT_SCOPE_VALUES,
+  JOB_KIND_VALUES,
+  JOB_STATUS_VALUES,
   MOVEMENT_REASON_VALUES,
   ROLE_VALUES,
   UNIT_VALUES,
   authScopesCheckConstraint,
+  jobKindsCheckConstraint,
+  jobStatusesCheckConstraint,
   reasonsCheckConstraint,
   rolesCheckConstraint,
   unitsCheckConstraint,
@@ -86,6 +90,18 @@ describe('DB CHECK constraint kod ile senkron', () => {
     expect(valuesIn(def!)).toEqual([...AUTH_ATTEMPT_SCOPE_VALUES].sort())
   })
 
+  it('jobs_kind_ck ve jobs_status_ck kod ile senkron', async () => {
+    // Yeni bir iş türü eklenip migration üretilmezse, uygulama işi
+    // kuyruğa almaya çalışır ve 23514 ile patlar — kullanıcı 500 görür.
+    const kinds = await constraintDefinition('jobs_kind_ck')
+    expect(kinds).toBeDefined()
+    expect(valuesIn(kinds!)).toEqual([...JOB_KIND_VALUES].sort())
+
+    const statuses = await constraintDefinition('jobs_status_ck')
+    expect(statuses).toBeDefined()
+    expect(valuesIn(statuses!)).toEqual([...JOB_STATUS_VALUES].sort())
+  })
+
   it('constraint üreticileri beklenen SQL metnini yazıyor', () => {
     // Üreticinin kendisi de sınanmalı: schema.ts bunu sql.raw ile
     // gömüyor, bozuk bir metin migration üretimine kadar fark edilmezdi.
@@ -95,6 +111,10 @@ describe('DB CHECK constraint kod ile senkron', () => {
     expect(authScopesCheckConstraint('scope')).toBe(
       "scope IN ('LOGIN_EMAIL', 'LOGIN_IP', 'PIN')",
     )
+    expect(jobStatusesCheckConstraint('status')).toBe(
+      "status IN ('QUEUED', 'RUNNING', 'SUCCEEDED', 'FAILED')",
+    )
+    expect(jobKindsCheckConstraint('kind')).toContain("kind IN ('STOCK_EXPORT'")
   })
 })
 

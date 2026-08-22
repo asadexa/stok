@@ -10,8 +10,8 @@ import {
 import { type Db, appDb, hashSecret, users, verifySecret, withTenant } from '@stok/db'
 import { eq, sql } from 'drizzle-orm'
 import { SignJWT, jwtVerify } from 'jose'
-import type { z } from 'zod'
 import { type Actor, requirePermission } from './authz.js'
+import { parseOrThrow } from './validate.js'
 import {
   LOGIN_EMAIL_POLICY,
   LOGIN_IP_POLICY,
@@ -508,19 +508,6 @@ export async function revokeSessions(
  */
 function defaultDb(): Db {
   return appDb()
-}
-
-/** `createMovement` ile aynı doğrulama hatası biçimi. */
-function parseOrThrow<T extends z.ZodTypeAny>(schema: T, raw: unknown): z.infer<T> {
-  const parsed = schema.safeParse(raw)
-  if (parsed.success) return parsed.data
-  const issues = parsed.error.issues.map((i) => ({
-    path: i.path.join('.'),
-    message: i.message,
-  }))
-  throw new AppError('VALIDATION_FAILED', issues.map((i) => `${i.path}: ${i.message}`).join('; '), {
-    issues,
-  })
 }
 
 /** Mobil istemci yenileme zamanlamasını bu sabitlere göre kurar. */

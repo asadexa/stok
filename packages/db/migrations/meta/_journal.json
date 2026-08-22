@@ -43,6 +43,13 @@
       "when": 1787388295000,
       "tag": "0005_auth_attempts",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1787389230167,
+      "tag": "0006_background_jobs",
+      "breakpoints": true
     }
   ]
 }

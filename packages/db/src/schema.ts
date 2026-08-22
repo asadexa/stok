@@ -1,4 +1,10 @@
-import { reasonsCheckConstraint, rolesCheckConstraint, unitsCheckConstraint } from '@stok/shared'
+import {
+  jobKindsCheckConstraint,
+  jobStatusesCheckConstraint,
+  reasonsCheckConstraint,
+  rolesCheckConstraint,
+  unitsCheckConstraint,
+} from '@stok/shared'
 import { sql } from 'drizzle-orm'
 import {
   type AnyPgColumn,
@@ -6,6 +12,7 @@ import {
   check,
   index,
   integer,
+  jsonb,
   numeric,
   pgTable,
   primaryKey,
@@ -284,6 +291,73 @@ export const currentStock = pgTable(
   ],
 )
 
+/**
+ * ============================================================================
+ * ARKA PLAN İŞLERİ (T14 / T17)
+ *
+ * İki kritik açığın ortak temeli. Kayıt KALICI ve tenant kapsamlı:
+ * admin, kendi işletmesinin başarısız gün sonu raporunu panelde görüyor.
+ * Log'a yazmak yetmezdi — G4'ün tanımı zaten "kimse fark etmez".
+ *
+ * NOT: `auth_attempts` (T51) bilerek bunun DIŞINDA; o tablo kimlik
+ * doğrulanmadan önce yazılıyor ve tenant'a bağlanamıyor.
+ * ============================================================================
+ */
+export const backgroundJobs = pgTable(
+  'background_jobs',
+  {
+    id: pk(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
+    kind: text('kind').notNull(),
+    status: text('status').notNull().default('QUEUED'),
+    /** İşin girdisi: tarih aralığı, filtreler. */
+    params: jsonb('params').$type<Record<string, unknown>>().notNull().default({}),
+    /** Kim istedi. Cron işlerinde NULL: sahibi sistem. */
+    requestedBy: uuid('requested_by').references(() => users.id),
+    /** Sonucun gideceği adres. Cron raporlarında da dolu. */
+    notifyEmail: text('notify_email'),
+    attempts: integer('attempts').notNull().default(0),
+    maxAttempts: integer('max_attempts').notNull().default(2),
+    /**
+     * Hata KODU ayrı saklanıyor: metin insan içindir, kod makine içindir.
+     * Admin paneli "e-posta gönderilemedi" metnini koddan üretiyor
+     * (D-2.2), yani sunucu metnini değiştirmek deploy gerektirmiyor.
+     */
+    lastErrorCode: text('last_error_code'),
+    lastErrorMessage: text('last_error_message'),
+    result: jsonb('result').$type<Record<string, unknown>>(),
+    /**
+     * Idempotency. "Cron iki kez çalıştı" uç durumu (PLAN.md Bölüm 5):
+     * aynı gün için ikinci bir gün sonu raporu oluşturulamaz.
+     */
+    dedupeKey: text('dedupe_key'),
+    /**
+     * Bir sonraki denemenin en erken zamanı. Başarısız iş HEMEN yeniden
+     * denenmemeli: bozuk bir SMTP sunucusuna saniyeler içinde ikinci kez
+     * bağlanmak, tek tekrar hakkını hiçbir şey değişmeden harcamak olurdu.
+     * Gecikme, geçici arızaya düzelme fırsatı veriyor.
+     */
+    nextAttemptAt: timestamp('next_attempt_at', { withTimezone: true }),
+    createdAt: createdAt(),
+    startedAt: timestamp('started_at', { withTimezone: true }),
+    finishedAt: timestamp('finished_at', { withTimezone: true }),
+  },
+  (t) => [
+    // Kuyruktan iş çekme sorgusu.
+    index('jobs_tenant_status_idx').on(t.tenantId, t.status, t.createdAt),
+    // Admin panelindeki "başarısız işler" listesi.
+    index('jobs_tenant_created_idx').on(t.tenantId, t.createdAt.desc()),
+    uniqueIndex('jobs_tenant_dedupe_uq')
+      .on(t.tenantId, t.dedupeKey)
+      .where(sql`dedupe_key IS NOT NULL`),
+    check('jobs_kind_ck', sql.raw(jobKindsCheckConstraint('kind'))),
+    check('jobs_status_ck', sql.raw(jobStatusesCheckConstraint('status'))),
+    check('jobs_attempts_ck', sql`attempts >= 0 AND attempts <= max_attempts`),
+  ],
+)
+
 export const schema = {
   tenants,
   users,
@@ -292,4 +366,5 @@ export const schema = {
   productBarcodes,
   stockMovements,
   currentStock,
+  backgroundJobs,
 }

@@ -159,3 +159,33 @@ export const listMovementsSchema = z.object({
 })
 
 export type ListMovementsInput = z.infer<typeof listMovementsSchema>
+
+/**
+ * ============================================================================
+ * EXPORT (T14)
+ *
+ * `limit`/`offset` YOK: export'un tanımı "hepsi". Sayfalama koymak,
+ * kullanıcıya eksik bir raporu tam sanarak vermek olurdu. Boyut kontrolü
+ * sayfalama ile değil, eşik + arka plan işi ile yapılıyor (D-4.2).
+ * ============================================================================
+ */
+
+export const exportMovementsSchema = z.object({
+  productId: z.string().uuid().optional(),
+  userId: z.string().uuid().optional(),
+  reason: reasonEnum.optional(),
+  from: z.string().datetime({ offset: true }).optional(),
+  to: z.string().datetime({ offset: true }).optional(),
+})
+
+export type ExportMovementsInput = z.infer<typeof exportMovementsSchema>
+
+export const exportStockSchema = z.object({
+  /** Arşivlenmiş ürünler varsayılan olarak HARİÇ: rapor bugünün stoğu. */
+  includeArchived: z.boolean().default(false),
+  /** Sadece kritik seviyenin altındakiler. Sipariş listesi çıkarmak için. */
+  onlyCritical: z.boolean().default(false),
+  category: z.string().trim().max(100).optional(),
+})
+
+export type ExportStockInput = z.infer<typeof exportStockSchema>

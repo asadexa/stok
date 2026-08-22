@@ -21,6 +21,7 @@ import {
 } from '@stok/db'
 import { and, desc, eq, gte, lte, sql } from 'drizzle-orm'
 import { type Actor, movementUserScope, redactPricesAll, requirePermission } from './authz.js'
+import { issuesOf, parseOrThrow, validationError } from './validate.js'
 import { formatScaled, multiplyScaled, parseScaled, scaledFromNumber, scaledToNumber } from './numeric.js'
 
 /**
@@ -98,11 +99,11 @@ function parseInput(raw: unknown): CreateMovementInput {
   const parsed = createMovementSchema.safeParse(raw)
   if (parsed.success) return parsed.data
 
-  const issues = parsed.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message }))
+  const issues = issuesOf(parsed.error)
   // Miktar hatası kendi koduna sahip: kullanıcıya "girilen bilgilerde hata
   // var" yerine "miktar sıfırdan büyük olmalı" gösterilebilsin.
-  const code = issues.every((i) => i.path === 'qty') ? 'INVALID_QUANTITY' : 'VALIDATION_FAILED'
-  throw new AppError(code, issues.map((i) => `${i.path}: ${i.message}`).join('; '), { issues })
+  const onlyQty = issues.every((i) => i.path === 'qty')
+  throw validationError(issues, onlyQty ? 'INVALID_QUANTITY' : 'VALIDATION_FAILED')
 }
 
 async function writeMovement(
@@ -433,13 +434,7 @@ export async function listMovements(
   raw: unknown = {},
   options: CreateMovementOptions = {},
 ): Promise<MovementRow[]> {
-  const parsed = listMovementsSchema.safeParse(raw)
-  if (!parsed.success) {
-    throw new AppError('VALIDATION_FAILED', parsed.error.issues.map((i) => i.message).join('; '), {
-      issues: parsed.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })),
-    })
-  }
-  const q = parsed.data
+  const q = parseOrThrow(listMovementsSchema, raw)
   // Yetki kontrolü burada: movementUserScope, read:all olmayan role
   // read:own arar ve ikisi de yoksa 403 fırlatır.
   const scopedUserId = movementUserScope(actor, q.userId)

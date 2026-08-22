@@ -58,8 +58,11 @@ Barkodsuz ürün sisteme giremez, sisteme girmeyen ürün stokta görünmez.
 Üretilen iç kodun GS1 standardı olmadığını, dışarıya satılan üründe kullanılamayacağını
 kullanıcıya anlatmak gerek.
 
-**Bağlam:** PLAN.md KRİTİK AÇIK G3 (yazıcı hatası sessiz) bu işle birlikte kapanır. T16'da
-timeout ve PDF'e düşme zaten planlanmış, bu madde asıl basma işlevi.
+**Bağlam:** PLAN.md KRİTİK AÇIK G3 (yazıcı hatası sessiz) bu işle birlikte kapanır.
+**T16 (timeout + PDF'e düşme) BİLEREK bu maddeye bağlandı ve v1'de yapılmadı:** G3'ün
+kullanıcıya görünen hali "buton takılı kalır", ama o buton henüz yok. Var olmayan bir
+taşıyıcının etrafına timeout sarmalayıcısı yazmak test edilemeyen ve bu iş geldiğinde
+büyük ihtimalle değişecek kod üretirdi. İkisi birlikte yapılmalı.
 Başlangıç noktası: önce sadece A4 PDF (donanımsız, test edilebilir), termal yazıcı sonra.
 
 **Efor:** M (human ~3 gün / CC ~3 saat)

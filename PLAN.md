@@ -430,19 +430,19 @@ birbirinin yedeği.
 | `TokenExpired` | E | Refresh dene, olmazsa login | Giriş ekranı, **kuyruk korunur** |
 | `ServerError` | E | Outbox'ta tut, backoff | Sarı rozet |
 | `ClientTooOld` | E | Zorunlu güncelleme ekranı | "Uygulamayı güncelleyin" + store linki |
-| `ExportTooLarge` | **H ← AÇIK** | - | 500 hatası ← KÖTÜ |
-| Türkçe karakter bozulması | **H ← AÇIK** | - | Excel'de "Kirmizi Defter" ← SESSİZ HATA |
+| `ExportTooLarge` | E | 413 + "tarih aralığını daraltın"; eşik üstü kuyruğa | "Rapor hazırlanıyor, e-posta ile gelecek" |
+| Türkçe karakter bozulması | E | Fixture testi her koşuda doğruluyor | Doğru metin |
 | `PrinterUnavailable` | **H ← AÇIK** | - | Buton takılı kalır ← KÖTÜ |
-| `MailDeliveryFailed` | **H ← AÇIK** | - | Kimse fark etmez ← SESSİZ HATA |
+| `MailDeliveryFailed` | E | 1 tekrar (60 sn sonra), sonra iş FAILED | Admin panelinde kalıcı uyarı |
 
 ### KRİTİK AÇIKLAR ve kapatma planı
 
 | # | Açık | Kapatma |
 |---|---|---|
-| G1 | `ExportTooLarge` yakalanmıyor | Stream export + 50k satır üstünde "tarih aralığı daraltın" uyarısı |
-| G2 | Türkçe karakter sessizce bozuluyor | exceljs UTF-8 + `Ğ Ü Ş İ Ö Ç ğ ü ş ı ö ç` içeren fixture testi |
-| G3 | Yazıcı hatası sessiz | Timeout + kullanıcıya "Yazıcıya ulaşılamadı" + PDF'e düşme |
-| G4 | Cron e-posta hatası sessiz | Hata durumunda admin paneline kalıcı uyarı + 1 kez tekrar |
+| G1 | ~~`ExportTooLarge` yakalanmıyor~~ **KAPANDI (T14)** | 20k altı senkron, üstü kuyruk + e-posta, 200k üstü "tarih aralığını daraltın" |
+| G2 | ~~Türkçe karakter sessizce bozuluyor~~ **KAPANDI (T15)** | xlsx (UTF-8 XML), üretilen dosya geri okunup karşılaştırılıyor |
+| G3 | Yazıcı hatası sessiz | **AÇIK.** TODOS E5 ile birlikte: timeout + "Yazıcıya ulaşılamadı" + PDF'e düşme |
+| G4 | ~~Cron e-posta hatası sessiz~~ **KAPANDI (T17)** | `background_jobs` satırı FAILED kalıyor, admin paneli okuyor, 1 tekrar |
 
 **Kural:** `catch (e)` genel yakalama yasak. Her istisna adıyla yakalanır. Yakalanan her hata
 ya tekrar dener, ya kullanıcıya görünür şekilde bozulur, ya da bağlam ekleyip yeniden fırlatır.
@@ -837,13 +837,18 @@ Depo yazılımı **okunaklı tablo** ve **büyük net sayı** ister. Süsleme, g
 
 ## MEVCUT DURUM
 
-Son güncelleme: 2026-08-22. **Faz 0-2 tamamlandı** (T1-T13), Faz 8'den
+Son güncelleme: 2026-08-22. **Faz 0-3 tamamlandı** (T1-T15, T17), Faz 8'den
 T44/T46/T47/T50 ve güvenlik görevi T51 de bitti.
+
+**Dört kritik açıktan üçü kapandı:** G1 (Excel boyutu), G2 (Türkçe karakter),
+G4 (cron mail hatası). G3 (yazıcı) TODOS E5'i bekliyor — basılacak bir şey
+olmadan timeout sarmalayıcısı yazmak test edilemez kod üretirdi.
 
 ```
 packages/shared   sebep kodları, roller, birimler, zod şemaları, hata sözleşmesi
 packages/db       Drizzle şeması, migration'lar, RLS, withTenant(), seed, test altyapısı
-packages/core     createMovement() TEK YAZMA KAPISI, auth + rol matrisi, NUMERIC
+packages/core     createMovement() TEK YAZMA KAPISI, auth + rol matrisi,
+                  iş kuyruğu, Excel export, NUMERIC aritmetiği
 apps/web          henüz yok (Faz 4)
 apps/mobile       henüz yok (Faz 5)
 ```
@@ -852,11 +857,13 @@ apps/mobile       henüz yok (Faz 5)
 servis katmanı `apps/web` içinde düşünülmüştü. Ayrı pakete alındı: tek yazma kapısının
 Next.js olmadan test edilebilmesi gerekiyor ve cron işleri de aynı kapıyı çağıracak.
 
-**Test durumu:** 270 test yeşil (shared 54, db 45, core 171). Entegrasyon testleri gerçek
+**Test durumu:** 316 test yeşil (shared 54, db 46, core 216). Entegrasyon testleri gerçek
 PostgreSQL'e koşuyor; her paket kendi test veritabanını sıfırdan kuruyor.
 
-**Açık uç:** `auth_prune_attempts()` yazıldı ama çağıran yok. T34 (gün sonu cron'u)
-bunu günlük çalıştırmalı, yoksa `auth_attempts` tablosu yavaşça büyür.
+**Açık uçlar (ikisi de T34'e bağlı):**
+- `auth_prune_attempts()` yazıldı ama çağıran yok; `auth_attempts` yavaşça büyür.
+- `runQueuedJobs()` yazıldı ama çağıran cron yok; kuyruğa alınan export işleri
+  bir işçi çalıştırılana kadar QUEUED bekler.
 
 Yeniden kullanılabilecek **sistem** var (ERPNext, InvenTree) ve D1'de bilinçli olarak
 sıfırdan yazma seçildi. Gerekçe: gerçek fark Türkçe 5 dakikada öğrenilen arayüz ve
@@ -884,12 +891,12 @@ zamanla gelir.
 | syncOutbox | Ağ yok | E | E | E (rozet) | E |
 | syncOutbox | Token süresi doldu | E | E | E | E |
 | syncOutbox | Uygulama eski | E | E | E | E |
-| exportExcel | Çok büyük | **H** | H | **Sessiz 500** | H | ← **KRİTİK AÇIK G1** |
-| exportExcel | Türkçe karakter | **H** | H | **Sessiz bozulma** | H | ← **KRİTİK AÇIK G2** |
+| exportExcel | Çok büyük | E | E | E (kuyruk + e-posta) | E | ← G1 KAPANDI (T14) |
+| exportExcel | Türkçe karakter | E | E | E (bozulmuyor) | E | ← G2 KAPANDI (T15) |
 | printBarcode | Yazıcı yok | **H** | H | **Takılı buton** | H | ← **KRİTİK AÇIK G3** |
-| dailyReportCron | Mail hatası | **H** | H | **Sessiz** | H | ← **KRİTİK AÇIK G4** |
+| dailyReportCron | Mail hatası | E | E | E (admin paneli) | E | ← G4 KAPANDI (T17) |
 
-**4 kritik açık.** Dördü de v1 uygulama listesinde (T14-T17) kapatılıyor.
+**4 kritik açıktan 3'ü kapandı** (T14, T15, T17). G3 (yazıcı) TODOS E5'i bekliyor.
 
 ---
 
@@ -945,13 +952,20 @@ Bu incelemenin bulgularından türetildi. Efor: insan ekibi / Claude Code.
 
 ### Faz 3: Kritik açıkların kapatılması
 
-- [ ] **T14 (P1, human: ~4sa / CC: ~30dk)** - export - Excel: 20k satır altı stream indirme, üstü arka plan işi + e-posta (T34 altyapısı)
+G1, G2 ve G4 kapandı. G3 (yazıcı) TODOS E5'e bağlı, aşağıda gerekçesi yazılı.
+
+- [x] **T14 (P1, human: ~4sa / CC: ~30dk)** - export - Excel: 20k satır altı stream indirme, üstü arka plan işi + e-posta (T34 altyapısı)
   - Kaynak: KRİTİK AÇIK G1 + D-4.2 (serverless zaman aşımı)
-- [ ] **T15 (P1, human: ~2sa / CC: ~15dk)** - export - Türkçe karakter fixture testi (`Ğ Ü Ş İ Ö Ç ğ ü ş ı ö ç`) + tarih/sayı formatı
+- [x] **T15 (P1, human: ~2sa / CC: ~15dk)** - export - Türkçe karakter fixture testi (`Ğ Ü Ş İ Ö Ç ğ ü ş ı ö ç`) + tarih/sayı formatı
   - Kaynak: KRİTİK AÇIK G2. Sessiz bozulma en kötü hata tipi
 - [ ] **T16 (P2, human: ~2sa / CC: ~15dk)** - print - Yazıcı timeout + PDF'e düşme
   - Kaynak: KRİTİK AÇIK G3
-- [ ] **T17 (P1, human: ~2sa / CC: ~15dk)** - cron - Rapor gönderim hatası admin paneline düşer + 1 tekrar
+  - **BEKLİYOR — bilinçli.** G3'ün kullanıcıya görünen hali "buton takılı kalır",
+    ama o buton henüz yok: etiket üretme ve basma işini TODOS E5 taşıyor ve v1
+    kapsamı dışında. Var olmayan bir taşıyıcının etrafına timeout sarmalayıcısı
+    yazmak, test edilemeyen ve E5 geldiğinde büyük ihtimalle değişecek bir kod
+    üretirdi. **E5 ile BİRLİKTE yapılmalı**, ondan önce değil.
+- [x] **T17 (P1, human: ~2sa / CC: ~15dk)** - cron - Rapor gönderim hatası admin paneline düşer + 1 tekrar
   - Kaynak: KRİTİK AÇIK G4
 
 ### Faz 4: Web arayüzü
