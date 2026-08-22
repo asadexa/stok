@@ -27,7 +27,16 @@ BEGIN
 END
 $$;
 
-GRANT CONNECT ON DATABASE stok TO stok_app;
+-- GRANT CONNECT veritabanı adını sabit yazmak zorunda; current_database()
+-- ile dinamik veriyoruz ki aynı dosya test veritabanlarına da uygulanabilsin
+-- (packages/db/src/testing.ts bu dosyayı aynen çalıştırır). Kurulum kodunun
+-- tek kopyası olması, testin ürünle aynı yapılandırmayı sınamasını sağlar.
+DO $$
+BEGIN
+  EXECUTE format('GRANT CONNECT ON DATABASE %I TO stok_app', current_database());
+END
+$$;
+
 GRANT USAGE  ON SCHEMA public  TO stok_app;
 
 -- Bundan sonra 'postgres' tarafından public şemasında oluşturulan her tablo,

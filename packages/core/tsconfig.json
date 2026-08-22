@@ -16,5 +16,5 @@
     "forceConsistentCasingInFileNames": true,
     "types": ["node"]
   },
-  "include": ["src", "drizzle.config.ts", "vitest.config.ts"]
+  "include": ["src", "vitest.config.ts"]
 }

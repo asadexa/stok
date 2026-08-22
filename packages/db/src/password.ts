@@ -1,7 +1,15 @@
-import { randomBytes, scrypt as scryptCb, timingSafeEqual } from 'node:crypto'
+import { type ScryptOptions, randomBytes, scrypt as scryptCb, timingSafeEqual } from 'node:crypto'
 import { promisify } from 'node:util'
 
-const scrypt = promisify(scryptCb)
+// promisify, scrypt'in dört argümanlı (options'lı) aşırı yüklemesini
+// göremiyor ve üç argümanlı imzayı seçiyor. Maliyet parametrelerini
+// vermek zorunlu olduğu için imzayı elle yazıyoruz.
+const scrypt = promisify(scryptCb) as (
+  password: string,
+  salt: Buffer,
+  keylen: number,
+  options: ScryptOptions,
+) => Promise<Buffer>
 
 /**
  * Parola ve PIN saklama.

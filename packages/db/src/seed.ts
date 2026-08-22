@@ -6,7 +6,6 @@ import { toDelta } from '@stok/shared'
 import { adminDbUnsafe } from './client.js'
 import { hashSecret } from './password.js'
 import {
-  currentStock,
   locations,
   productBarcodes,
   products,

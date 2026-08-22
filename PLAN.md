@@ -837,16 +837,26 @@ Depo yazılımı **okunaklı tablo** ve **büyük net sayı** ister. Süsleme, g
 
 ## MEVCUT DURUM
 
-`C:\stok` boş, git repo değil, kod yok. İlk komut:
+Son güncelleme: 2026-08-22. **Faz 0-2 tamamlandı** (T1-T12), Faz 8'den T44/T46/T50 de bitti.
 
 ```
-git init && git commit --allow-empty -m "chore: proje başlangıcı"
+packages/shared   sebep kodları, roller, birimler, zod şemaları, hata sözleşmesi
+packages/db       Drizzle şeması, migration'lar, RLS, withTenant(), seed, test altyapısı
+packages/core     createMovement() TEK YAZMA KAPISI + NUMERIC aritmetiği
+apps/web          henüz yok (Faz 4)
+apps/mobile       henüz yok (Faz 5)
 ```
 
-Yeniden kullanılabilecek mevcut kod yok. Yeniden kullanılabilecek **sistem** var (ERPNext,
-InvenTree) ve D1'de bilinçli olarak sıfırdan yazma seçildi. Gerekçe: gerçek fark Türkçe
-5 dakikada öğrenilen arayüz ve telefonun el terminaline dönüşmesi. Bu ikisi hazır sistemlerde
-yok, geri kalan her şey var.
+`packages/core` mimari diyagramda ayrı bir kutu olarak görünmüyor çünkü plan yazılırken
+servis katmanı `apps/web` içinde düşünülmüştü. Ayrı pakete alındı: tek yazma kapısının
+Next.js olmadan test edilebilmesi gerekiyor ve cron işleri de aynı kapıyı çağıracak.
+
+**Test durumu:** 161 test yeşil (shared 54, db 39, core 68). Entegrasyon testleri gerçek
+PostgreSQL'e koşuyor; her paket kendi test veritabanını sıfırdan kuruyor.
+
+Yeniden kullanılabilecek **sistem** var (ERPNext, InvenTree) ve D1'de bilinçli olarak
+sıfırdan yazma seçildi. Gerekçe: gerçek fark Türkçe 5 dakikada öğrenilen arayüz ve
+telefonun el terminaline dönüşmesi. Bu ikisi hazır sistemlerde yok, geri kalan her şey var.
 
 ---
 
@@ -885,34 +895,34 @@ Bu incelemenin bulgularından türetildi. Efor: insan ekibi / Claude Code.
 
 ### Faz 0: Temel (1. gün)
 
-- [ ] **T1 (P1, human: ~1sa / CC: ~10dk)** - altyapı - Git init, pnpm monorepo iskeleti (`apps/web`, `apps/mobile`, `packages/shared`)
-- [ ] **T2 (P1, human: ~2sa / CC: ~20dk)** - altyapı - Postgres kurulumu (Supabase projesi) + Drizzle bağlantısı + `.env` yönetimi
+- [x] **T1 (P1, human: ~1sa / CC: ~10dk)** - altyapı - Git init, pnpm monorepo iskeleti (`apps/web`, `apps/mobile`, `packages/shared`)
+- [x] **T2 (P1, human: ~2sa / CC: ~20dk)** - altyapı - Postgres kurulumu (Supabase projesi) + Drizzle bağlantısı + `.env` yönetimi
 
 ### Faz 1: Veri modeli (planın kalbi)
 
-- [ ] **T3 (P1, human: ~4sa / CC: ~30dk)** - db - Şema migration'ı: tenants, users, products, product_barcodes, locations, stock_movements, stock_count_*
+- [x] **T3 (P1, human: ~4sa / CC: ~30dk)** - db - Şema migration'ı: tenants, users, products, product_barcodes, locations, stock_movements, stock_count_*
   - Kaynak: Bölüm 1. Miktar `NUMERIC(14,3)`, para `NUMERIC(12,2)`, zaman `timestamptz`
   - Doğrula: `drizzle-kit push` + şema testi
-- [ ] **T4 (P1, human: ~3sa / CC: ~25dk)** - db - `current_stock` projeksiyonu + trigger ile bakım
-- [ ] **T5 (P1, human: ~2sa / CC: ~15dk)** - db - Ledger değiştirilemezliği: `REVOKE UPDATE, DELETE` + trigger
+- [x] **T4 (P1, human: ~3sa / CC: ~25dk)** - db - `current_stock` projeksiyonu + trigger ile bakım
+- [x] **T5 (P1, human: ~2sa / CC: ~15dk)** - db - Ledger değiştirilemezliği: `REVOKE UPDATE, DELETE` + trigger
   - Kaynak: Tehdit S3. Bu olmadan "kim ne yaptı" ekranı hiçbir şey ispat etmez
-- [ ] **T6 (P1, human: ~4sa / CC: ~30dk)** - güvenlik - RLS zorlaması: `app_user` rolü (BYPASSRLS yok), `FORCE ROW LEVEL SECURITY`, tenant politikaları, `withTenant()` yardımcısı
+- [x] **T6 (P1, human: ~4sa / CC: ~30dk)** - güvenlik - RLS zorlaması: `app_user` rolü (BYPASSRLS yok), `FORCE ROW LEVEL SECURITY`, tenant politikaları, `withTenant()` yardımcısı
   - Kaynak: D5, Tehdit S1, S2, S12. RLS yazmak tek başına yetmez; bağlanılan rol politikaları atlayabilir
   - Doğrula: T46 çapraz tenant testi
-- [ ] **T7 (P1, human: ~3sa / CC: ~20dk)** - db - Index'ler + **Türkçe normalizasyon**: `tr_norm()` fonksiyonu, `products.name_norm` generated column, GIN trgm index
+- [x] **T7 (P1, human: ~3sa / CC: ~20dk)** - db - Index'ler + **Türkçe normalizasyon**: `tr_norm()` fonksiyonu, `products.name_norm` generated column, GIN trgm index
   - Kaynak: D-4.1. `unaccent` + `lower()` Türkçe'de collation'a bağlı, güvenilmez
-- [ ] **T8 (P1, human: ~2sa / CC: ~20dk)** - db - Seed script: 200 ürün, 3 kullanıcı, 5000 gerçekçi hareket
+- [x] **T8 (P1, human: ~2sa / CC: ~20dk)** - db - Seed script: 200 ürün, 3 kullanıcı, 5000 gerçekçi hareket
 
 ### Faz 2: Çekirdek servis
 
-- [ ] **T9 (P1, human: ~7sa / CC: ~50dk)** - api - `createMovement()` tek yazma kapısı: validation, idempotency, **`SELECT ... FOR UPDATE` ile atomik stok kontrolü**, ledger insert, projeksiyon, **`qty_multiplier` uygulaması**
+- [x] **T9 (P1, human: ~7sa / CC: ~50dk)** - api - `createMovement()` tek yazma kapısı: validation, idempotency, **`SELECT ... FOR UPDATE` ile atomik stok kontrolü**, ledger insert, projeksiyon, **`qty_multiplier` uygulaması**
   - Kaynak: Bölüm 2 "tek yazma kapısı" + D-1.2 (TOCTOU yarışı) + D7 (koli çarpanı)
   - Doğrula: 40 entegrasyon testi, Bölüm 3'teki her hata yolu, T12 eşzamanlılık
-- [ ] **T10 (P1, human: ~2sa / CC: ~15dk)** - api - Adlandırılmış istisna sınıfları + hata cevap sözleşmesi (`{code, message, details}`)
+- [x] **T10 (P1, human: ~2sa / CC: ~15dk)** - api - Adlandırılmış istisna sınıfları + hata cevap sözleşmesi (`{code, message, details}`)
   - Kaynak: Bölüm 3. Genel `catch` yasak
-- [ ] **T11 (P1, human: ~3sa / CC: ~20dk)** - test - **Invariant testi**: `SUM(movements.delta) == current_stock.qty`, 1000 rastgele hareket
+- [x] **T11 (P1, human: ~3sa / CC: ~20dk)** - test - **Invariant testi**: `SUM(movements.delta) == current_stock.qty`, 1000 rastgele hareket
   - Kaynak: Bölüm 6. Bu geçmiyorsa sistem yalan söylüyor
-- [ ] **T12 (P1, human: ~3sa / CC: ~25dk)** - test - Eşzamanlılık testi: 20 paralel çıkış, elde 10. Negatif yok, kayıp yok
+- [x] **T12 (P1, human: ~3sa / CC: ~25dk)** - test - Eşzamanlılık testi: 20 paralel çıkış, elde 10. Negatif yok, kayıp yok
 - [ ] **T13 (P1, human: ~4sa / CC: ~30dk)** - api - Auth + rol kontrolü (sunucu tarafı), rol matrisi zorlaması
   - Kaynak: Bölüm 4 rol matrisi. Tehdit S6, S7
 
@@ -976,11 +986,11 @@ Bu incelemenin bulgularından türetildi. Efor: insan ekibi / Claude Code.
 - [ ] **T43 (P1, human: ~0.5g / CC: ~30dk)** - deploy - **EAS Update + EAS Build CI/CD**: dev/staging/prod update kanalları, otomatik build, geri alma prosedürü
   - Kaynak: D6. "Mobil geri alma yok" maddesini kapatır, saha riskini 3 günden 5 dakikaya indirir
   - Doğrula: bir güncelleme yayınla, geri al, cihazda doğrula
-- [ ] **T44 (P1, human: ~2sa / CC: ~15dk)** - shared - `packages/shared/reasons.ts` tek kaynak: zod enum, Türkçe etiket eşlemesi, DB CHECK constraint senkron testi
+- [x] **T44 (P1, human: ~2sa / CC: ~15dk)** - shared - `packages/shared/reasons.ts` tek kaynak: zod enum, Türkçe etiket eşlemesi, DB CHECK constraint senkron testi
   - Kaynak: D-2.3, D-2.4. Üç yerde ayrı yazılırsa drift kaçınılmaz
 - [ ] **T45 (P1, human: ~1sa / CC: ~10dk)** - güvenlik - ESLint kuralı: route handler içinde doğrudan `db` kullanımı yasak, sadece `withTenant()`
   - Kaynak: D5. RLS'i insan disiplinine bırakmamak için makine zorlaması
-- [ ] **T46 (P1, human: ~3sa / CC: ~25dk)** - test - **RLS çapraz tenant test seti** (4 test): A→B okuma engelli, A→B yazma engelli, `SET LOCAL` yapılmadan 0 satır, uygulama rolü BYPASSRLS taşımıyor
+- [x] **T46 (P1, human: ~3sa / CC: ~25dk)** - test - **RLS çapraz tenant test seti** (4 test): A→B okuma engelli, A→B yazma engelli, `SET LOCAL` yapılmadan 0 satır, uygulama rolü BYPASSRLS taşımıyor
   - Kaynak: Bölüm 3 test boşluğu. Test edilmeyen güvenlik kontrolü, varlığı bilinmeyen kontroldür
 - [ ] **T47 (P1, human: ~3sa / CC: ~25dk)** - test - Rol matrisi sunucu tarafı testleri (11 satırın her biri)
   - Kaynak: Tehdit S6, S7. Arayüzde butonu gizlemek yetki kontrolü değildir
@@ -988,7 +998,7 @@ Bu incelemenin bulgularından türetildi. Efor: insan ekibi / Claude Code.
   - Kaynak: D8. Cihaz listesi 4 senaryo: arka plana atma, işletim sistemi uygulamayı öldürme, uçak modu, düşük pil
 - [ ] **T49 (P1, human: ~0.5g / CC: ~40dk)** - mobil - Offline ürün önbelleği (okutulan ürünler) + çevrimdışı tanınmayan barkod akışı (`unresolved=true`, senkronda çözüm, bildirim)
   - Kaynak: D9. Çevrimdışı tanınmayan barkod reddedilmez, işaretlenir; reddetmek veriyi kaybetmek olur
-- [ ] **T50 (P2, human: ~2sa / CC: ~15dk)** - istemci - Hata kodu → Türkçe metin eşlemesi (web + mobil ortak, `packages/shared`)
+- [x] **T50 (P2, human: ~2sa / CC: ~15dk)** - istemci - Hata kodu → Türkçe metin eşlemesi (web + mobil ortak, `packages/shared`)
   - Kaynak: D-2.2. Sunucu sabit `code` döner, metin istemcide üretilir
 
 **Toplam:** 50 görev. Human ekip ~8-9 hafta. Claude Code ile ~10-12 gün.
