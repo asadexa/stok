@@ -5,15 +5,7 @@ import type { MovementReason } from '@stok/shared'
 import { toDelta } from '@stok/shared'
 import { adminDbUnsafe } from './client.js'
 import { hashSecret } from './password.js'
-import {
-  currentStock,
-  locations,
-  productBarcodes,
-  products,
-  stockMovements,
-  tenants,
-  users,
-} from './schema.js'
+import { locations, productBarcodes, products, stockMovements, tenants, users } from './schema.js'
 
 config({ path: '../../.env' })
 
@@ -314,6 +306,38 @@ async function main() {
             unitCost: reason === 'PURCHASE' ? (p.purchasePrice as string) : null,
           })
           seq++
+        }
+
+        // Ürünlerin yaklaşık %15'i kritik seviyeye insin.
+        // Gerçek depoda her zaman bitmek üzere olan ürünler vardır ve
+        // kritik stok uyarısı ürünün ana özelliklerinden biri. Seed'de hiç
+        // kritik ürün olmazsa ne demo edilebilir ne de T35 (kritik stok
+        // taraması) gerçek veriyle test edilebilir.
+        if (rng() < 0.15 && running > 1) {
+          const minStock = Number(p.minStock)
+          // Eşiğin biraz altına indir; bir kısmı sıfıra kadar tükensin.
+          const target = rng() < 0.25 ? 0 : Math.max(0, randInt(0, Math.floor(minStock)))
+          let remaining = running - target
+          while (remaining > 0) {
+            const qty = Math.min(remaining, randInt(3, 25))
+            const at = new Date(Date.now() - randInt(0, 20) * DAY - randInt(0, 86_400_000))
+            running -= qty
+            remaining -= qty
+            movementRows.push({
+              id: detUuid(`mv:${spec.key}:${seq}`),
+              tenantId,
+              productId,
+              userId: pick(actors),
+              barcodeId: unitBarcodeByProduct.get(productId),
+              delta: String(-qty),
+              reason: 'SALE',
+              idempotencyKey: `seed:${spec.key}:${seq}`,
+              createdAt: at,
+              clientCreatedAt: at,
+              locationId: p.locationId,
+            })
+            seq++
+          }
         }
       }
 
