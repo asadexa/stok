@@ -16,6 +16,7 @@
     "@stok/db": "workspace:*",
     "@stok/shared": "workspace:*",
     "drizzle-orm": "^0.44.0",
+    "jose": "^6.2.9",
     "postgres": "^3.4.5",
     "zod": "^3.24.1"
   },

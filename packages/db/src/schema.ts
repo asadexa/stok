@@ -5,6 +5,7 @@ import {
   boolean,
   check,
   index,
+  integer,
   numeric,
   pgTable,
   primaryKey,
@@ -71,6 +72,16 @@ export const users = pgTable(
      *  "kim yaptı" bunsuz yalan söyler. */
     pinHash: text('pin_hash'),
     active: boolean('active').notNull().default(true),
+    /**
+     * Uzaktan oturum kapatma (tehdit S5). Bu sayı artınca kullanıcının
+     * dağıtılmış TÜM refresh token'ları geçersiz olur: çalınan telefon,
+     * işten ayrılan çalışan, parola değişikliği.
+     *
+     * Access token kısa ömürlü ve imzadan doğrulanıyor (her istekte
+     * veritabanına gitmemek için); yani iptal en fazla access token
+     * ömrü kadar (15 dk) gecikmeli etki eder. Bilinçli takas.
+     */
+    tokenVersion: integer('token_version').notNull().default(0),
     createdAt: createdAt(),
   },
   (t) => [

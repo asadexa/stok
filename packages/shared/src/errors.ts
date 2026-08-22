@@ -93,6 +93,30 @@ export const ERROR_CODES = {
     tr: () => 'Beklenmeyen bir hata oluştu, tekrar deneniyor',
   },
 
+  // --- Kimlik doğrulama ---
+  INVALID_CREDENTIALS: {
+    http: 401,
+    retryable: false,
+    // Metin BİLEREK "e-posta bulunamadı" demiyor: hangi e-postaların kayıtlı
+    // olduğunu söylemek, kaba kuvvet saldırısına hedef listesi vermektir.
+    tr: () => 'E-posta veya parola hatalı',
+  },
+  ACCOUNT_INACTIVE: {
+    http: 403,
+    retryable: false,
+    tr: () => 'Hesabınız pasif durumda, yöneticinize başvurun',
+  },
+  TENANT_AMBIGUOUS: {
+    http: 409,
+    retryable: false,
+    tr: () => 'Bu e-posta birden fazla işletmede kayıtlı, hangisine gireceğinizi seçin',
+  },
+  TOKEN_INVALID: {
+    http: 401,
+    retryable: false,
+    tr: () => 'Oturum geçersiz, tekrar giriş yapın',
+  },
+
   // --- Oturum ve sürüm ---
   TOKEN_EXPIRED: {
     http: 401,

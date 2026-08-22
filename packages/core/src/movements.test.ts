@@ -9,7 +9,8 @@ import {
   testAppDb,
 } from '@stok/db/testing'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { type Actor, checkStockInvariant, createMovement, getStockQty } from './movements.js'
+import { checkStockInvariant, createMovement, getStockQty } from './movements.js'
+import type { Actor } from './authz.js'
 import { TEST_DB_NAME } from './test/db-name.js'
 
 /**
@@ -197,6 +198,20 @@ describe('createMovement - negatif stok politikası (U1)', () => {
     )
 
     expect(res.newQty).toBe(-4)
+  })
+
+  it('negatif konumdayken GİRİŞ serbest, düzeltme yolu kapanmıyor', async () => {
+    // Ürün -4'te (yukarıdaki test bilerek düşürdü). Mal kabulü yapmak
+    // stoğu gerçeğe yaklaştırıyor; sonuç hâlâ negatif diye reddetmek,
+    // negatife düşmüş bir ürünü düzeltmeyi imkansız kılardı.
+    const p = tenant.products['ISI-001']!
+    const before = await getStockQty(boss, p.id, { db: app.db })
+    expect(before).toBeLessThan(0)
+
+    const res = await call(staff, req({ barcode: p.barcode, qty: 1, reason: 'PURCHASE' }))
+
+    expect(res.newQty).toBe(before + 1)
+    expect(res.newQty).toBeLessThan(0)
   })
 
   it('admin de bayrağı kaldırmadan negatife düşemez', async () => {

@@ -837,12 +837,13 @@ Depo yazılımı **okunaklı tablo** ve **büyük net sayı** ister. Süsleme, g
 
 ## MEVCUT DURUM
 
-Son güncelleme: 2026-08-22. **Faz 0-2 tamamlandı** (T1-T12), Faz 8'den T44/T46/T50 de bitti.
+Son güncelleme: 2026-08-22. **Faz 0-2 tamamlandı** (T1-T13), Faz 8'den
+T44/T46/T47/T50 de bitti.
 
 ```
 packages/shared   sebep kodları, roller, birimler, zod şemaları, hata sözleşmesi
 packages/db       Drizzle şeması, migration'lar, RLS, withTenant(), seed, test altyapısı
-packages/core     createMovement() TEK YAZMA KAPISI + NUMERIC aritmetiği
+packages/core     createMovement() TEK YAZMA KAPISI, auth + rol matrisi, NUMERIC
 apps/web          henüz yok (Faz 4)
 apps/mobile       henüz yok (Faz 5)
 ```
@@ -851,8 +852,11 @@ apps/mobile       henüz yok (Faz 5)
 servis katmanı `apps/web` içinde düşünülmüştü. Ayrı pakete alındı: tek yazma kapısının
 Next.js olmadan test edilebilmesi gerekiyor ve cron işleri de aynı kapıyı çağıracak.
 
-**Test durumu:** 161 test yeşil (shared 54, db 39, core 68). Entegrasyon testleri gerçek
+**Test durumu:** 237 test yeşil (shared 54, db 44, core 139). Entegrasyon testleri gerçek
 PostgreSQL'e koşuyor; her paket kendi test veritabanını sıfırdan kuruyor.
+
+**Bilinen açık:** T51 (giriş kaba kuvvet koruması). Giriş endpoint'i çalışıyor ama
+deneme sayacı yok; tehdit S9 v1 çıkışından önce kapatılmalı.
 
 Yeniden kullanılabilecek **sistem** var (ERPNext, InvenTree) ve D1'de bilinçli olarak
 sıfırdan yazma seçildi. Gerekçe: gerçek fark Türkçe 5 dakikada öğrenilen arayüz ve
@@ -923,8 +927,14 @@ Bu incelemenin bulgularından türetildi. Efor: insan ekibi / Claude Code.
 - [x] **T11 (P1, human: ~3sa / CC: ~20dk)** - test - **Invariant testi**: `SUM(movements.delta) == current_stock.qty`, 1000 rastgele hareket
   - Kaynak: Bölüm 6. Bu geçmiyorsa sistem yalan söylüyor
 - [x] **T12 (P1, human: ~3sa / CC: ~25dk)** - test - Eşzamanlılık testi: 20 paralel çıkış, elde 10. Negatif yok, kayıp yok
-- [ ] **T13 (P1, human: ~4sa / CC: ~30dk)** - api - Auth + rol kontrolü (sunucu tarafı), rol matrisi zorlaması
+- [x] **T13 (P1, human: ~4sa / CC: ~30dk)** - api - Auth + rol kontrolü (sunucu tarafı), rol matrisi zorlaması
   - Kaynak: Bölüm 4 rol matrisi. Tehdit S6, S7
+- [ ] **T51 (P1, human: ~3sa / CC: ~25dk)** - güvenlik - Giriş kaba kuvvet koruması: IP ve hesap bazlı deneme sayacı, kademeli gecikme, hesap kilitleme
+  - Kaynak: Tehdit S9. **T13 ile giriş endpoint'i açıldı ama sayaç YOK**: parola
+    sınırsız denenebiliyor. scrypt her denemeyi ~100 ms'ye çıkarıyor, bu tek
+    başına koruma değil — dağıtık deneme hâlâ çalışır.
+  - Kalıcı bir sayaç deposu gerekiyor (tablo veya Redis); v1'de tablo yeterli.
+    T32'deki PIN kilitleme mantığıyla aynı deponun paylaşılması mantıklı.
 
 ### Faz 3: Kritik açıkların kapatılması
 
@@ -992,7 +1002,7 @@ Bu incelemenin bulgularından türetildi. Efor: insan ekibi / Claude Code.
   - Kaynak: D5. RLS'i insan disiplinine bırakmamak için makine zorlaması
 - [x] **T46 (P1, human: ~3sa / CC: ~25dk)** - test - **RLS çapraz tenant test seti** (4 test): A→B okuma engelli, A→B yazma engelli, `SET LOCAL` yapılmadan 0 satır, uygulama rolü BYPASSRLS taşımıyor
   - Kaynak: Bölüm 3 test boşluğu. Test edilmeyen güvenlik kontrolü, varlığı bilinmeyen kontroldür
-- [ ] **T47 (P1, human: ~3sa / CC: ~25dk)** - test - Rol matrisi sunucu tarafı testleri (11 satırın her biri)
+- [x] **T47 (P1, human: ~3sa / CC: ~25dk)** - test - Rol matrisi sunucu tarafı testleri (11 satırın her biri)
   - Kaynak: Tehdit S6, S7. Arayüzde butonu gizlemek yetki kontrolü değildir
 - [ ] **T48 (P1, human: ~1g / CC: ~1sa)** - test - Outbox saf mantık test seti (sahte transport, tüm durum geçişleri) + `docs/mobil-cihaz-kontrol-listesi.md`
   - Kaynak: D8. Cihaz listesi 4 senaryo: arka plana atma, işletim sistemi uygulamayı öldürme, uçak modu, düşük pil
@@ -1001,7 +1011,7 @@ Bu incelemenin bulgularından türetildi. Efor: insan ekibi / Claude Code.
 - [x] **T50 (P2, human: ~2sa / CC: ~15dk)** - istemci - Hata kodu → Türkçe metin eşlemesi (web + mobil ortak, `packages/shared`)
   - Kaynak: D-2.2. Sunucu sabit `code` döner, metin istemcide üretilir
 
-**Toplam:** 50 görev. Human ekip ~8-9 hafta. Claude Code ile ~10-12 gün.
+**Toplam:** 51 görev. Human ekip ~8-9 hafta. Claude Code ile ~10-12 gün.
 
 Mühendislik incelemesi 8 görev ekledi, 1 görev çıkardı (sayim tabloları T3'ten),
 6 görevi genişletti (T6, T7, T9, T14, T28, T32).

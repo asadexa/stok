@@ -180,9 +180,16 @@ export interface TestTenant {
   tenantId: string
   adminUserId: string
   staffUserId: string
+  /** Giriş testleri için: fixture kullanıcılarının e-postası ve parolası. */
+  adminEmail: string
+  staffEmail: string
+  password: string
   locationId: string
   products: Record<string, TestProduct>
 }
+
+/** Fixture kullanıcılarının parolası. Testlerde sabit, üretimde yok. */
+export const TEST_PASSWORD = 'test1234'
 
 const DEFAULT_PRODUCTS: TestProductSpec[] = [
   // Türkçe karakterli adlar bilerek: tr_norm() ve arama index'i gerçek
@@ -207,7 +214,9 @@ export async function seedTestTenant(
   const adminUserId = detUuid(`user:${label}:admin`)
   const staffUserId = detUuid(`user:${label}:staff`)
   const locationId = detUuid(`location:${label}`)
-  const passwordHash = await hashSecret('test1234')
+  const adminEmail = `admin@${label}.test`
+  const staffEmail = `staff@${label}.test`
+  const passwordHash = await hashSecret(TEST_PASSWORD)
 
   await db.insert(tenants).values({ id: tenantId, name: `Test Tenant ${label}` })
 
@@ -215,7 +224,7 @@ export async function seedTestTenant(
     {
       id: adminUserId,
       tenantId,
-      email: `admin@${label}.test`,
+      email: adminEmail,
       name: 'Test Yönetici',
       role: 'ADMIN',
       passwordHash,
@@ -223,7 +232,7 @@ export async function seedTestTenant(
     {
       id: staffUserId,
       tenantId,
-      email: `staff@${label}.test`,
+      email: staffEmail,
       name: 'Test Çalışan',
       role: 'STAFF',
       passwordHash,
@@ -278,7 +287,16 @@ export async function seedTestTenant(
     result[spec.sku] = { id, sku: spec.sku, name: spec.name, barcode, caseBarcode }
   }
 
-  return { tenantId, adminUserId, staffUserId, locationId, products: result }
+  return {
+    tenantId,
+    adminUserId,
+    staffUserId,
+    adminEmail,
+    staffEmail,
+    password: TEST_PASSWORD,
+    locationId,
+    products: result,
+  }
 }
 
 /**

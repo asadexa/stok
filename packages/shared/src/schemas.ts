@@ -109,3 +109,53 @@ export const createProductSchema = z.object({
 })
 
 export type CreateProductInput = z.infer<typeof createProductSchema>
+
+/**
+ * ============================================================================
+ * KİMLİK DOĞRULAMA (T13)
+ * ============================================================================
+ */
+
+/**
+ * Giriş isteği.
+ *
+ * `tenantId` normalde GEREKMEZ: sunucu e-postadan tenant'ı kendisi çözer.
+ * Sadece aynı e-posta birden fazla işletmede kayıtlıysa sunucu
+ * `TENANT_AMBIGUOUS` döner ve istemci seçim yaptırıp bu alanla tekrar
+ * gönderir. Kullanıcıyı normal durumda "işletme kodu" girmeye zorlamak,
+ * "5 dakikada öğrenilen arayüz" hedefine aykırı olurdu.
+ */
+export const loginSchema = z.object({
+  email: z.string().trim().toLowerCase().email().max(200),
+  // Parolaya üst sınır koymak şart: sınırsız uzunluk, scrypt'i hizmet
+  // reddi aracına çevirir (uzun girdi = uzun CPU).
+  password: z.string().min(1).max(200),
+  tenantId: z.string().uuid().optional(),
+})
+
+export type LoginInput = z.infer<typeof loginSchema>
+
+export const refreshSchema = z.object({
+  refreshToken: z.string().min(1).max(4096),
+})
+
+export type RefreshInput = z.infer<typeof refreshSchema>
+
+/**
+ * Hareket listesi sorgusu.
+ *
+ * `userId` filtresi ÇALIŞAN için sunucuda zorla kendi kimliğine çevrilir
+ * (rol matrisi: "hareket geçmişi → sadece kendi"). İstemcinin gönderdiği
+ * değere güvenilmez.
+ */
+export const listMovementsSchema = z.object({
+  productId: z.string().uuid().optional(),
+  userId: z.string().uuid().optional(),
+  reason: reasonEnum.optional(),
+  from: z.string().datetime({ offset: true }).optional(),
+  to: z.string().datetime({ offset: true }).optional(),
+  limit: z.number().int().positive().max(200).default(50),
+  offset: z.number().int().nonnegative().default(0),
+})
+
+export type ListMovementsInput = z.infer<typeof listMovementsSchema>

@@ -11,7 +11,7 @@ import {
   testAdminDb,
   testAppDb,
 } from './testing.js'
-import { currentStock, productBarcodes, products, stockMovements, tenants } from './schema.js'
+import { currentStock, productBarcodes, products, stockMovements, tenants, users } from './schema.js'
 
 /**
  * ============================================================================
@@ -287,6 +287,62 @@ describe('T46.4 - uygulama rolü RLS atlayamaz', () => {
     ]) {
       expect(withPolicy.has(t), `${t}: RLS politikası yok`).toBe(true)
     }
+  })
+})
+
+describe('T46.5 - giriş istisnası (auth_lookup) daraltılmış', () => {
+  it('fonksiyon tenant bağlamı olmadan çalışır ve SADECE iki alan döner', async () => {
+    // Giriş anında tenant bilinmiyor; bu fonksiyon RLS'in tek istisnası.
+    const rows = await app.db.execute<{ user_id: string; tenant_id: string }>(
+      sql`SELECT * FROM auth_lookup_user(${alpha.adminEmail})`,
+    )
+    const list = [...rows]
+
+    expect(list).toHaveLength(1)
+    expect(list[0]?.tenant_id).toBe(alpha.tenantId)
+    expect(list[0]?.user_id).toBe(alpha.adminUserId)
+    // Parola özeti, ad, rol BU YOLDAN ÇIKMIYOR.
+    expect(Object.keys(list[0] ?? {}).sort()).toEqual(['tenant_id', 'user_id'])
+  })
+
+  it('uygulama rolü app.auth_lookup ayarını KENDİ kurarak satır göremez', async () => {
+    // İstisnanın tamamı buna dayanıyor: politika `TO <sahip rol>` ile
+    // role bağlı. Bağlı olmasaydı uygulama rolü bu ayarı kendi kurup
+    // BÜTÜN tenantların kullanıcı tablosunu okurdu.
+    const rows = await app.db.execute<{ n: string }>(sql`
+      SELECT set_config('app.auth_lookup', 'on', false) AS ignored,
+             (SELECT count(*)::text FROM users) AS n
+    `)
+    expect([...rows][0]?.n).toBe('0')
+  })
+
+  it('tenant bağlamı kuruluyken bile ayar başka tenantı açmıyor', async () => {
+    const rows = await withTenant(
+      alpha.tenantId,
+      async (tx) => {
+        await tx.execute(sql`SELECT set_config('app.auth_lookup', 'on', true)`)
+        return tx.select().from(users)
+      },
+      app.db,
+    )
+    expect(rows.every((u) => u.tenantId === alpha.tenantId)).toBe(true)
+  })
+
+  it('fonksiyonu PUBLIC çalıştıramaz, sadece stok_app', async () => {
+    const rows = await admin.db.execute<{ acl: string | null }>(sql`
+      SELECT array_to_string(proacl, ',') AS acl
+        FROM pg_proc WHERE proname = 'auth_lookup_user'
+    `)
+    const acl = [...rows][0]?.acl ?? ''
+
+    expect(acl).toContain('stok_app=X')
+    // "=X/..." (rol adı olmadan) PUBLIC yetkisi demektir.
+    expect(acl.split(',').some((entry) => entry.startsWith('=X'))).toBe(false)
+  })
+
+  it('bilinmeyen e-posta boş döner', async () => {
+    const rows = await app.db.execute(sql`SELECT * FROM auth_lookup_user('yok@yok.test')`)
+    expect([...rows]).toEqual([])
   })
 })
 

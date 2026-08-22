@@ -2,9 +2,8 @@ import {
   AppError,
   type CreateMovementInput,
   type CreateMovementResponse,
-  type Role,
-  can,
   createMovementSchema,
+  listMovementsSchema,
   toDelta,
 } from '@stok/shared'
 import {
@@ -17,9 +16,11 @@ import {
   productBarcodes,
   products,
   stockMovements,
+  users,
   withTenant,
 } from '@stok/db'
-import { and, eq, sql } from 'drizzle-orm'
+import { and, desc, eq, gte, lte, sql } from 'drizzle-orm'
+import { type Actor, movementUserScope, redactPricesAll, requirePermission } from './authz.js'
 import { formatScaled, multiplyScaled, parseScaled, scaledFromNumber, scaledToNumber } from './numeric.js'
 
 /**
@@ -47,12 +48,6 @@ import { formatScaled, multiplyScaled, parseScaled, scaledFromNumber, scaledToNu
  * ============================================================================
  */
 
-export interface Actor {
-  tenantId: string
-  userId: string
-  role: Role
-}
-
 interface CreateMovementOptions {
   /** Test ve cron için: varsayılan uygulama havuzu yerine başka bağlantı. */
   db?: Db
@@ -66,21 +61,13 @@ export async function createMovement(
   raw: unknown,
   options: CreateMovementOptions = {},
 ): Promise<CreateMovementResponse> {
-  if (!can(actor.role, 'movement:create')) {
-    throw new AppError('FORBIDDEN', `role ${actor.role} cannot create movements`, {
-      permission: 'movement:create',
-    })
-  }
+  requirePermission(actor, 'movement:create')
 
   const input = parseInput(raw)
 
-  if (input.allowNegative && !can(actor.role, 'movement:allowNegative')) {
-    // Reddetmek yerine sessizce yok saymak daha kötü olurdu: çalışan
-    // "yine de yap" dediğini sanır, sistem başka bir şey yapar.
-    throw new AppError('FORBIDDEN', `role ${actor.role} cannot override negative stock`, {
-      permission: 'movement:allowNegative',
-    })
-  }
+  // Reddetmek yerine bayrağı sessizce yok saymak daha kötü olurdu:
+  // çalışan "yine de yap" dediğini sanır, sistem başka bir şey yapar.
+  if (input.allowNegative) requirePermission(actor, 'movement:allowNegative')
 
   for (let attempt = 1; ; attempt++) {
     try {
@@ -146,7 +133,13 @@ async function writeMovement(
   const before = await lockStockRow(tx, actor.tenantId, target.productId)
   const expected = before + delta
 
-  if (expected < 0n && !input.allowNegative) {
+  // Kontrol SADECE çıkışlara uygulanıyor. `expected < 0` tek başına
+  // yetmez: stok zaten -5 iken +3'lük bir MAL KABULÜ de -2'de kalır ve
+  // reddedilirdi. O zaman negatife düşmüş bir ürünü mal girişiyle
+  // düzeltmek imkansız olur, tek çare admin'in her seferinde
+  // `allowNegative` ile giriş yapması olurdu. Giriş her zaman serbest:
+  // stoğu gerçeğe yaklaştırıyor.
+  if (delta < 0n && expected < 0n && !input.allowNegative) {
     throw new AppError(
       'INSUFFICIENT_STOCK',
       `requested ${formatScaled(-delta)} > available ${formatScaled(before)}`,
@@ -402,5 +395,99 @@ export async function checkStockInvariant(
       }))
     },
     options.db,
+  )
+}
+
+/**
+ * ============================================================================
+ * HAREKET LİSTESİ
+ *
+ * Rol matrisi (PLAN.md Bölüm 4): "Hareket geçmişi (tüm kullanıcılar) →
+ * admin ✓, çalışan SADECE KENDİ".
+ *
+ * Kapsam kısıtı `movementUserScope()` ile uygulanıyor ve istemcinin
+ * gönderdiği `userId` filtresi çalışan için YOK SAYILIYOR. Filtreyi
+ * doğrudan sorguya koysaydık `?userId=<patron>` yazan çalışan patronun
+ * hareketlerini okurdu — arayüzde o kutuyu göstermemek bunu engellemez.
+ *
+ * Alış fiyatı (`unitCost`) çalışan cevabından ÇIKARILIYOR (tehdit S7).
+ * ============================================================================
+ */
+
+export interface MovementRow {
+  id: string
+  productId: string
+  productName: string
+  productSku: string
+  userId: string
+  userName: string
+  delta: number
+  reason: string
+  note: string | null
+  unitCost?: number | null
+  createdAt: Date
+}
+
+export async function listMovements(
+  actor: Actor,
+  raw: unknown = {},
+  options: CreateMovementOptions = {},
+): Promise<MovementRow[]> {
+  const parsed = listMovementsSchema.safeParse(raw)
+  if (!parsed.success) {
+    throw new AppError('VALIDATION_FAILED', parsed.error.issues.map((i) => i.message).join('; '), {
+      issues: parsed.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })),
+    })
+  }
+  const q = parsed.data
+  // Yetki kontrolü burada: movementUserScope, read:all olmayan role
+  // read:own arar ve ikisi de yoksa 403 fırlatır.
+  const scopedUserId = movementUserScope(actor, q.userId)
+
+  const rows = await withTenant(
+    actor.tenantId,
+    (tx) =>
+      tx
+        .select({
+          id: stockMovements.id,
+          productId: stockMovements.productId,
+          productName: products.name,
+          productSku: products.sku,
+          userId: stockMovements.userId,
+          userName: users.name,
+          delta: stockMovements.delta,
+          reason: stockMovements.reason,
+          note: stockMovements.note,
+          unitCost: stockMovements.unitCost,
+          createdAt: stockMovements.createdAt,
+        })
+        .from(stockMovements)
+        .innerJoin(products, eq(products.id, stockMovements.productId))
+        .innerJoin(users, eq(users.id, stockMovements.userId))
+        .where(
+          and(
+            eq(stockMovements.tenantId, actor.tenantId),
+            scopedUserId ? eq(stockMovements.userId, scopedUserId) : undefined,
+            q.productId ? eq(stockMovements.productId, q.productId) : undefined,
+            q.reason ? eq(stockMovements.reason, q.reason) : undefined,
+            q.from ? gte(stockMovements.createdAt, new Date(q.from)) : undefined,
+            q.to ? lte(stockMovements.createdAt, new Date(q.to)) : undefined,
+          ),
+        )
+        // Sıralama HER ZAMAN sunucu saatiyle: telefon saati yanlış olabilir
+        // ve cihaz saatine göre sıralanan bir log denetimde işe yaramaz.
+        .orderBy(desc(stockMovements.createdAt))
+        .limit(q.limit)
+        .offset(q.offset),
+    options.db,
+  )
+
+  return redactPricesAll(
+    actor,
+    rows.map((r) => ({
+      ...r,
+      delta: scaledToNumber(parseScaled(r.delta)),
+      unitCost: r.unitCost === null ? null : Number(r.unitCost),
+    })),
   )
 }
