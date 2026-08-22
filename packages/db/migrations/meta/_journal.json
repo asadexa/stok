@@ -36,6 +36,13 @@
       "when": 1787387254105,
       "tag": "0004_auth_lookup",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1787388295000,
+      "tag": "0005_auth_attempts",
+      "breakpoints": true
     }
   ]
 }

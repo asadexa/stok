@@ -111,6 +111,18 @@ export const ERROR_CODES = {
     retryable: false,
     tr: () => 'Bu e-posta birden fazla işletmede kayıtlı, hangisine gireceğinizi seçin',
   },
+  TOO_MANY_ATTEMPTS: {
+    http: 429,
+    // Outbox için tekrar denenebilir DEĞİL: kullanıcının beklemesi gerek,
+    // otomatik tekrar sadece kilidi uzatır.
+    retryable: false,
+    tr: (d) => {
+      const s = typeof d.retryAfterSeconds === 'number' ? d.retryAfterSeconds : 60
+      if (s < 60) return `Çok fazla hatalı deneme. ${s} saniye sonra tekrar deneyin`
+      const dk = Math.ceil(s / 60)
+      return `Çok fazla hatalı deneme. ${dk} dakika sonra tekrar deneyin`
+    },
+  },
   TOKEN_INVALID: {
     http: 401,
     retryable: false,

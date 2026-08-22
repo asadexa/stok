@@ -475,7 +475,7 @@ kendi diline çeviremez. `message` alanı hiçbir zaman doğrudan ekrana basılm
 | S6 | Çalışan yetkisi aşımı (ürün silme, fiyat görme) | Orta | Orta | Rol kontrolü **sunucuda**, UI'da gizlemek yeterli değil |
 | S7 | Alış fiyatı çalışana görünüyor | Orta | Orta | Fiyat alanları çalışan API cevabından çıkarılır |
 | S8 | Barkod alanından enjeksiyon | Düşük | Yüksek | Parametreli sorgu (Drizzle zaten yapıyor) + uzunluk sınırı |
-| S9 | Kaba kuvvet giriş denemesi | Orta | Orta | Rate limit + hesap kilitleme |
+| S9 | Kaba kuvvet giriş denemesi | Orta | Orta | Kademeli kilit, kalıcı sayaç (T51) |
 | S10 | KVKK: çalışan adı + saat + işlem = kişisel veri | Kesin | Orta | Aydınlatma metni + saklama süresi politikası. Türkiye'de satacaksan yükümlülük |
 | S11 | PIN kaba kuvvet: 4-6 hane, cihazda sınırsız denenebilir | Orta | Orta | 5 yanlışta 60 sn kilit, 10 yanlışta oturum kapat + tam giriş (D-2.5) |
 | S12 | RLS yazılıp `postgres`/`service_role` ile bağlanma: politikalar sessizce devre dışı | **Yüksek** | **Yüksek** | `app_user` rolü + `FORCE ROW LEVEL SECURITY` + `withTenant` (D5). Test T46 |
@@ -838,7 +838,7 @@ Depo yazılımı **okunaklı tablo** ve **büyük net sayı** ister. Süsleme, g
 ## MEVCUT DURUM
 
 Son güncelleme: 2026-08-22. **Faz 0-2 tamamlandı** (T1-T13), Faz 8'den
-T44/T46/T47/T50 de bitti.
+T44/T46/T47/T50 ve güvenlik görevi T51 de bitti.
 
 ```
 packages/shared   sebep kodları, roller, birimler, zod şemaları, hata sözleşmesi
@@ -852,11 +852,11 @@ apps/mobile       henüz yok (Faz 5)
 servis katmanı `apps/web` içinde düşünülmüştü. Ayrı pakete alındı: tek yazma kapısının
 Next.js olmadan test edilebilmesi gerekiyor ve cron işleri de aynı kapıyı çağıracak.
 
-**Test durumu:** 237 test yeşil (shared 54, db 44, core 139). Entegrasyon testleri gerçek
+**Test durumu:** 270 test yeşil (shared 54, db 45, core 171). Entegrasyon testleri gerçek
 PostgreSQL'e koşuyor; her paket kendi test veritabanını sıfırdan kuruyor.
 
-**Bilinen açık:** T51 (giriş kaba kuvvet koruması). Giriş endpoint'i çalışıyor ama
-deneme sayacı yok; tehdit S9 v1 çıkışından önce kapatılmalı.
+**Açık uç:** `auth_prune_attempts()` yazıldı ama çağıran yok. T34 (gün sonu cron'u)
+bunu günlük çalıştırmalı, yoksa `auth_attempts` tablosu yavaşça büyür.
 
 Yeniden kullanılabilecek **sistem** var (ERPNext, InvenTree) ve D1'de bilinçli olarak
 sıfırdan yazma seçildi. Gerekçe: gerçek fark Türkçe 5 dakikada öğrenilen arayüz ve
@@ -929,12 +929,19 @@ Bu incelemenin bulgularından türetildi. Efor: insan ekibi / Claude Code.
 - [x] **T12 (P1, human: ~3sa / CC: ~25dk)** - test - Eşzamanlılık testi: 20 paralel çıkış, elde 10. Negatif yok, kayıp yok
 - [x] **T13 (P1, human: ~4sa / CC: ~30dk)** - api - Auth + rol kontrolü (sunucu tarafı), rol matrisi zorlaması
   - Kaynak: Bölüm 4 rol matrisi. Tehdit S6, S7
-- [ ] **T51 (P1, human: ~3sa / CC: ~25dk)** - güvenlik - Giriş kaba kuvvet koruması: IP ve hesap bazlı deneme sayacı, kademeli gecikme, hesap kilitleme
-  - Kaynak: Tehdit S9. **T13 ile giriş endpoint'i açıldı ama sayaç YOK**: parola
-    sınırsız denenebiliyor. scrypt her denemeyi ~100 ms'ye çıkarıyor, bu tek
-    başına koruma değil — dağıtık deneme hâlâ çalışır.
-  - Kalıcı bir sayaç deposu gerekiyor (tablo veya Redis); v1'de tablo yeterli.
-    T32'deki PIN kilitleme mantığıyla aynı deponun paylaşılması mantıklı.
+- [x] **T51 (P1, human: ~3sa / CC: ~25dk)** - güvenlik - Giriş kaba kuvvet koruması: IP ve hesap bazlı deneme sayacı, kademeli gecikme, hesap kilitleme
+  - Kaynak: Tehdit S9. Sayaç `auth_attempts` tablosunda, KALICI: bellekte tutulsaydı
+    her deploy saldırgana sıfırdan başlama hakkı verirdi.
+  - Uygulama rolü tabloya doğrudan erişemiyor; sadece üç SECURITY DEFINER
+    fonksiyonu (`auth_record_failure` / `auth_read_attempts` / `auth_clear_attempts`).
+    Uygulama kodundaki bir hata korumayı devre dışı bırakamaz.
+  - Eşik ve kilit eğrisi TypeScript'te (`packages/core/src/rate-limit.ts`):
+    e-posta 5 hata → 60 sn, üstel, 15 dk tavan; adres 50 hata (paylaşılan NAT).
+    T32 PIN kilitlemesi (D-2.5) aynı depoyu farklı politikayla kullanacak.
+  - Tavan bilinçli: sınırsız artan kilit, saldırganın meşru kullanıcıyı kalıcı
+    olarak dışarıda bırakmasına izin verirdi.
+  - `auth_prune_attempts()` var ama HENÜZ ÇAĞRILMIYOR; gün sonu cron'una (T34)
+    bağlanacak, yoksa tablo yavaşça büyür.
 
 ### Faz 3: Kritik açıkların kapatılması
 

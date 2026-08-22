@@ -284,6 +284,9 @@ describe('T46.4 - uygulama rolü RLS atlayamaz', () => {
       'product_barcodes',
       'stock_movements',
       'current_stock',
+      // Tenant'a bağlı değil ama politikası var: sadece sahip role açık,
+      // uygulama rolüne hiçbir satır geçmiyor (T51).
+      'auth_attempts',
     ]) {
       expect(withPolicy.has(t), `${t}: RLS politikası yok`).toBe(true)
     }

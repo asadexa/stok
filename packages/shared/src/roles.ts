@@ -109,3 +109,35 @@ export function permissionsOf(role: Role): Permission[] {
 export function rolesCheckConstraint(column = 'role'): string {
   return `${column} IN (${ROLE_VALUES.map((r) => `'${r}'`).join(', ')})`
 }
+
+/**
+ * ============================================================================
+ * KABA KUVVET SAYACI KAPSAMLARI (T51)
+ *
+ * `auth_attempts` tablosu tek bir sayaç deposu; hangi şeyin sayıldığını
+ * bu kapsam belirler. Tek depo olması bilinçli: T32'deki PIN kilitlemesi
+ * ikinci bir tablo ve ikinci bir mantık kurmasın.
+ *
+ * Değerler DB CHECK constraint'iyle senkron tutuluyor (schema-sync testi).
+ * Yazım hatası (`login_email` gibi) sayacı sessizce devre dışı bırakırdı:
+ * yeni bir kapsam adı = her zaman sıfırdan başlayan bir sayaç = koruma yok.
+ * ============================================================================
+ */
+export const AUTH_ATTEMPT_SCOPES = {
+  /** Hesap bazlı: aynı e-postaya parola denemesi. */
+  LOGIN_EMAIL: { tr: 'Giriş (e-posta)' },
+  /** Kaynak bazlı: tek bir adresten çok sayıda hesaba deneme. */
+  LOGIN_IP: { tr: 'Giriş (adres)' },
+  /** T32: paylaşılan telefonda PIN denemesi. */
+  PIN: { tr: 'PIN' },
+} as const
+
+export type AuthAttemptScope = keyof typeof AUTH_ATTEMPT_SCOPES
+
+export const AUTH_ATTEMPT_SCOPE_VALUES = Object.keys(
+  AUTH_ATTEMPT_SCOPES,
+) as AuthAttemptScope[]
+
+export function authScopesCheckConstraint(column = 'scope'): string {
+  return `${column} IN (${AUTH_ATTEMPT_SCOPE_VALUES.map((s) => `'${s}'`).join(', ')})`
+}

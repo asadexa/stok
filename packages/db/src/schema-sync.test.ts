@@ -1,7 +1,9 @@
 import {
+  AUTH_ATTEMPT_SCOPE_VALUES,
   MOVEMENT_REASON_VALUES,
   ROLE_VALUES,
   UNIT_VALUES,
+  authScopesCheckConstraint,
   reasonsCheckConstraint,
   rolesCheckConstraint,
   unitsCheckConstraint,
@@ -76,12 +78,23 @@ describe('DB CHECK constraint kod ile senkron', () => {
     expect(valuesIn(def!)).toEqual([...UNIT_VALUES].sort())
   })
 
+  it('auth_attempts_scope_ck tam olarak AUTH_ATTEMPT_SCOPES listesini içeriyor', async () => {
+    // Kapsam adındaki bir yazım hatası her zaman sıfırdan başlayan bir
+    // sayaç yaratır, yani kaba kuvvet korumasını SESSİZCE kapatır (T51).
+    const def = await constraintDefinition('auth_attempts_scope_ck')
+    expect(def).toBeDefined()
+    expect(valuesIn(def!)).toEqual([...AUTH_ATTEMPT_SCOPE_VALUES].sort())
+  })
+
   it('constraint üreticileri beklenen SQL metnini yazıyor', () => {
     // Üreticinin kendisi de sınanmalı: schema.ts bunu sql.raw ile
     // gömüyor, bozuk bir metin migration üretimine kadar fark edilmezdi.
     expect(reasonsCheckConstraint('reason')).toContain("reason IN ('PURCHASE'")
     expect(rolesCheckConstraint('role')).toBe("role IN ('ADMIN', 'STAFF')")
     expect(unitsCheckConstraint('unit')).toBe("unit IN ('ADET', 'KG', 'METRE', 'LITRE')")
+    expect(authScopesCheckConstraint('scope')).toBe(
+      "scope IN ('LOGIN_EMAIL', 'LOGIN_IP', 'PIN')",
+    )
   })
 })
 

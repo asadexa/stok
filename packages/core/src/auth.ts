@@ -12,6 +12,14 @@ import { eq, sql } from 'drizzle-orm'
 import { SignJWT, jwtVerify } from 'jose'
 import type { z } from 'zod'
 import { type Actor, requirePermission } from './authz.js'
+import {
+  LOGIN_EMAIL_POLICY,
+  LOGIN_IP_POLICY,
+  assertNotLocked,
+  clearAttempts,
+  recordFailure,
+  throwIfLocked,
+} from './rate-limit.js'
 
 /**
  * ============================================================================
@@ -91,6 +99,15 @@ export interface AuthOptions {
   db?: Db
   /** Test edilebilirlik: saat enjekte edilebilir, süre dolması sınanabilsin. */
   now?: () => number
+  /**
+   * İsteğin geldiği adres. Kaba kuvvet sayacının ikinci anahtarı (T51).
+   *
+   * SUNUCU KATMANINDAN gelir (proxy başlığından çözülmüş), İSTEK
+   * GÖVDESİNDEN ASLA: istemcinin yazdığı bir değere göre sayaç tutmak,
+   * saldırgana her denemede yeni bir kimlik uydurma imkanı verirdi.
+   * Bu yüzden `loginSchema` içinde değil, burada.
+   */
+  clientIp?: string
 }
 
 // ---------------------------------------------------------------------------
@@ -239,6 +256,13 @@ export async function login(raw: unknown, options: AuthOptions = {}): Promise<Lo
   const input: LoginInput = parseOrThrow(loginSchema, raw)
   const db = options.db ?? defaultDb()
   const now = options.now?.() ?? Date.now()
+  const ip = options.clientIp
+
+  // Kilit kontrolü EN BAŞTA: scrypt her denemede ~100 ms CPU yiyor ve
+  // sayaç sonradan bakılsaydı kilitli bir hesap bile saldırganın
+  // sunucuyu yormasına izin verirdi (T51, tehdit S9).
+  await assertNotLocked(db, 'LOGIN_EMAIL', input.email, LOGIN_EMAIL_POLICY, now)
+  if (ip) await assertNotLocked(db, 'LOGIN_IP', ip, LOGIN_IP_POLICY, now)
 
   const candidates = await lookupCandidates(db, input.email)
   const matches = input.tenantId
@@ -246,7 +270,11 @@ export async function login(raw: unknown, options: AuthOptions = {}): Promise<Lo
     : candidates
 
   if (matches.length === 0) {
+    // Kayıtlı OLMAYAN e-posta da sayılıyor. Sadece var olan hesaplar
+    // kilitlenseydi, "kilitlendim" cevabı hesabın varlığını ele verir ve
+    // giriş hatalarını tek kod altında toplama çabamız boşa giderdi.
     await burnPasswordTime(input.password)
+    await noteLoginFailure(db, input.email, ip, now)
     throw new AppError('INVALID_CREDENTIALS', `no user for ${input.email}`)
   }
 
@@ -287,15 +315,23 @@ export async function login(raw: unknown, options: AuthOptions = {}): Promise<Lo
     // Parola özeti olmayan kullanıcı: sadece PIN ile çalışan bir hesap
     // (E10) veya yarım kalmış davet. Giriş yolu kapalı.
     await burnPasswordTime(input.password)
+    await noteLoginFailure(db, input.email, ip, now)
     throw new AppError('INVALID_CREDENTIALS', `user ${match.user_id} has no password`)
   }
 
   const ok = await verifySecret(input.password, user.passwordHash)
-  if (!ok) throw new AppError('INVALID_CREDENTIALS', `bad password for ${input.email}`)
+  if (!ok) {
+    await noteLoginFailure(db, input.email, ip, now)
+    throw new AppError('INVALID_CREDENTIALS', `bad password for ${input.email}`)
+  }
 
   // Aktiflik kontrolü parola doğrulamasından SONRA: önce yapılsaydı,
   // parolayı bilmeyen biri "bu hesap pasif" cevabından hesabın varlığını
   // öğrenirdi.
+  // Parola doğru: bu bir tahmin değil. Hesap pasif olsa bile sayacı
+  // temizliyoruz, çünkü sayaç kaba kuvveti ölçüyor ve burada kaba kuvvet yok.
+  await clearLoginAttempts(db, input.email, ip)
+
   if (!user.active) {
     throw new AppError('ACCOUNT_INACTIVE', `user ${user.id} is inactive`, { userId: user.id })
   }
@@ -314,6 +350,34 @@ export async function login(raw: unknown, options: AuthOptions = {}): Promise<Lo
       now,
     ),
   }
+}
+
+/**
+ * Başarısız denemeyi hem hesap hem adres sayacına yazar ve yeni durum
+ * kilit gerektiriyorsa `TOO_MANY_ATTEMPTS` fırlatır.
+ *
+ * Kilit BU denemede başlıyorsa kullanıcı `INVALID_CREDENTIALS` yerine
+ * doğrudan bekleme süresini görür; "parola yanlış" deyip bir sonraki
+ * denemede sessizce kilitlemek, kullanıcıya ne olduğunu anlatmazdı.
+ */
+async function noteLoginFailure(
+  db: Db,
+  email: string,
+  ip: string | undefined,
+  now: number,
+): Promise<void> {
+  const byEmail = await recordFailure(db, 'LOGIN_EMAIL', email, LOGIN_EMAIL_POLICY, now)
+  const byIp = ip
+    ? await recordFailure(db, 'LOGIN_IP', ip, LOGIN_IP_POLICY, now)
+    : undefined
+
+  throwIfLocked(byEmail, 'LOGIN_EMAIL', now)
+  if (byIp) throwIfLocked(byIp, 'LOGIN_IP', now)
+}
+
+async function clearLoginAttempts(db: Db, email: string, ip: string | undefined): Promise<void> {
+  await clearAttempts(db, 'LOGIN_EMAIL', email)
+  if (ip) await clearAttempts(db, 'LOGIN_IP', ip)
 }
 
 async function issueTokens(actor: Actor, tokenVersion: number, now: number): Promise<TokenPair> {
