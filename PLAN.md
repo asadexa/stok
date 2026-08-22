@@ -860,6 +860,10 @@ Next.js olmadan test edilebilmesi gerekiyor ve cron işleri de aynı kapıyı ç
 **Test durumu:** 316 test yeşil (shared 54, db 46, core 216). Entegrasyon testleri gerçek
 PostgreSQL'e koşuyor; her paket kendi test veritabanını sıfırdan kuruyor.
 
+**CI:** `.github/workflows/ci.yml` — her push ve PR'da typecheck, migration
+drift kontrolü ve tüm test paketi, `postgres:17` servis konteyneriyle koşuyor.
+T42 (deploy pipeline) hâlâ açık; bu sadece doğrulama tarafı.
+
 **Açık uçlar (ikisi de T34'e bağlı):**
 - `auth_prune_attempts()` yazıldı ama çağıran yok; `auth_attempts` yavaşça büyür.
 - `runQueuedJobs()` yazıldı ama çağıran cron yok; kuyruğa alınan export işleri

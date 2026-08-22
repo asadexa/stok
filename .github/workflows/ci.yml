@@ -1,0 +1,99 @@
+# ============================================================================
+# CI
+#
+# Testlerin büyük kısmı GERÇEK PostgreSQL'e koşuyor ve bu bilinçli: bu
+# projede doğruluğun çoğu veritabanında duruyor — RLS politikaları,
+# append-only tetikleyici, projeksiyon tetikleyicisi, `FOR UPDATE` kilidi,
+# NUMERIC aritmetiği. Sahte bir sürücüyle koşan CI, tam olarak korumak
+# istediğimiz şeyleri hiç sınamazdı.
+#
+# Bu yüzden servis konteyneri var. Sürüm docker-compose.yml ile AYNI
+# (postgres:17): geliştirme ve CI farklı sürümlerde koşarsa "bende
+# çalışıyordu" tartışması CI'a taşınmış olur.
+#
+# Test veritabanlarını iş akışı DEĞİL, test altyapısı kuruyor
+# (packages/db/src/testing.ts): her paket kendi veritabanını düşürüp
+# sıfırdan yaratıyor, `db/init/*.sql` ve bütün migration'ları uyguluyor.
+# Kurulum adımlarını burada tekrar yazmak ikinci bir kaynak olurdu ve
+# ikisi zamanla ayrışırdı.
+# ============================================================================
+
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+# Aynı dal üstünde arka arkaya push yapılırsa eski koşuyu iptal et:
+# ikinci push'un sonucu zaten birincininkini geçersiz kılıyor.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: typecheck + test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          # Test altyapısı kendi veritabanlarını yaratıyor; buradaki
+          # veritabanı sadece ilk bağlantının tutunacağı yer.
+          POSTGRES_DB: postgres
+        ports:
+          # 5433: .env.example ile aynı, böylece yerelde ve CI'da aynı
+          # bağlantı dizesi çalışıyor.
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://stok_app:stok_app_dev@localhost:5433/stok
+      MIGRATION_DATABASE_URL: postgresql://postgres:postgres@localhost:5433/stok
+      # Yalnızca CI için. Üretim anahtarı buradan GELMEZ; sunucu 32
+      # karakterden kısa anahtarla açılmıyor, o yüzden bir değer şart.
+      AUTH_SECRET: ci-icin-sabit-anahtar-en-az-32-karakter
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # --frozen-lockfile: pnpm-lock.yaml ile package.json ayrışmışsa
+      # sessizce çözmek yerine burada patlasın.
+      - name: Bağımlılıklar
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      # Şema dosyası değişip migration üretilmediyse kod ile veritabanı
+      # sessizce ayrışır: uygulama yeni sütunu bekler, üretimde yoktur.
+      # `generate` yeni bir dosya yazıyorsa çalışma ağacı kirlenir.
+      - name: Migration'lar şema ile senkron mu
+        run: |
+          pnpm --filter @stok/db exec drizzle-kit generate
+          if [ -n "$(git status --porcelain packages/db/migrations)" ]; then
+            echo "::error::schema.ts değişmiş ama migration üretilmemiş."
+            echo "Yerelde çalıştır: pnpm --filter @stok/db generate"
+            git status --porcelain packages/db/migrations
+            git diff -- packages/db/migrations
+            exit 1
+          fi
+
+      - name: Testler
+        run: pnpm test

@@ -1,5 +1,5 @@
 {
-  "id": "16cd1ceb-2ebe-4565-a448-d12efef4ef4c",
+  "id": "aec560fb-1a56-45f4-8320-255f0923230f",
   "prevId": "d36b2455-15f2-488f-9c32-1ebcd3c4a740",
   "version": "7",
   "dialect": "postgresql",
@@ -88,6 +88,12 @@
         "dedupe_key": {
           "name": "dedupe_key",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "next_attempt_at": {
+          "name": "next_attempt_at",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },
