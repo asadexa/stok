@@ -189,3 +189,22 @@ export const exportStockSchema = z.object({
 })
 
 export type ExportStockInput = z.infer<typeof exportStockSchema>
+
+/**
+ * Stok tablosu sorgusu (T19).
+ *
+ * `search` HEM ürün adına HEM stok koduna bakıyor ve ikisi de `tr_norm()`
+ * üzerinden geçiyor (D-4.1). Admin barkod okuyucuyu klavye gibi kullanıyor;
+ * okuttuğu şey çoğu zaman koddur, arama kutusu ikisini de bulmalı.
+ */
+export const listStockSchema = z.object({
+  search: z.string().trim().max(100).optional(),
+  category: z.string().trim().max(100).optional(),
+  productId: z.string().uuid().optional(),
+  onlyCritical: z.boolean().default(false),
+  includeArchived: z.boolean().default(false),
+  limit: z.number().int().positive().max(200).default(50),
+  offset: z.number().int().nonnegative().default(0),
+})
+
+export type ListStockInput = z.infer<typeof listStockSchema>

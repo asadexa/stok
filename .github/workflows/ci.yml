@@ -97,3 +97,16 @@ jobs:
 
       - name: Testler
         run: pnpm test
+
+      # Typecheck web uygulamasının DERLENECEĞİNİ göstermiyor: tsc ile
+      # webpack aynı modül çözümlemesini yapmıyor. Monorepo paketleri
+      # kaynak TypeScript olarak tüketiliyor ve içeride `./movements.js`
+      # diye import ediliyor; tsc bunu `.ts`e eşliyor, webpack eşlemesi
+      # next.config.ts'te elle kuruluyor. O ayar bozulursa typecheck yine
+      # yeşil kalır, `next build` patlar — ve bunu üretim dağıtımında
+      # öğrenmek istemiyoruz.
+      #
+      # Veritabanı gerekmiyor: her sayfa `cookies()` okuduğu için dinamik,
+      # derleme sırasında hiçbiri sorgu çalıştırmıyor.
+      - name: Web derlemesi
+        run: pnpm --filter @stok/web build

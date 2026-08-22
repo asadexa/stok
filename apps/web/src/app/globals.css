@@ -1,0 +1,28 @@
+@import 'tailwindcss';
+
+/*
+ * Depo yazılımı. PLAN.md Bölüm 11:
+ *   - Yüksek kontrast: depoda ışık kötü, ekran parlar.
+ *   - Renk TEK BAŞINA anlam taşımasın (kritik = kırmızı + ikon + metin).
+ *   - Minimum 56 px dokunma hedefi (eldiven var, acele var).
+ * Gradient, pastel, pasta grafik yok: süsleme güveni azaltır.
+ */
+@theme {
+  --color-kritik: oklch(0.55 0.21 27);
+  --color-kritik-bg: oklch(0.96 0.03 27);
+  --color-giris: oklch(0.52 0.15 155);
+  --color-cikis: oklch(0.55 0.19 27);
+}
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  @apply bg-slate-50 text-slate-900 antialiased;
+}
+
+/* Tablo sayıları hizalansın: 1.000 ile 999 alt alta okunabilmeli. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}

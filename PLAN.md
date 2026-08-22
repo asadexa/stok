@@ -974,9 +974,23 @@ G1, G2 ve G4 kapandı. G3 (yazıcı) TODOS E5'e bağlı, aşağıda gerekçesi y
 
 ### Faz 4: Web arayüzü
 
-- [ ] **T18 (P1, human: ~6sa / CC: ~45dk)** - web - Admin dashboard, Bölüm 11 hiyerarşisiyle (uyarılar → bugün → son hareketler → tablo)
-- [ ] **T19 (P1, human: ~5sa / CC: ~40dk)** - web - Stok tablosu: arama, filtre, sayfalama, kritik stok vurgusu
-- [ ] **T20 (P1, human: ~4sa / CC: ~30dk)** - web - Hareket logu: kullanıcı/tarih/ürün/sebep filtreleri
+- [x] **T18 (P1, human: ~6sa / CC: ~45dk)** - web - Admin dashboard, Bölüm 11 hiyerarşisiyle (uyarılar → bugün → son hareketler → tablo)
+  - Stok tablosu ayrı sayfada (T19): panelde dördüncü blok olarak kritik
+    ürün listesi duruyor, tam tablo değil. On bin satırı dashboard'a
+    koymak, "bir sorun var mı" sorusunun cevabını ekranın dışına iterdi.
+  - "Bugün" özeti çalışan için KENDİ hareketleri; başarısız iş sayacı
+    (G4) çalışana hiç gösterilmiyor.
+- [x] **T19 (P1, human: ~5sa / CC: ~40dk)** - web - Stok tablosu: arama, filtre, sayfalama, kritik stok vurgusu
+  - Arama, filtre ve sayfa adres çubuğunda: yer imine eklenebiliyor,
+    paylaşılabiliyor, geri tuşu çalışıyor.
+  - Sıralama `name_norm` üzerinden. Veritabanı collation'ı `C.UTF-8` ve
+    ham `ORDER BY name` Türkçe baş harfli her ürünü listenin dibine
+    indiriyordu.
+- [x] **T20 (P1, human: ~4sa / CC: ~30dk)** - web - Hareket logu: kullanıcı/tarih/ürün/sebep filtreleri
+  - Kullanıcı filtresi sadece admin'de; çalışanın gönderdiği `?kullanici=`
+    sunucuda yok sayılıyor (`movementUserScope`).
+  - Sayfalama `limit + 1` ile: defterde her sayfa için ikinci bir
+    `count(*)` çalıştırmak sayfanın kendisinden pahalıya gelirdi.
 - [ ] **T21 (P1, human: ~4sa / CC: ~30dk)** - web - Ürün ekleme/düzenleme/arşivleme + çoklu barkod yönetimi
 - [ ] **T22 (P1, human: ~3sa / CC: ~25dk)** - web - Excel export butonları (stok + hareket)
 - [ ] **T23 (P1, human: ~4sa / CC: ~30dk)** - web - **E1: Excel/CSV toplu ürün içe aktarma** + önizleme + hata raporu

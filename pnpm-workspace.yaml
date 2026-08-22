@@ -5,3 +5,6 @@ packages:
 # bağımlılığı; build script'i çalışmazsa test koşmaz.
 allowBuilds:
   esbuild: true
+  # Next.js'in görsel optimizasyonu. Build script'i çalışmazsa `next build`
+  # uyarı verip devam ediyor ama üretimde görsel dönüşümü kapalı kalıyor.
+  sharp: true

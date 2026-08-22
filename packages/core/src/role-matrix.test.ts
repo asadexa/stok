@@ -324,8 +324,12 @@ describe('satır 5: alış fiyatı ve maliyet gizleme (tehdit S7)', () => {
     expect(rows.length).toBeGreaterThan(0)
     for (const row of rows) {
       expect(Object.hasOwn(row, 'unitCost')).toBe(false)
+      // Değer başka bir alana sızmış olabilir; alan adına değil DEĞERE
+      // bakıyoruz. Ham JSON içinde '99' aramak flaky'di: satırdaki
+      // rastgele UUID'ler bu diziyi kendiliğinden içerebiliyor ve test
+      // ayda bir sebepsiz kırmızıya dönüyordu.
+      expect(Object.values(row)).not.toContain(99)
     }
-    expect(JSON.stringify(rows)).not.toContain('99')
   })
 
   it('redactPrices üç fiyat alanının hepsini çıkarır', () => {
