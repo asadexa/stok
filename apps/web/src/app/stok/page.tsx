@@ -165,6 +165,12 @@ export default async function StockPage({
             queueAction={queueExport}
           />
           <Link
+            href="/urunler/aktar"
+            className="h-14 rounded-md border border-slate-300 bg-white px-5 text-base font-medium leading-[3.5rem] hover:bg-slate-100"
+          >
+            Toplu aktar
+          </Link>
+          <Link
             href="/urunler/yeni"
             className="h-14 rounded-md bg-slate-900 px-6 text-base font-medium leading-[3.5rem] text-white hover:bg-slate-700"
           >
@@ -247,9 +253,19 @@ export default async function StockPage({
               <>
                 <p>Henüz ürün yok.</p>
                 {actor.role === 'ADMIN' ? (
-                  <Link href="/urunler/yeni" className="mt-2 inline-block underline">
-                    İlk ürünü ekleyin
-                  </Link>
+                  // İlk gün senaryosu tam olarak burası: elinde 800 kalemlik
+                  // bir liste olan kullanıcıya "tek tek ekle" demek, sistemi
+                  // hiç kurmaması demek.
+                  <p className="mt-2">
+                    <Link href="/urunler/aktar" className="underline">
+                      Excel dosyanızı toplu aktarın
+                    </Link>{' '}
+                    veya{' '}
+                    <Link href="/urunler/yeni" className="underline">
+                      ilk ürünü elle ekleyin
+                    </Link>
+                    .
+                  </p>
                 ) : null}
               </>
             )}

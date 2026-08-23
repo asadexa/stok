@@ -1005,8 +1005,18 @@ G1, G2 ve G4 kapandı. G3 (yazıcı) TODOS E5'e bağlı, aşağıda gerekçesi y
     bağlantı olsaydı sayfayı yenilemek her seferinde yeni iş kuyruğa alırdı.
   - `exportStockSchema`'ya `search` eklendi: ekranda 12 satır görüp
     dosyada 4000 satır almak sessiz bir yalandı.
-- [ ] **T23 (P1, human: ~4sa / CC: ~30dk)** - web - **E1: Excel/CSV toplu ürün içe aktarma** + önizleme + hata raporu
+- [x] **T23 (P1, human: ~4sa / CC: ~30dk)** - web - **E1: Excel/CSV toplu ürün içe aktarma** + önizleme + hata raporu
   - Kaynak: Bölüm 11 boş durumlar. Bu olmadan sistem ilk gün kurulamaz
+  - Üç adım, ikisi salt okuma: çözümle → önizle → onayla. Onaydan önce
+    hiçbir şey yazılmıyor (test bunu doğruluyor).
+  - Satır bazlı hata, dosya bazlı red değil: tek bozuk satır 799 doğru
+    satırı reddetmiyor. Hatalı satırlar Excel raporu olarak iniyor.
+  - Onay adımı istemcinin sınıflandırmasına güvenmiyor; önizleme sunucuda
+    yeniden hesaplanıyor.
+  - Türkçe sayı ("1.234,56"), noktalı virgüllü CSV, BOM ve Türkçe birim
+    etiketleri destekleniyor — hepsi muhasebeden gelen dosyanın gerçeği.
+  - Bu ekran JavaScript gerektiriyor (bilinçli istisna, gerekçesi
+    actions.ts'te): kurulum günü masa başında yapılan tek seferlik iş.
 - [ ] **T24 (P2, human: ~3sa / CC: ~20dk)** - web - Kullanıcı yönetimi (ekle, rol ver, pasifleştir)
 - [ ] **T25 (P2, human: ~2sa / CC: ~15dk)** - web - "Sistem Sağlığı" kartı (son senkron, bekleyen kayıt, aktif cihaz)
   - Kaynak: Bölüm 8

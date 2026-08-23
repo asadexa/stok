@@ -117,6 +117,26 @@ export const ERROR_CODES = {
     tr: () => 'Ürünün son barkodu kaldırılamaz. Önce yenisini ekleyin.',
   },
 
+  // --- Toplu içe aktarma (T23 / E1) ---
+  IMPORT_NO_HEADER: {
+    http: 400,
+    retryable: false,
+    tr: () => 'Dosyanın ilk satırında sütun başlıkları bulunamadı',
+  },
+  IMPORT_MISSING_COLUMN: {
+    http: 400,
+    retryable: false,
+    // Bulunan başlıklar metinde: kullanıcı sütunu yanlış adlandırmışsa
+    // hangi adı yazdığını görmeden düzeltemez.
+    tr: (d) =>
+      `Dosyada "Stok Kodu" ve "Ürün Adı" sütunları olmalı. Bulunanlar: ${d.found ?? '—'}`,
+  },
+  IMPORT_TOO_LARGE: {
+    http: 413,
+    retryable: false,
+    tr: (d) => `Dosyada ${d.limit} satırdan fazla var. Dosyayı bölerek yükleyin.`,
+  },
+
   // --- Şeffaf: kullanıcı hiçbir şey görmez, doğru davranış budur ---
   DUPLICATE_MOVEMENT: {
     http: 200,
