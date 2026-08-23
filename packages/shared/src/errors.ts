@@ -193,7 +193,17 @@ export const ERROR_CODES = {
   EXPORT_TOO_LARGE: {
     http: 413,
     retryable: false,
-    tr: () => 'Rapor çok büyük, arka planda hazırlanıp e-posta ile gönderilecek',
+    // Metin "arka planda hazırlanıp e-posta ile gönderilecek" diyordu ve bu
+    // YANLIŞTI: bu kod SADECE istek REDDEDİLDİĞİNDE fırlıyor (satır sayısı
+    // sert sınırın üstünde). Kullanıcı hiç gelmeyecek bir e-postayı
+    // beklerdi. Kuyruğa alınan durumun ayrı bir yolu var ve hata bile
+    // değil.
+    //
+    // Sayılar metinde: "çok büyük" tek başına kullanıcıya ne kadar
+    // daraltması gerektiğini söylemiyor.
+    tr: (d) =>
+      `Rapor çok büyük: ${d.rowCount} satır, üst sınır ${d.limit}. ` +
+      'Tarih aralığını veya filtreleri daraltın.',
   },
   PRINTER_UNAVAILABLE: {
     http: 503,

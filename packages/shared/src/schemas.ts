@@ -262,6 +262,15 @@ export const exportMovementsSchema = z.object({
 export type ExportMovementsInput = z.infer<typeof exportMovementsSchema>
 
 export const exportStockSchema = z.object({
+  /**
+   * Ekrandaki arama kutusuyla AYNI alan.
+   *
+   * Başta yoktu ve bu sessiz bir yalandı: kullanıcı "vida" arayıp 12 satır
+   * görüyor, "Excel'e aktar" diyor ve eline 4000 satırlık dosya geliyordu.
+   * Export'un ekranda görüneni vermesi, raporun doğru olmasından ayrı bir
+   * şey değil.
+   */
+  search: z.string().trim().max(100).optional(),
   /** Arşivlenmiş ürünler varsayılan olarak HARİÇ: rapor bugünün stoğu. */
   includeArchived: z.boolean().default(false),
   /** Sadece kritik seviyenin altındakiler. Sipariş listesi çıkarmak için. */

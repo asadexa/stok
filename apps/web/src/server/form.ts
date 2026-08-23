@@ -28,10 +28,50 @@ const DETAIL_KEYS = ['sku', 'barcode', 'name', 'retryAfterSeconds'] as const
  */
 const ISSUE_PARAM = 'sorun'
 
-export type FormParams = Record<string, string | undefined>
+/**
+ * `messageFrom`'un OKUDUĞU parametreler — hepsi bu kadar.
+ *
+ * Index imzalı gevşek bir tip (`Record<string, string | undefined>`)
+ * kullanılmıyor: sayfalar kendi parametrelerini açıkça tanımlıyor ve
+ * index imzasız bir arayüz index imzalı bir tipe atanamaz. Okunan
+ * anahtarları tek tek saymak hem derleyiciyi memnun ediyor hem de bu
+ * fonksiyonun sözleşmesini görünür kılıyor.
+ *
+ * Sayfalar kendi arayüzlerini bunu genişleterek tanımlıyor.
+ */
+export interface FormParams {
+  hata?: string
+  sorun?: string
+  sku?: string
+  barcode?: string
+  name?: string
+  retryAfterSeconds?: string
+}
+
+/**
+ * Next'in `redirect()` ve `notFound()` fonksiyonları AKIŞ KONTROLÜ için
+ * fırlatıyor — hata değiller.
+ *
+ * `try { ...; redirect(ok) } catch (err) { redirect(hata) }` yazıldığında
+ * başarı yönlendirmesi kendi catch'ine düşüyor ve kullanıcı "beklenmeyen
+ * hata" görüyor. İşin en kötü hâli: iş GERÇEKTEN yapılmış oluyor (rapor
+ * kuyruğa girmiş, kayıt yazılmış) ama ekran başarısız diyor — kullanıcı
+ * tekrar deniyor ve mükerrer kayıt oluşuyor.
+ *
+ * Doğru çözüm yönlendirmeyi `try` dışına almak ve kod öyle yazılıyor; bu
+ * kontrol ikinci savunma hattı: aynı hata tekrar yazılırsa sessizce yanlış
+ * davranmak yerine yönlendirme çalışmaya devam ediyor.
+ */
+function rethrowControlFlow(err: unknown): void {
+  const digest = (err as { digest?: unknown } | null)?.digest
+  if (typeof digest === 'string' && (digest.startsWith('NEXT_REDIRECT') || digest === 'NEXT_NOT_FOUND')) {
+    throw err
+  }
+}
 
 /** `AppError`'ı `hata=KOD&sku=...` biçimli sorgu dizesine çevirir. */
 export function errorQuery(err: unknown): string {
+  rethrowControlFlow(err)
   const search = new URLSearchParams()
   if (err instanceof AppError) {
     search.set('hata', err.code)

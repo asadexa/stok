@@ -998,7 +998,13 @@ G1, G2 ve G4 kapandı. G3 (yazıcı) TODOS E5'e bağlı, aşağıda gerekçesi y
   - Arşivlenen barkod artık çözülmüyor; tekillik index'i kısmi olduğu için
     aynı etiket doğru ürüne yeniden bağlanabiliyor.
   - D7 çarpan kuralı iki yönlü oldu: koli > 1, diğer türler tam olarak 1.
-- [ ] **T22 (P1, human: ~3sa / CC: ~25dk)** - web - Excel export butonları (stok + hareket)
+- [x] **T22 (P1, human: ~3sa / CC: ~25dk)** - web - Excel export butonları (stok + hareket)
+  - Karar sayfa çizilirken veriliyor (`planExport`, sadece sayar): düğmede
+    kaç satır ineceği yazıyor ve üç yol üç farklı şey gösteriyor.
+  - İndirme adresi salt okunur bir `GET`; kuyruğa alma ayrı bir POST. Tek
+    bağlantı olsaydı sayfayı yenilemek her seferinde yeni iş kuyruğa alırdı.
+  - `exportStockSchema`'ya `search` eklendi: ekranda 12 satır görüp
+    dosyada 4000 satır almak sessiz bir yalandı.
 - [ ] **T23 (P1, human: ~4sa / CC: ~30dk)** - web - **E1: Excel/CSV toplu ürün içe aktarma** + önizleme + hata raporu
   - Kaynak: Bölüm 11 boş durumlar. Bu olmadan sistem ilk gün kurulamaz
 - [ ] **T24 (P2, human: ~3sa / CC: ~20dk)** - web - Kullanıcı yönetimi (ekle, rol ver, pasifleştir)

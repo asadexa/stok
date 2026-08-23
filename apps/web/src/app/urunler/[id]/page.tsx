@@ -51,12 +51,20 @@ import { currentActor } from '@/server/session'
  * ============================================================================
  */
 
+/** Bu ekranın kendi bildirim parametreleri + ortak hata alanları. */
+interface UrunParams extends FormParams {
+  yeni?: string
+  kaydedildi?: string
+  barkod?: string
+  arsiv?: string
+}
+
 export default async function ProductPage({
   params,
   searchParams,
 }: {
   params: Promise<{ id: string }>
-  searchParams: Promise<FormParams>
+  searchParams: Promise<UrunParams>
 }) {
   const actor = await currentActor()
   if (!actor) redirect('/giris')

@@ -1,11 +1,14 @@
 import { type Unit, formatQty } from '@stok/shared'
-import { listCategories, listStock } from '@stok/core'
+import { actorCan, exportStock, listCategories, listStock } from '@stok/core'
 import { appDb } from '@stok/db'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { Shell } from '@/components/shell'
+import { ExportControl } from '@/components/export-control'
 import { Pagination } from '@/components/pagination'
 import { formatDateTime, formatMoney } from '@/lib/format'
+import { type FormParams, errorQuery, messageFrom } from '@/server/form'
+import { exportHref, exportPlanFor } from '@/server/export'
 import { currentActor } from '@/server/session'
 
 /**
@@ -32,12 +35,14 @@ import { currentActor } from '@/server/session'
 
 const PAGE_SIZE = 50
 
-interface StokParams {
+interface StokParams extends FormParams {
   ara?: string
   kategori?: string
   kritik?: string
   arsiv?: string
   atla?: string
+  rapor?: string
+  eposta?: string
 }
 
 /** Adres çubuğundan gelen sayı. Çöp girdi 0'a düşüyor, sayfa çökmüyor. */
@@ -84,10 +89,81 @@ export default async function StockPage({
   }
   const hasFilter = Object.values(filters).some(Boolean)
 
+  // Export planı EKRANDAKİ FİLTRELERLE hesaplanıyor: kullanıcı "vida"
+  // arayıp 12 satır görüyorsa dosya da 12 satır olmalı. Sayım yetkisiz
+  // role hiç yapılmıyor.
+  const canExport = actorCan(actor, 'export:excel')
+  const exportParams = {
+    search,
+    category,
+    onlyCritical,
+    includeArchived,
+  }
+  const { plan: exportPlan, error: exportError } = canExport
+    ? await exportPlanFor(actor, 'STOCK_EXPORT', exportParams)
+    : { plan: null, error: null }
+
+  async function queueExport() {
+    'use server'
+    const owner = await currentActor()
+    if (!owner) redirect('/giris')
+
+    const back = exportHref('/stok', filters)
+    const join = back.includes('?') ? '&' : '?'
+
+    // YÖNLENDİRMELER `try` DIŞINDA. Next'in `redirect()` fonksiyonu akış
+    // kontrolü için fırlatıyor; içeride bırakılırsa başarı yönlendirmesi
+    // kendi catch'ine düşer ve kullanıcı, iş gerçekten yapılmışken
+    // "beklenmeyen hata" görür — sonra tekrar dener ve rapor iki kez
+    // kuyruğa girer.
+    let target: string
+    try {
+      const result = await exportStock(owner, exportParams, { db: appDb() })
+      target =
+        result.mode === 'queued'
+          ? `${back}${join}rapor=kuyrukta&eposta=${encodeURIComponent(result.notifyEmail)}`
+          : // Aradan satır silinip eşiğin altına düşmüş: artık anında inebilir.
+            exportHref('/api/rapor/stok', filters)
+    } catch (err) {
+      target = `${back}${join}${errorQuery(err)}`
+    }
+    redirect(target)
+  }
+
+  const message = messageFrom(params)
+
   return (
     <Shell role={actor.role} active="/stok">
+      {message ? (
+        <p
+          role="alert"
+          className="mb-4 flex gap-2 rounded-md border border-kritik bg-kritik-bg p-3 text-sm text-kritik"
+        >
+          <span aria-hidden>⚠</span>
+          <span>{message}</span>
+        </p>
+      ) : null}
+
+      {params.rapor === 'kuyrukta' ? (
+        <p className="mb-4 flex gap-2 rounded-md border border-giris bg-white p-3 text-sm text-slate-700">
+          <span aria-hidden className="text-giris">
+            ✓
+          </span>
+          <span>
+            Rapor hazırlanıyor. Hazır olunca{' '}
+            <span className="font-medium">{params.eposta}</span> adresine gönderilecek.
+          </span>
+        </p>
+      ) : null}
+
       {actor.role === 'ADMIN' ? (
-        <div className="mb-4 flex justify-end">
+        <div className="mb-4 flex flex-wrap items-center justify-end gap-3">
+          <ExportControl
+            href={exportHref('/api/rapor/stok', filters)}
+            plan={exportPlan}
+            error={exportError}
+            queueAction={queueExport}
+          />
           <Link
             href="/urunler/yeni"
             className="h-14 rounded-md bg-slate-900 px-6 text-base font-medium leading-[3.5rem] text-white hover:bg-slate-700"

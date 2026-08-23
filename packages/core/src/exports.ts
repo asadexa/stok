@@ -18,7 +18,7 @@ import {
   users,
   withTenant,
 } from '@stok/db'
-import { and, asc, eq, gte, isNull, lte, sql } from 'drizzle-orm'
+import { and, asc, eq, gte, isNull, lte, or, sql } from 'drizzle-orm'
 import { type Actor, canSeePrices, movementUserScope, requirePermission } from './authz.js'
 import {
   type MovementExportRow,
@@ -108,11 +108,21 @@ function limitsOf(options: ExportOptions) {
 // ---------------------------------------------------------------------------
 
 function stockWhere(actor: Actor, q: ExportStockInput) {
+  const search = q.search?.trim()
   return and(
     eq(products.tenantId, actor.tenantId),
     q.includeArchived ? undefined : isNull(products.archivedAt),
     q.category ? eq(products.category, q.category) : undefined,
     q.onlyCritical ? sql`COALESCE(${currentStock.qty}, 0) <= ${products.minStock}` : undefined,
+    // `listStock` ile BİREBİR aynı koşul (tr_norm, hem ad hem stok kodu).
+    // İki yerde farklı yazılsaydı ekranda 12 satır görüp Excel'de 13 satır
+    // almak mümkün olurdu ve hangisinin doğru olduğu belli olmazdı.
+    search
+      ? or(
+          sql`${products.nameNorm} LIKE '%' || tr_norm(${search}) || '%'`,
+          sql`tr_norm(${products.sku}) LIKE '%' || tr_norm(${search}) || '%'`,
+        )
+      : undefined,
   )
 }
 
@@ -261,6 +271,63 @@ async function resolveNotifyEmail(actor: Actor, options: ExportOptions): Promise
     })
   }
   return row.email
+}
+
+/**
+ * ============================================================================
+ * PLANLAMA — indirme bağlantısının mutasyon içermemesi için
+ *
+ * `exportStock`/`exportMovements` üç yoldan birini seçiyor ve ikisi yan
+ * etkili: kuyruğa alma bir iş yaratıyor. Bu yüzden indirme düğmesi
+ * doğrudan bir `GET` bağlantısı OLAMAZ — kullanıcının sayfayı yenilemesi
+ * her seferinde yeni bir arka plan işi kuyruğa alırdı.
+ *
+ * Akış ikiye bölündü:
+ *
+ *   POST (form)  ─▶ planExport(): SADECE sayar, hiçbir şey yazmaz
+ *                     ├─ inline  ─▶ GET /api/rapor/... adresine yönlendir
+ *                     └─ queued  ─▶ exportStock() çağır, işi kuyruğa al
+ *
+ * Böylece indirme adresi salt okunur kalıyor: yenilenebilir, yer imine
+ * eklenebilir, tarayıcı önceden çekse bile zarar yok.
+ *
+ * `inline` yolunda sayım iki kez çalışıyor (bir planlamada, bir de indirme
+ * isteğinde). `COUNT(*)` aynı index'i kullanıyor ve 20 bin satırlık dosyayı
+ * üretmenin yanında ölçülemeyecek kadar ucuz — buna karşılık kazanılan şey,
+ * yan etkisiz bir indirme adresi.
+ * ============================================================================
+ */
+export interface ExportPlan {
+  mode: 'inline' | 'queued'
+  rowCount: number
+}
+
+export async function planExport(
+  actor: Actor,
+  kind: ExportKind,
+  raw: unknown = {},
+  options: ExportOptions = {},
+): Promise<ExportPlan> {
+  requirePermission(actor, 'export:excel')
+  const limits = limitsOf(options)
+
+  const rowCount = await (kind === 'STOCK_EXPORT'
+    ? (async () => {
+        const q = parseOrThrow(exportStockSchema, raw)
+        return withTenant(actor.tenantId, (tx) => countStock(tx, actor, q), options.db)
+      })()
+    : (async () => {
+        const q = parseOrThrow(exportMovementsSchema, raw)
+        const scopedUserId = movementUserScope(actor, q.userId)
+        return withTenant(
+          actor.tenantId,
+          (tx) => countMovements(tx, actor, q, scopedUserId),
+          options.db,
+        )
+      })())
+
+  if (rowCount > limits.queued) throw tooLarge(rowCount, kind, limits.queued)
+  return { mode: rowCount >= limits.inline ? 'queued' : 'inline', rowCount }
 }
 
 export async function exportStock(

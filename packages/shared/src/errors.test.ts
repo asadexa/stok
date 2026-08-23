@@ -18,6 +18,33 @@ describe('hata sözleşmesi (D-2.2)', () => {
     )
   })
 
+  it('EXPORT_TOO_LARGE olmayacak bir e-posta vaat ETMİYOR', () => {
+    // Metin eskiden "arka planda hazırlanıp e-posta ile gönderilecek"
+    // diyordu ama bu kod SADECE istek reddedildiğinde fırlıyor: hiçbir iş
+    // kuyruğa alınmıyor, hiçbir e-posta gitmiyor. Kullanıcı gelmeyecek
+    // bir postayı beklerdi.
+    const text = errorText('EXPORT_TOO_LARGE', { rowCount: 250_000, limit: 200_000 })
+
+    expect(text).not.toContain('e-posta')
+    expect(text).toContain('250000')
+    expect(text).toContain('200000')
+    // Kullanıcının yapabileceği somut şey metinde olmalı.
+    expect(text).toContain('daraltın')
+  })
+
+  it('doğrulama hatası hangi alanın yanlış olduğunu söylüyor', () => {
+    // zod mesajları zaten Türkçe ve alana özgü; yutulup genel bir cümleye
+    // çevrilseydi kullanıcı formda denemeyle arardı.
+    expect(
+      errorText('VALIDATION_FAILED', {
+        issues: [{ path: 'qtyMultiplier', message: 'Barkod türü ile çarpan uyuşmuyor' }],
+      }),
+    ).toBe('Barkod türü ile çarpan uyuşmuyor')
+
+    // Ayrıntı yoksa genel metne düşüyor.
+    expect(errorText('VALIDATION_FAILED', {})).toBe('Girilen bilgilerde hata var')
+  })
+
   it('çift kayıt kullanıcıya gösterilmez', () => {
     // Doğru davranış: aynı okutma iki kez gönderilmiş, sistem sessizce
     // tek kayıt tutmuş. Kullanıcının bilmesi gereken bir şey yok.

@@ -12,6 +12,7 @@ import {
   createExportJobHandler,
   exportMovements,
   exportStock,
+  planExport,
 } from './exports.js'
 import { RETRY_DELAY_SECONDS, getJob, listFailedJobs, listJobs, runQueuedJobs } from './jobs.js'
 import { createInMemoryTransport } from './mail.js'
@@ -109,6 +110,18 @@ async function expectAppError(promise: Promise<unknown>, code: string) {
   return err as AppError
 }
 
+/** `inline` olduğunu doğrulayıp daraltan yardımcı. */
+async function asInline(promise: Promise<Awaited<ReturnType<typeof exportStock>>>) {
+  const res = await promise
+  if (res.mode !== 'inline') throw new Error(`beklenen inline, gelen ${res.mode}`)
+  return res
+}
+
+async function jobCount(): Promise<number> {
+  const rows = await admin.db.execute<{ n: string }>(sql`SELECT count(*)::text AS n FROM background_jobs`)
+  return Number([...rows][0]?.n ?? 0)
+}
+
 async function sheetOf(buffer: Uint8Array) {
   const workbook = new ExcelJS.Workbook()
   // Cast: exceljs bağımlılığı (fast-csv üzerinden) @types/node@14 çekiyor
@@ -118,6 +131,78 @@ async function sheetOf(buffer: Uint8Array) {
   await workbook.xlsx.load((Buffer.from(buffer) as unknown as Parameters<typeof workbook.xlsx.load>[0]))
   return workbook.worksheets[0]!
 }
+
+describe('T22 - ekrandaki filtre ile aynı satırlar', () => {
+  it('arama filtresi export\'a da uygulanıyor', async () => {
+    // Başta uygulanmıyordu: kullanıcı "ısıtıcı" arayıp 1 satır görüyor,
+    // Excel'e aktar deyince eline bütün katalog geliyordu. Ekranda
+    // görünenle dosyadakinin farklı olması, raporun yanlış olması demek.
+    const sheet = await sheetOf((await asInline(exportStock(boss, { search: 'isitici' }, opts))).buffer)
+
+    // 1 başlık + 1 veri satırı.
+    expect(sheet.rowCount).toBe(2)
+    expect(String(sheet.getRow(2).getCell(2).value)).toBe('Isıtıcı Şerit')
+  })
+
+  it('arama stok koduna da bakıyor ve Türkçe normalize ediliyor', async () => {
+    const bySku = await asInline(exportStock(boss, { search: 'EX-2' }, opts))
+    const byName = await asInline(exportStock(boss, { search: 'IŞITICI' }, opts))
+
+    expect((await sheetOf(bySku.buffer)).rowCount).toBe(2)
+    expect((await sheetOf(byName.buffer)).rowCount).toBe(2)
+  })
+
+  it('eşleşme yoksa dosya sadece başlık satırı içeriyor', async () => {
+    // Boş dosya değil BAŞLIKLI dosya: kullanıcı dosyayı açtığında
+    // "bozuk mu indi" diye düşünmemeli, "sonuç yok" görmeli.
+    const res = await asInline(exportStock(boss, { search: 'zzzyok' }, opts))
+    expect((await sheetOf(res.buffer)).rowCount).toBe(1)
+  })
+})
+
+describe('T22 - planExport', () => {
+  it('eşik altında inline, üstünde queued diyor ve hiçbir şey yazmıyor', async () => {
+    const before = await jobCount()
+
+    const plan = await planExport(boss, 'STOCK_EXPORT', {}, opts)
+    expect(plan).toEqual({ mode: 'inline', rowCount: 2 }) // arşivli hariç
+
+    const queued = await planExport(boss, 'STOCK_EXPORT', { includeArchived: true }, {
+      ...opts,
+      inlineRowLimit: 2,
+      queuedRowLimit: 100,
+    })
+    expect(queued.mode).toBe('queued')
+
+    // ASIL İDDİA: planlama yan etkisiz. İndirme adresi bir GET ve
+    // kullanıcı sayfayı yenilediğinde yeni iş kuyruğa alınmamalı.
+    expect(await jobCount()).toBe(before)
+  })
+
+  it('sert sınırın üstünde reddediyor ve sayıları hataya koyuyor', async () => {
+    const err = await expectAppError(
+      planExport(boss, 'STOCK_EXPORT', {}, { ...opts, inlineRowLimit: 1, queuedRowLimit: 1 }),
+      'EXPORT_TOO_LARGE',
+    )
+    expect(err.details).toMatchObject({ rowCount: 2, limit: 1 })
+  })
+
+  it('planlama exportStock ile aynı filtreyi görüyor', async () => {
+    const plan = await planExport(boss, 'STOCK_EXPORT', { search: 'isitici' }, opts)
+    const res = await asInline(exportStock(boss, { search: 'isitici' }, opts))
+
+    expect(plan.rowCount).toBe(res.rowCount)
+  })
+
+  it('çalışan planlama yapamıyor', async () => {
+    await expectAppError(planExport(staff, 'STOCK_EXPORT', {}, opts), 'FORBIDDEN')
+  })
+
+  it('hareket planı çalışanın kapsamıyla sınırlı olurdu (admin tümünü sayıyor)', async () => {
+    const plan = await planExport(boss, 'MOVEMENT_EXPORT', {}, opts)
+    expect(plan.rowCount).toBe(2) // biri admin, biri çalışan tarafından yazıldı
+  })
+})
 
 describe('yetki', () => {
   it('çalışan Excel indiremez', async () => {

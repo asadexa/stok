@@ -4,13 +4,16 @@ import {
   type MovementReason,
   reasonLabel,
 } from '@stok/shared'
-import { getProduct, listMovements, listTenantUsers } from '@stok/core'
+import { actorCan, exportMovements, getProduct, listMovements, listTenantUsers } from '@stok/core'
 import { appDb } from '@stok/db'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { Shell } from '@/components/shell'
+import { ExportControl } from '@/components/export-control'
 import { Pagination } from '@/components/pagination'
 import { dayEndIso, dayStartIso, formatDateTime, formatMoney } from '@/lib/format'
+import { type FormParams, errorQuery, messageFrom } from '@/server/form'
+import { exportHref, exportPlanFor } from '@/server/export'
 import { currentActor } from '@/server/session'
 
 /**
@@ -37,13 +40,15 @@ const PAGE_SIZE = 50
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-interface HareketParams {
+interface HareketParams extends FormParams {
   urun?: string
   kullanici?: string
   sebep?: string
   baslangic?: string
   bitis?: string
   atla?: string
+  rapor?: string
+  eposta?: string
 }
 
 function toOffset(raw: string | undefined): number {
@@ -110,8 +115,73 @@ export default async function MovementsPage({
   }
   const hasFilter = Object.values(filters).some(Boolean)
 
+  // Export EKRANDAKİ filtrelerle. `userId` burada da ham gönderiliyor;
+  // `exportMovements` içindeki `movementUserScope` çalışanın gönderdiğini
+  // yok sayıyor — Excel'e dökmek rol matrisini atlamanın yolu olamaz.
+  const exportParams = { productId, userId, reason, from, to }
+  const { plan: exportPlan, error: exportError } = actorCan(actor, 'export:excel')
+    ? await exportPlanFor(actor, 'MOVEMENT_EXPORT', exportParams)
+    : { plan: null, error: null }
+
+  async function queueExport() {
+    'use server'
+    const owner = await currentActor()
+    if (!owner) redirect('/giris')
+
+    const back = exportHref('/hareketler', filters)
+    const join = back.includes('?') ? '&' : '?'
+
+    // Yönlendirmeler `try` DIŞINDA — gerekçe için bkz. /stok sayfası.
+    let target: string
+    try {
+      const result = await exportMovements(owner, exportParams, { db: appDb() })
+      target =
+        result.mode === 'queued'
+          ? `${back}${join}rapor=kuyrukta&eposta=${encodeURIComponent(result.notifyEmail)}`
+          : exportHref('/api/rapor/hareket', filters)
+    } catch (err) {
+      target = `${back}${join}${errorQuery(err)}`
+    }
+    redirect(target)
+  }
+
+  const message = messageFrom(params)
+
   return (
     <Shell role={actor.role} active="/hareketler">
+      {message ? (
+        <p
+          role="alert"
+          className="mb-4 flex gap-2 rounded-md border border-kritik bg-kritik-bg p-3 text-sm text-kritik"
+        >
+          <span aria-hidden>⚠</span>
+          <span>{message}</span>
+        </p>
+      ) : null}
+
+      {params.rapor === 'kuyrukta' ? (
+        <p className="mb-4 flex gap-2 rounded-md border border-giris bg-white p-3 text-sm text-slate-700">
+          <span aria-hidden className="text-giris">
+            ✓
+          </span>
+          <span>
+            Rapor hazırlanıyor. Hazır olunca{' '}
+            <span className="font-medium">{params.eposta}</span> adresine gönderilecek.
+          </span>
+        </p>
+      ) : null}
+
+      {exportPlan || exportError ? (
+        <div className="mb-4 flex justify-end">
+          <ExportControl
+            href={exportHref('/api/rapor/hareket', filters)}
+            plan={exportPlan}
+            error={exportError}
+            queueAction={queueExport}
+          />
+        </div>
+      ) : null}
+
       {actor.role !== 'ADMIN' ? (
         <p className="mb-4 rounded-md border border-slate-200 bg-white p-3 text-sm text-slate-600">
           Bu listede yalnızca sizin yaptığınız hareketler görünür.
