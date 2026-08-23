@@ -1,6 +1,7 @@
 export * from './reasons.js'
 export * from './roles.js'
 export * from './units.js'
+export * from './barcodes.js'
 export * from './errors.js'
 export * from './jobs.js'
 export * from './schemas.js'

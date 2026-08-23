@@ -50,6 +50,13 @@
       "when": 1787419133203,
       "tag": "0006_background_jobs",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1787468577881,
+      "tag": "0007_barcode_archive",
+      "breakpoints": true
     }
   ]
 }

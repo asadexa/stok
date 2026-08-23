@@ -1,13 +1,17 @@
 import {
   AUTH_ATTEMPT_SCOPE_VALUES,
+  BARCODE_KINDS,
+  BARCODE_KIND_VALUES,
   JOB_KIND_VALUES,
   JOB_STATUS_VALUES,
   MOVEMENT_REASON_VALUES,
   ROLE_VALUES,
   UNIT_VALUES,
   authScopesCheckConstraint,
+  barcodeKindsCheckConstraint,
   jobKindsCheckConstraint,
   jobStatusesCheckConstraint,
+  multiplierCheckConstraint,
   reasonsCheckConstraint,
   rolesCheckConstraint,
   unitsCheckConstraint,
@@ -102,6 +106,44 @@ describe('DB CHECK constraint kod ile senkron', () => {
     expect(valuesIn(statuses!)).toEqual([...JOB_STATUS_VALUES].sort())
   })
 
+  it('barcodes_kind_ck tam olarak BARCODE_KINDS listesini içeriyor', async () => {
+    // Yeni bir barkod türü eklenip migration üretilmezse, arayüz türü
+    // seçtirir ve INSERT 23514 ile patlar — kullanıcı 500 görür.
+    const def = await constraintDefinition('barcodes_kind_ck')
+    expect(def).toBeDefined()
+    expect(valuesIn(def!)).toEqual([...BARCODE_KIND_VALUES].sort())
+  })
+
+  it('barkod çarpan kuralı iki yönlü zorlanıyor (D7)', async () => {
+    // Sadece "koli > 1" yönü olsaydı, çarpanı 12 olan bir TEKLİ barkod
+    // veritabanına girer ve tek kalem okutulduğunda stoğu 12 artırırdı.
+    const def = await constraintDefinition('barcodes_case_multiplier_ck')
+    expect(def).toBeDefined()
+    // PostgreSQL ifadeyi normalize ediyor: `1` → `(1)::numeric`, tek
+    // elemanlı IN → `=`. Metni birebir beklemek yerine iki yönün de
+    // orada olduğunu arıyoruz.
+    const normalized = def!.replace(/\s+/g, ' ')
+    expect(normalized).toMatch(/qty_multiplier > \(1\)::numeric/)
+    expect(normalized).toMatch(/qty_multiplier = \(1\)::numeric/)
+    // Çarpan alabilen tür listesi `BARCODE_KINDS` bayrağından türüyor.
+    expect(valuesIn(def!)).toEqual(
+      BARCODE_KIND_VALUES.filter((k) => BARCODE_KINDS[k].allowsMultiplier),
+    )
+  })
+
+  it('barkod tekilliği KISMİ index: arşivli barkodu kapsamıyor', async () => {
+    // Tam index olsaydı, yanlış ürüne bağlanmış bir barkod arşivlendikten
+    // sonra doğru ürüne bir daha eklenemezdi (T21).
+    const rows = await admin.db.execute<{ indexdef: string }>(sql`
+      SELECT indexdef FROM pg_indexes
+       WHERE tablename = 'product_barcodes' AND indexname = 'barcodes_tenant_barcode_uq'
+    `)
+    const def = [...rows][0]?.indexdef
+    expect(def, 'barkod tekillik index\'i yok').toBeDefined()
+    expect(def).toContain('UNIQUE')
+    expect(def).toContain('archived_at IS NULL')
+  })
+
   it('constraint üreticileri beklenen SQL metnini yazıyor', () => {
     // Üreticinin kendisi de sınanmalı: schema.ts bunu sql.raw ile
     // gömüyor, bozuk bir metin migration üretimine kadar fark edilmezdi.
@@ -115,6 +157,12 @@ describe('DB CHECK constraint kod ile senkron', () => {
       "status IN ('QUEUED', 'RUNNING', 'SUCCEEDED', 'FAILED')",
     )
     expect(jobKindsCheckConstraint('kind')).toContain("kind IN ('STOCK_EXPORT'")
+    expect(barcodeKindsCheckConstraint('kind')).toBe(
+      "kind IN ('UNIT', 'CASE', 'EAN', 'INTERNAL')",
+    )
+    expect(multiplierCheckConstraint('kind', 'qty_multiplier')).toBe(
+      "CASE WHEN kind IN ('CASE') THEN qty_multiplier > 1 ELSE qty_multiplier = 1 END",
+    )
   })
 })
 

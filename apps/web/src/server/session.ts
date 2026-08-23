@@ -37,12 +37,43 @@ interface CookieOptions {
   maxAge: number
 }
 
+/**
+ * Çerez `secure` bayrağı UYGULAMANIN ADRESİNDEN türüyor, `NODE_ENV`'den
+ * değil.
+ *
+ * `NODE_ENV` bir DERLEME modu, dağıtım şeması değil. `next start` her
+ * zaman production modunda çalışır — yani bayrağı `NODE_ENV`'e bağlamak
+ * "üretim = HTTPS" varsayımını kodun içine gömer.
+ *
+ * O varsayım bu üründe tutmuyor: depo sunucusunun LAN'da düz HTTP ile
+ * (`http://192.168.1.20:3000`) koşması gayet olası bir kurulum. Orada
+ * tarayıcı `Secure` çerezi SAKLAMAZ bile ve giriş ekranı hiçbir hata
+ * göstermeden kendini tekrar eder — teşhis edilmesi en zor arıza türü.
+ * (`localhost` istisna: tarayıcılar onu güvenilir sayar, o yüzden
+ * yerelde sorun görünmüyordu.)
+ *
+ * `APP_URL` uygulamanın gerçekten hangi şemayla servis edildiğini
+ * söylüyor; bayrağı oradan almak dağıtımla tutarlı davranış veriyor.
+ *
+ * FAIL CLOSED: `APP_URL` yoksa veya çözümlenemiyorsa `Secure` AÇIK
+ * kalıyor. Yanlış tarafa düşmek, oturum çerezini düz metin göndermek
+ * demek olurdu.
+ */
+function secureCookies(): boolean {
+  const url = process.env.APP_URL
+  if (!url) return true
+  try {
+    return new URL(url).protocol === 'https:'
+  } catch {
+    return true
+  }
+}
+
 function cookieOptions(maxAge: number): CookieOptions {
   return {
     httpOnly: true,
     sameSite: 'lax',
-    // Yerelde http üzerinden çalışıyoruz; üretimde çerez sadece TLS ile.
-    secure: process.env.NODE_ENV === 'production',
+    secure: secureCookies(),
     path: '/',
     maxAge,
   }

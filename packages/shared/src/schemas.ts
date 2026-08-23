@@ -1,17 +1,36 @@
 import { z } from 'zod'
+import {
+  BARCODE_KIND_VALUES,
+  type BarcodeKind,
+  multiplierMatchesKind,
+} from './barcodes.js'
 import { MOVEMENT_REASON_VALUES, MOVEMENT_REASONS, type MovementReason } from './reasons.js'
 import { UNIT_VALUES, type Unit } from './units.js'
 
 const reasonEnum = z.enum(MOVEMENT_REASON_VALUES as [MovementReason, ...MovementReason[]])
 const unitEnum = z.enum(UNIT_VALUES as [Unit, ...Unit[]])
+const barcodeKindEnum = z.enum(BARCODE_KIND_VALUES as [BarcodeKind, ...BarcodeKind[]])
 
 /** NUMERIC(14,3): en fazla 3 ondalık basamak. */
 const MAX_DECIMALS = 3
-const hasValidPrecision = (n: number) => {
+const decimalsOf = (n: number) => {
   const s = n.toString()
   const dot = s.indexOf('.')
-  return dot === -1 || s.length - dot - 1 <= MAX_DECIMALS
+  return dot === -1 ? 0 : s.length - dot - 1
 }
+const hasValidPrecision = (n: number) => decimalsOf(n) <= MAX_DECIMALS
+
+/**
+ * Para: NUMERIC(12,2). Basamak sınırı BURADA da zorlanıyor çünkü
+ * PostgreSQL fazlasını sessizce yuvarlar — 19,999 TL girip 20,00 TL
+ * kaydedilmesini kullanıcı ancak raporda fark ederdi.
+ */
+const moneySchema = z
+  .number({ invalid_type_error: 'Tutar sayı olmalı' })
+  .finite()
+  .nonnegative()
+  .max(99_999_999.99)
+  .refine((n) => decimalsOf(n) <= 2, { message: 'En fazla 2 ondalık basamak (kuruş)' })
 
 /**
  * Miktar. Kullanıcı HER ZAMAN pozitif girer; işareti sebep belirler.
@@ -81,6 +100,38 @@ export const createMovementResponseSchema = z.object({
 
 export type CreateMovementResponse = z.infer<typeof createMovementResponseSchema>
 
+/**
+ * ============================================================================
+ * ÜRÜN TANIMI (T21)
+ *
+ * Fiyat ve miktar alanları `z.number()`, `z.coerce.number()` DEĞİL: coerce
+ * boş metni 0'a çevirir ve "alış fiyatını boş bıraktım" ile "alış fiyatı
+ * sıfır" ayrımı kaybolur. Formdan gelen metni sayıya çevirmek çağıranın işi
+ * ve orada boş alan `undefined` olmalı.
+ * ============================================================================
+ */
+
+const barcodeInputSchema = z
+  .object({
+    barcode: barcodeSchema,
+    kind: barcodeKindEnum.default('UNIT'),
+    qtyMultiplier: z
+      .number()
+      .positive()
+      .finite()
+      .max(100_000)
+      .refine(hasValidPrecision, { message: `En fazla ${MAX_DECIMALS} ondalık basamak` })
+      .default(1),
+  })
+  // D7 iki yönlü: koli çarpanı 1 olamaz (5 koli girilince stok 5 artardı,
+  // gerçekte 60), tekli barkodun çarpanı 1'den farklı olamaz (tek kalem
+  // okutulunca stok 12 artardı). İkisi de sayıyı makul gösterip sessizce
+  // yanlış yazar. Kural `BARCODE_KINDS` içindeki bayraktan türüyor.
+  .refine((b) => multiplierMatchesKind(b.kind, b.qtyMultiplier), {
+    message: 'Barkod türü ile çarpan uyuşmuyor',
+    path: ['qtyMultiplier'],
+  })
+
 /** Ürün oluşturma. Sadece admin. */
 export const createProductSchema = z.object({
   sku: z.string().trim().min(1).max(64),
@@ -88,27 +139,57 @@ export const createProductSchema = z.object({
   unit: unitEnum.default('ADET'),
   category: z.string().trim().max(100).optional(),
   brand: z.string().trim().max(100).optional(),
-  purchasePrice: z.number().nonnegative().finite().optional(),
-  salePrice: z.number().nonnegative().finite().optional(),
-  minStock: z.number().nonnegative().finite().default(0),
+  purchasePrice: moneySchema.optional(),
+  salePrice: moneySchema.optional(),
+  minStock: z
+    .number()
+    .nonnegative()
+    .finite()
+    .max(1_000_000)
+    .refine(hasValidPrecision, { message: `En fazla ${MAX_DECIMALS} ondalık basamak` })
+    .default(0),
   locationId: z.string().uuid().optional(),
-  barcodes: z
-    .array(
-      z.object({
-        barcode: barcodeSchema,
-        kind: z.enum(['UNIT', 'CASE', 'EAN', 'INTERNAL']).default('UNIT'),
-        qtyMultiplier: z.number().positive().finite().default(1),
-      }),
-    )
-    .min(1, 'En az bir barkod gerekli')
-    // D7: koli barkodunun çarpanı 1 olamaz, yoksa koli okutulunca stok
-    // 1 artar ve sistem sessizce yanlış sayı söyler.
-    .refine((bs) => bs.every((b) => b.kind !== 'CASE' || b.qtyMultiplier > 1), {
-      message: 'Koli barkodunun çarpanı birden büyük olmalı',
-    }),
+  barcodes: z.array(barcodeInputSchema).min(1, 'En az bir barkod gerekli'),
 })
 
 export type CreateProductInput = z.infer<typeof createProductSchema>
+
+/**
+ * Ürün güncelleme.
+ *
+ * Barkodlar BURADA YOK: onların kendi uç noktaları var (`addBarcodeSchema`
+ * ve barkod silme). Aynı forma sıkıştırılsaydı "gönderilen listede olmayan
+ * barkodu sil" anlamına gelirdi ve tarayıcıda açık kalmış eski bir sekmeden
+ * gelen kaydetme, aradaki eklemeleri sessizce silerdi.
+ *
+ * Her alan opsiyonel ama `null` ile `undefined` FARKLI: `undefined` =
+ * dokunma, `null` = temizle. Kategori/marka/fiyat/konum için bu ayrım şart,
+ * yoksa bir kez girilen alış fiyatı bir daha asla boşaltılamazdı.
+ */
+export const updateProductSchema = z.object({
+  sku: z.string().trim().min(1).max(64).optional(),
+  name: z.string().trim().min(1).max(200).optional(),
+  unit: unitEnum.optional(),
+  category: z.string().trim().max(100).nullable().optional(),
+  brand: z.string().trim().max(100).nullable().optional(),
+  purchasePrice: moneySchema.nullable().optional(),
+  salePrice: moneySchema.nullable().optional(),
+  minStock: z
+    .number()
+    .nonnegative()
+    .finite()
+    .max(1_000_000)
+    .refine(hasValidPrecision, { message: `En fazla ${MAX_DECIMALS} ondalık basamak` })
+    .optional(),
+  locationId: z.string().uuid().nullable().optional(),
+})
+
+export type UpdateProductInput = z.infer<typeof updateProductSchema>
+
+/** Var olan ürüne barkod ekleme. */
+export const addBarcodeSchema = barcodeInputSchema
+
+export type AddBarcodeInput = z.infer<typeof addBarcodeSchema>
 
 /**
  * ============================================================================

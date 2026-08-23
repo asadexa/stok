@@ -31,6 +31,26 @@ export interface ErrorMeta {
   tr: (d: ErrorDetails) => string
 }
 
+/**
+ * `validationError()` ayrıntılara `issues: [{ path, message }]` koyuyor.
+ * Metin üretimi burada, çünkü hata sözleşmesi (D-2.2) Türkçe metnin tek
+ * kaynağının bu dosya olduğunu söylüyor.
+ */
+function firstIssueMessage(details: ErrorDetails): string | undefined {
+  const issues = details.issues
+  if (!Array.isArray(issues)) return undefined
+  for (const issue of issues) {
+    if (
+      typeof issue === 'object' &&
+      issue !== null &&
+      typeof (issue as { message?: unknown }).message === 'string'
+    ) {
+      return (issue as { message: string }).message
+    }
+  }
+  return undefined
+}
+
 export const ERROR_CODES = {
   // --- İş kuralı: tekrar denemek işe yaramaz, kullanıcı müdahalesi gerek ---
   BARCODE_UNKNOWN: {
@@ -56,7 +76,15 @@ export const ERROR_CODES = {
   VALIDATION_FAILED: {
     http: 400,
     retryable: false,
-    tr: () => 'Girilen bilgilerde hata var',
+    // zod mesajları ZATEN TÜRKÇE ve alana özgü ("Koli barkodunun çarpanı
+    // birden büyük olmalı"). Bunu yutup "Girilen bilgilerde hata var"
+    // demek, kullanıcıyı formda hangi alanın yanlış olduğunu tahmin
+    // etmeye zorluyordu — üç sayı alanı olan bir formda bu, denemeyle
+    // bulunacak bir bilmece.
+    //
+    // İLK sorunu gösteriyoruz, hepsini değil: liste hâlinde altı satır
+    // hata, tek satırlık bir yönlendirmeden daha az okunur.
+    tr: (d) => firstIssueMessage(d) ?? 'Girilen bilgilerde hata var',
   },
   FORBIDDEN: {
     http: 403,
@@ -67,6 +95,26 @@ export const ERROR_CODES = {
     http: 404,
     retryable: false,
     tr: () => 'Kayıt bulunamadı',
+  },
+  SKU_EXISTS: {
+    http: 409,
+    retryable: false,
+    // Çakışan kaydın ADI da veriliyor: "bu kod kullanımda" mesajı tek
+    // başına kullanıcıyı ürünü aramaya gönderir, adı görürse zaten
+    // eklemiş olduğunu anında anlar.
+    tr: (d) => `"${d.sku}" stok kodu zaten kullanılıyor${d.name ? `: ${d.name}` : ''}`,
+  },
+  BARCODE_EXISTS: {
+    http: 409,
+    retryable: false,
+    tr: (d) => `${d.barcode} barkodu başka bir üründe tanımlı${d.name ? `: ${d.name}` : ''}`,
+  },
+  LAST_BARCODE: {
+    http: 409,
+    retryable: false,
+    // Barkodsuz ürün depoda OKUTULAMAZ, yani pratikte kaybolur. Kullanıcı
+    // bunu ancak eline terminali alıp raf başında fark eder.
+    tr: () => 'Ürünün son barkodu kaldırılamaz. Önce yenisini ekleyin.',
   },
 
   // --- Şeffaf: kullanıcı hiçbir şey görmez, doğru davranış budur ---

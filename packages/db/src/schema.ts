@@ -1,6 +1,8 @@
 import {
+  barcodeKindsCheckConstraint,
   jobKindsCheckConstraint,
   jobStatusesCheckConstraint,
+  multiplierCheckConstraint,
   reasonsCheckConstraint,
   rolesCheckConstraint,
   unitsCheckConstraint,
@@ -173,15 +175,35 @@ export const productBarcodes = pgTable(
      * CHECK: koli barkodunun çarpanı 1 olamaz.
      */
     qtyMultiplier: qtyCol('qty_multiplier').notNull().default('1'),
+    /**
+     * Barkod da SİLİNMİYOR, arşivleniyor — ürünlerdeki gerekçenin aynısı ve
+     * burada teknik bir zorunluluk da var: `stock_movements.barcode_id` bu
+     * satıra FK ile bağlı ("koli mu birim mi okutuldu" denetimde aranıyor).
+     * Gerçek DELETE, hareketi olan bir barkodda 23503 ile patlar ve
+     * kullanıcı 500 görürdü.
+     */
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
     createdAt: createdAt(),
   },
   (t) => [
     // Bir barkod tenant içinde tek bir ürüne ait olabilir.
-    uniqueIndex('barcodes_tenant_barcode_uq').on(t.tenantId, t.barcode),
+    //
+    // KISMİ index: kural sadece ARŞİVLENMEMİŞ barkodlar için geçerli.
+    // Tam index olsaydı yanlış ürüne bağlanmış bir barkod arşivlendikten
+    // sonra doğru ürüne bir daha eklenemezdi — ve barkod etiketi rafın
+    // üstünde duruyor olurdu.
+    uniqueIndex('barcodes_tenant_barcode_uq')
+      .on(t.tenantId, t.barcode)
+      .where(sql`archived_at IS NULL`),
     index('barcodes_product_idx').on(t.productId),
-    check('barcodes_kind_ck', sql`kind IN ('UNIT', 'CASE', 'EAN', 'INTERNAL')`),
+    check('barcodes_kind_ck', sql.raw(barcodeKindsCheckConstraint('kind'))),
     check('barcodes_multiplier_ck', sql`qty_multiplier > 0`),
-    check('barcodes_case_multiplier_ck', sql`kind <> 'CASE' OR qty_multiplier > 1`),
+    // İki yönlü D7 kuralı (bkz. shared/barcodes.ts): koli çarpanı > 1,
+    // diğer türlerde çarpan tam olarak 1.
+    check(
+      'barcodes_case_multiplier_ck',
+      sql.raw(multiplierCheckConstraint('kind', 'qty_multiplier')),
+    ),
   ],
 )
 

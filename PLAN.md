@@ -991,7 +991,13 @@ G1, G2 ve G4 kapandı. G3 (yazıcı) TODOS E5'e bağlı, aşağıda gerekçesi y
     sunucuda yok sayılıyor (`movementUserScope`).
   - Sayfalama `limit + 1` ile: defterde her sayfa için ikinci bir
     `count(*)` çalıştırmak sayfanın kendisinden pahalıya gelirdi.
-- [ ] **T21 (P1, human: ~4sa / CC: ~30dk)** - web - Ürün ekleme/düzenleme/arşivleme + çoklu barkod yönetimi
+- [x] **T21 (P1, human: ~4sa / CC: ~30dk)** - web - Ürün ekleme/düzenleme/arşivleme + çoklu barkod yönetimi
+  - Barkod da arşivleniyor, silinmiyor: `stock_movements.barcode_id` FK ile
+    bağlı, gerçek DELETE 23503 ile patlardı (migration 0007).
+  - Son aktif barkod kaldırılamıyor — barkodsuz ürün depoda okutulamaz.
+  - Arşivlenen barkod artık çözülmüyor; tekillik index'i kısmi olduğu için
+    aynı etiket doğru ürüne yeniden bağlanabiliyor.
+  - D7 çarpan kuralı iki yönlü oldu: koli > 1, diğer türler tam olarak 1.
 - [ ] **T22 (P1, human: ~3sa / CC: ~25dk)** - web - Excel export butonları (stok + hareket)
 - [ ] **T23 (P1, human: ~4sa / CC: ~30dk)** - web - **E1: Excel/CSV toplu ürün içe aktarma** + önizleme + hata raporu
   - Kaynak: Bölüm 11 boş durumlar. Bu olmadan sistem ilk gün kurulamaz

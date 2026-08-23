@@ -19,7 +19,7 @@ import {
   users,
   withTenant,
 } from '@stok/db'
-import { and, desc, eq, gte, lte, sql } from 'drizzle-orm'
+import { and, desc, eq, gte, isNull, lte, sql } from 'drizzle-orm'
 import { type Actor, movementUserScope, redactPricesAll, requirePermission } from './authz.js'
 import { issuesOf, parseOrThrow, validationError } from './validate.js'
 import { formatScaled, multiplyScaled, parseScaled, scaledFromNumber, scaledToNumber } from './numeric.js'
@@ -211,7 +211,18 @@ async function resolveBarcode(tx: Tx, tenantId: string, barcode: string) {
     })
     .from(productBarcodes)
     .innerJoin(products, eq(products.id, productBarcodes.productId))
-    .where(and(eq(productBarcodes.tenantId, tenantId), eq(productBarcodes.barcode, barcode)))
+    .where(
+      and(
+        eq(productBarcodes.tenantId, tenantId),
+        eq(productBarcodes.barcode, barcode),
+        // ARŞİVLENMİŞ BARKOD ÇÖZÜLMÜYOR (T21). Yanlış ürüne bağlandığı
+        // için kaldırılmış bir barkod hâlâ çözülseydi, kaldırma işlemi
+        // hiçbir şey yapmamış olurdu: etiket rafta duruyor, okutan kişi
+        // yine yanlış üründen düşürüyor. "Bu barkod tanımlı değil" demek
+        // doğru cevap — kullanıcı yeniden tanımlamaya gider.
+        isNull(productBarcodes.archivedAt),
+      ),
+    )
     .limit(1)
 
   if (!row) {

@@ -86,6 +86,17 @@ export default async function StockPage({
 
   return (
     <Shell role={actor.role} active="/stok">
+      {actor.role === 'ADMIN' ? (
+        <div className="mb-4 flex justify-end">
+          <Link
+            href="/urunler/yeni"
+            className="h-14 rounded-md bg-slate-900 px-6 text-base font-medium leading-[3.5rem] text-white hover:bg-slate-700"
+          >
+            + Yeni ürün
+          </Link>
+        </div>
+      ) : null}
+
       <form method="get" action="/stok" className="mb-4 flex flex-wrap items-end gap-3">
         <label className="block grow basis-64">
           <span className="text-sm font-medium">Ara</span>
@@ -153,11 +164,20 @@ export default async function StockPage({
 
       <section aria-label="Stok tablosu" className="rounded-md border border-slate-200 bg-white">
         {page.rows.length === 0 ? (
-          <p className="p-6 text-slate-600">
-            {hasFilter
-              ? 'Bu filtrelere uyan ürün yok.'
-              : 'Henüz ürün yok. Ürün ekleyerek başlayın.'}
-          </p>
+          <div className="p-6 text-slate-600">
+            {hasFilter ? (
+              <p>Bu filtrelere uyan ürün yok.</p>
+            ) : (
+              <>
+                <p>Henüz ürün yok.</p>
+                {actor.role === 'ADMIN' ? (
+                  <Link href="/urunler/yeni" className="mt-2 inline-block underline">
+                    İlk ürünü ekleyin
+                  </Link>
+                ) : null}
+              </>
+            )}
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -181,8 +201,12 @@ export default async function StockPage({
                 {page.rows.map((row) => (
                   <tr key={row.productId} className="border-t border-slate-100 align-top">
                     <td className="px-4 py-2">
+                      {/* Ada tıklamak ürün kartına gidiyor: oradan hem
+                          hareketlere hem düzenlemeye geçilebiliyor.
+                          Doğrudan hareket loguna bağlansaydı, ürünü
+                          düzenlemek için ayrı bir yol aramak gerekirdi. */}
                       <Link
-                        href={`/hareketler?urun=${row.productId}`}
+                        href={`/urunler/${row.productId}`}
                         className="font-medium underline decoration-slate-300 underline-offset-2"
                       >
                         {row.name}
