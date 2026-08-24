@@ -190,6 +190,22 @@ async function main() {
   ok('Paketler kurulu')
 
   // -------------------------------------------------------------------------
+  step('Veritabanı kurulumu')
+  // -------------------------------------------------------------------------
+  // `pg_trgm` eklentisi ve `stok_app` rolü. Docker bunları konteyner İLK
+  // KEZ oluşturulurken kendisi uyguluyor, ama kendi Postgres'ini kurmuş
+  // biri için hiçbir yerde uygulanmıyordu ve migration "stok_app rolü yok"
+  // diye düşüyordu. Yani Docker gereksiz yere ZORUNLU haldeydi.
+  //
+  // Her açılışta koşuyor: üç ifade de idempotent. "Kuruldu mu" bayrağı
+  // tutmuyoruz — tutulan her bayrak gerçekle ayrışabilecek ikinci bir
+  // kaynaktır.
+  if (pnpmScript('@stok/db', 'init').status !== 0) {
+    die('Veritabanı kurulumu başarısız.\n  Elle görmek için: pnpm --filter @stok/db run init')
+  }
+  ok('Eklenti ve roller yerinde')
+
+  // -------------------------------------------------------------------------
   step("Migration'lar")
   // -------------------------------------------------------------------------
   if (pnpmScript('@stok/db', 'migrate').status !== 0) {

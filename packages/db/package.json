@@ -13,6 +13,7 @@
   "scripts": {
     "generate": "drizzle-kit generate",
     "migrate": "drizzle-kit migrate",
+    "init": "tsx src/init-db.ts",
     "studio": "drizzle-kit studio",
     "seed": "tsx src/seed.ts",
     "product-count": "tsx src/product-count.ts",

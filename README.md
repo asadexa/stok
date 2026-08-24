@@ -82,10 +82,16 @@ işletmenin tek bir ürününü bile göremezsiniz (veritabanı seviyesinde RLS)
 ```bash
 pnpm install
 docker compose up -d              # veya 5433 portunda kendi Postgres'iniz
+pnpm --filter @stok/db run init   # pg_trgm eklentisi + stok_app rolü
 pnpm --filter @stok/db run migrate
 pnpm --filter @stok/db run seed
 pnpm --filter @stok/web run dev
 ```
+
+**Docker zorunlu değil.** Kendi PostgreSQL kurulumunuz 5433 portunda
+çalışıyorsa `docker compose up -d` adımını atlayın; `init` adımı eklentiyi
+ve rolü oraya da uygular. Docker kullanıyorsanız bu adım zaten uygulanmış
+olanı tekrar uygular — üç ifade de idempotent, zararı yok.
 
 Sunucu, `DATABASE_URL` veya `AUTH_SECRET` eksikse **açılmıyor** ve neyin
 eksik olduğunu konsola yazıyor. Bunlar olmadan uygulama açılıp ilk giriş

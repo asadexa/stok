@@ -1216,6 +1216,29 @@ G1, G2 ve G4 kapandı. G3 (yazıcı) TODOS E5'e bağlı, aşağıda gerekçesi y
     bağlantısıyla değiştirilince RLS testi kırmızı yanıyor, yani gerçekten
     ikisinin farkını sınıyor.
 
+- [x] **T64 (P2, human: ~1sa / CC: ~15dk)** - altyapı - **Docker zorunlu olmaktan çıksın**
+  - `db/init/*.sql` (pg_trgm eklentisi + `stok_app` rolü) yalnızca İKİ
+    yerde uygulanıyordu: Docker konteyneri ilk kez oluşturulurken
+    (`docker-entrypoint-initdb.d`) ve test veritabanı kurulurken
+    (`testing.ts`).
+  - Sonuç: kendi makinesine PostgreSQL kurmuş biri `pnpm demo`
+    çalıştırdığında demo koşucusu açık portu bulup Docker'ı atlıyor, sonra
+    migration "stok_app rolü yok" diyerek düşüyordu. Yani projenin Docker'a
+    ihtiyacı yokken Docker fiilen ZORUNLUydu.
+  - `packages/db/src/init-db.ts` — aynı SQL dosyalarını MEVCUT
+    veritabanına uyguluyor. `testing.ts` ise onları düşürüp yeniden
+    yarattığı veritabanına uyguluyor; ortak olan SQL dosyalarının kendisi,
+    yani kurulum kodunun tek kopyası orada.
+  - Her açılışta koşuyor. Üç ifade de idempotent
+    (`CREATE EXTENSION IF NOT EXISTS`, rol bloğu `IF NOT EXISTS` korumalı,
+    `GRANT` tekrarlanabilir), o yüzden "kuruldu mu" bayrağı tutulmuyor —
+    tutulan her bayrak gerçekle ayrışabilecek ikinci bir kaynaktır.
+  - Sahip bağlantısıyla (`MIGRATION_DATABASE_URL`): rol yaratmak ve
+    eklenti kurmak uygulama rolünün yetkisi değil, olmamalı da.
+  - Doğrulandı: boş bir veritabanında init öncesi `pg_trgm` yok (0), init
+    sonrası var (1) ve `stok_app` CONNECT yetkisi almış. Arka arkaya iki
+    kez koşturuldu, ikisi de temiz.
+
 ### Faz 4.5: Mobilin ön şartı
 
 - [ ] **T53 (P1, human: ~6sa / CC: ~45dk)** - api - **`/api/v1` REST uçları** (mobil için)
