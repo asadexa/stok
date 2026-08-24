@@ -1181,6 +1181,41 @@ G1, G2 ve G4 kapandı. G3 (yazıcı) TODOS E5'e bağlı, aşağıda gerekçesi y
     ile giriş denendi; ekran yine genel metni gösterdi, terminal sebebi
     yazdı. Guard geri alındı.
 
+- [x] **T62 (P2, human: ~1sa / CC: ~15dk)** - altyapı - **Depo skill'leri (`.claude/skills/`)**
+  - Kullanıcı "gstack skill'lerini entegre et" dedi. gstack bu ortamda
+    YOK: ne makinede, ne depoda, ne eklenti kataloğunda. PLAN.md'deki
+    GSTACK REVIEW REPORT tablosu o incelemelerin SONUÇLARINI kaydediyor,
+    komutların kendisini değil.
+  - Onun yerine bu projede tekrar tekrar elle uygulanan üç disiplin
+    yazıya döküldü. Bunlar bugüne kadar yalnız oturum bağlamında
+    yaşıyordu; bağlam bitince kayboluyorlardı.
+  - `dogrula` — korumayı geçici kaldır, testin kırmızı yandığını gör,
+    geri koy ve yerinde olduğunu doğrula. Bu projede ~15 kez uygulandı.
+  - `demo-testi` — tarayıcıda sürme (dört kullanıcıya görünen hata
+    yalnız böyle bulundu) ve demo kurulum yolunun platform tuzakları.
+  - `gorev-kaydet` — bulguyu sohbette bırakma, PLAN.md'ye numaralı görev
+    olarak yaz. T52, T53, T55, T57-T61 böyle doğdu.
+  - Gerçek gstack bulunursa bunların yerini alabilir; çakışmıyorlar.
+
+- [x] **T63 (P1, human: ~1sa / CC: ~15dk)** - db - **master'daki kırık smoke testi**
+  - master'a inen `fc3d00f` iki dosya ekledi ve ikisi de sorunluydu.
+  - `packages/db/src/smoke.test.ts` silinmiş `./test-support.js`
+    modülünü import ediyordu (134cb32'de kaldırılmıştı). master'ın test
+    paketi bu haliyle o dosyayı yükleyemeden düşüyordu. Git bunu
+    ÇAKIŞMA OLARAK GÖSTERMİYOR — farklı dosyalar; sessiz anlamsal
+    çakışma.
+  - Dosyanın fikri doğruydu (iskele bozulduğunda diğer testlerin kafa
+    karıştırıcı hataları arasında aramamak), dayandığı temel yoktu.
+    Dört testinden ikisi kaldırılan iskelenin kendi temizlik
+    mekanizmasını sınıyordu; kalan ikisinin karşılığı zaten
+    rls.test.ts'te vardı. Bu yüzden port değil, mevcut iskeleye göre
+    yeniden yazıldı.
+  - `tatus -sb` — yanlış yazılmış bir `git status -sb` komutunun çıktısı
+    yanlışlıkla commit edilmiş. Silindi.
+  - Doğrulandı: yeni smoke testi 4/4 geçiyor; uygulama bağlantısı admin
+    bağlantısıyla değiştirilince RLS testi kırmızı yanıyor, yani gerçekten
+    ikisinin farkını sınıyor.
+
 ### Faz 4.5: Mobilin ön şartı
 
 - [ ] **T53 (P1, human: ~6sa / CC: ~45dk)** - api - **`/api/v1` REST uçları** (mobil için)
