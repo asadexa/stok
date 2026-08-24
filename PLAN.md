@@ -1161,6 +1161,26 @@ G1, G2 ve G4 kapandı. G3 (yazıcı) TODOS E5'e bağlı, aşağıda gerekçesi y
     saklamıyor, giriş ekranı hiçbir hata göstermeden kendini tekrar ediyor
     — teşhis edilmesi en zor arıza türü.
 
+- [x] **T61 (P1, human: ~1sa / CC: ~10dk)** - web - **Sunucu kusuru olan hatalar loga yazılsın**
+  - **KULLANICI TESTİ, ÜÇÜNCÜ TUR.** Giriş `SERVER_ERROR` veriyordu ve
+    sunucu günlüğünde HİÇBİR İZ yoktu: terminalde sadece `POST /giris 303`
+    görünüyordu. `AppError` yakalanıp yönlendirmeye çevriliyor, mesajı
+    yolda kayboluyordu.
+  - Oysa `AppError`'ın mesajı teşhisi zaten yazıyordu:
+    "AUTH_SECRET tanımlı değil veya 32 karakterden kısa (üret: openssl
+    rand -base64 32)". Bu satır kimseye ulaşmadığı için teşhis, hatayı
+    fırlatan satırın kaynak kodda elle bulunmasını gerektirdi.
+  - `logServerFault()` — `errorQuery()` ve giriş ekranının catch bloğunda.
+  - **Yalnızca 5xx.** "Parola hatalı" veya "elde yeterli stok yok"
+    kullanıcının yaptığı bir şey, sunucunun kusuru değil; onları da loga
+    yazmak günlüğü gürültüye boğar ve gerçek arızayı görünmez kılar.
+  - **Ekrana değil konsola.** Kullanıcı genel metni görmeye devam ediyor;
+    ayrıntı operatörün terminaline gidiyor. Kimliği doğrulanmamış bir
+    sayfaya sunucunun iç durumunu yazmak gereksiz bilgi verir.
+  - Doğrulandı: T60 guard'ı geçici olarak kapatılıp kısa bir `AUTH_SECRET`
+    ile giriş denendi; ekran yine genel metni gösterdi, terminal sebebi
+    yazdı. Guard geri alındı.
+
 ### Faz 4.5: Mobilin ön şartı
 
 - [ ] **T53 (P1, human: ~6sa / CC: ~45dk)** - api - **`/api/v1` REST uçları** (mobil için)

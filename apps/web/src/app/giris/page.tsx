@@ -1,6 +1,7 @@
 import { AppError, errorText } from '@stok/shared'
 import { redirect } from 'next/navigation'
 import { headers } from 'next/headers'
+import { logServerFault } from '@/server/form'
 import { currentActor, startSession } from '@/server/session'
 
 /**
@@ -43,6 +44,9 @@ export default async function LoginPage({
       await startSession(email, password, clientIp)
     } catch (err) {
       if (!(err instanceof AppError)) throw err
+      // Sunucu kusuru olan hatalar loga: ekrandaki genel metin operatöre
+      // hiçbir şey söylemiyor, terminaldeki satır teşhisi bitiriyor.
+      logServerFault('giris', err)
       const wait = err.details.retryAfterSeconds
       redirect(`/giris?hata=${err.code}${typeof wait === 'number' ? `&bekle=${wait}` : ''}`)
     }
