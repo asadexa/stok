@@ -1123,6 +1123,44 @@ G1, G2 ve G4 kapandı. G3 (yazıcı) TODOS E5'e bağlı, aşağıda gerekçesi y
     olmadan çalışmadığını kimse fark etmiyor. Ortamı hazırlamak
     uygulamanın işi.
 
+- [x] **T59 (P1, human: ~2sa / CC: ~20dk)** - altyapı - **Veritabanı hazır olmadan migration koşmasın**
+  - **KULLANICI TESTİ, İKİNCİ TUR.** `pnpm db:reset` konteyneri başlattı,
+    hemen ardından koşan `migrate` hiçbir şey uygulamadı. drizzle-kit
+    hatayı spinner'ın arkasında yuttuğu için geriye sadece `Exit status 1`
+    kaldı ve kullanıcı yirmi dakika türev hatalarla uğraştı:
+    `relation "current_stock" does not exist`, sonra
+    `function auth_read_attempts(...) does not exist`. Hepsi tek bir
+    sessiz başarısızlığın sonucuydu.
+  - **Kök sebep: AÇIK PORT HAZIR DEMEK DEĞİL.** Docker portu konteyner
+    başlar başlamaz yayınlıyor; `docker-proxy` dinliyor ama arkadaki
+    Postgres hâlâ `initdb` ve `db/init/*.sql` ile uğraşıyor. TCP bağlantısı
+    KURULUYOR, sorgu reddediliyor.
+  - `scripts/wait-for-db.mjs`: Docker varsa konteynerin İÇİNDEN
+    `pg_isready` (tek güvenilir cevap), yerel kurulumda TCP yeter — yerel
+    Postgres portu ancak hazır olunca açıyor.
+  - `db:up` ve `db:reset` artık bekliyor. `demo.mjs` de aynı modülü
+    kullanıyor; eskiden "port açık" görünce beklemeden geçiyordu, yani
+    aynı tuzak orada da vardı.
+
+- [x] **T60 (P1, human: ~1sa / CC: ~15dk)** - web - **Eksik yapılandırmada sunucu açılmasın**
+  - Kullanıcı testinde AYNI HATA İKİ KEZ yaşandı: önce `DATABASE_URL`,
+    sonra `AUTH_SECRET`. İkisinde de uygulama derlendi, açıldı ve ilk
+    giriş denemesinde düştü; ekranda "SERVER_ERROR" yazıyordu. Kurulum
+    hatası, çalışma hatası kılığında görünüyordu.
+  - `next.config.ts` içinde `assertServerConfig()`: eksikleri TEK SEFERDE
+    listeliyor ve ne yapılacağını söylüyor. Tek tek söylemek, kullanıcıyı
+    birini düzeltip diğerini keşfetme turuna sokardı.
+  - **Konsola, giriş ekranına değil.** Kimliği doğrulanmamış bir sayfaya
+    sunucunun neyi eksik olduğunu yazmak gereksiz bilgi verir; operatörün
+    ihtiyacı olan yer zaten konsol.
+  - **Derlemede koşmuyor** (`PHASE_PRODUCTION_BUILD` atlanıyor): `next
+    build` hiçbir yere bağlanmıyor ve gizli anahtarları olmayan bir imaj
+    kurma adımında da çalışabilmeli.
+  - `APP_URL` eksikse uyarı: çerez `secure` bayrağı oradan türüyor ve yoksa
+    açık kalıyor (fail closed). LAN'da düz HTTP kurulumda tarayıcı çerezi
+    saklamıyor, giriş ekranı hiçbir hata göstermeden kendini tekrar ediyor
+    — teşhis edilmesi en zor arıza türü.
+
 ### Faz 4.5: Mobilin ön şartı
 
 - [ ] **T53 (P1, human: ~6sa / CC: ~45dk)** - api - **`/api/v1` REST uçları** (mobil için)

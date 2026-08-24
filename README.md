@@ -87,12 +87,18 @@ pnpm --filter @stok/db run seed
 pnpm --filter @stok/web run dev
 ```
 
+Sunucu, `DATABASE_URL` veya `AUTH_SECRET` eksikse **açılmıyor** ve neyin
+eksik olduğunu konsola yazıyor. Bunlar olmadan uygulama açılıp ilk giriş
+denemesinde düşerdi ve ekranda sadece "SERVER_ERROR" görünürdü.
+
 `--filter` ile çağırırken **`run` kelimesi zorunlu**: pnpm onsuz ilk kelimeyi
 script değil çalıştırılabilir sayıyor ve Windows'ta
 `'migrate' is not recognized` hatası veriyor.
 
 | Komut | Ne yapar |
 |---|---|
+| `pnpm db:up` | Veritabanını açar ve **hazır olana kadar bekler** |
+| `pnpm db:reset` | Veriyi silip veritabanını sıfırdan kurar |
 | `pnpm test` | Tüm testler (gerçek PostgreSQL gerekir) |
 | `pnpm typecheck` | Dört paketin tip kontrolü |
 | `pnpm --filter @stok/db run generate` | Şema değişikliğinden migration üretir |

@@ -8,9 +8,9 @@
     "node": ">=22"
   },
   "scripts": {
-    "db:up": "docker compose up -d",
+    "db:up": "docker compose up -d && node scripts/wait-for-db.mjs",
     "db:down": "docker compose down",
-    "db:reset": "docker compose down -v && docker compose up -d",
+    "db:reset": "docker compose down -v && docker compose up -d && node scripts/wait-for-db.mjs",
     "db:logs": "docker compose logs -f db",
     "typecheck": "pnpm -r --if-present typecheck",
     "test": "pnpm -r --if-present test",
