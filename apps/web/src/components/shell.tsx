@@ -20,6 +20,8 @@ interface NavItem {
 
 const NAV: NavItem[] = [
   { href: '/panel', label: 'Panel', adminOnly: false },
+  // Hareket girişi menüde İKİNCİ sırada: depoda en sık yapılan iş bu.
+  { href: '/hareket', label: 'Giriş/Çıkış', adminOnly: false },
   { href: '/stok', label: 'Stok', adminOnly: false },
   { href: '/hareketler', label: 'Hareketler', adminOnly: false },
   { href: '/kullanicilar', label: 'Kullanıcılar', adminOnly: true },

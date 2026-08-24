@@ -2,6 +2,7 @@ import {
   AppError,
   type CreateMovementInput,
   type CreateMovementResponse,
+  type Unit,
   createMovementSchema,
   listMovementsSchema,
   toDelta,
@@ -200,6 +201,95 @@ async function writeMovement(
  * RLS zaten süzüyor ama açık filtre `barcodes_tenant_barcode_uq` index'ini
  * kullandırıyor ve niyeti okuyana gösteriyor.
  */
+/**
+ * ============================================================================
+ * BARKOD ÖNİZLEME (T52)
+ *
+ * Hareket yazmadan ÖNCE "hangi ürün, elde kaç tane" sorusunu cevaplıyor.
+ * PLAN.md D9: "çalışan barkodu okuttuğunda ekranda ürün adı ve mevcut stok
+ * görmeli, yoksa doğru ürüne yazdığını doğrulayamaz."
+ *
+ * Bu, yazma yolundan AYRI ve salt okunur. Aynı fonksiyonu kullanmak cazip
+ * ama yanlış olurdu: yazma yolu satırı kilitliyor (`FOR UPDATE`) ve sadece
+ * bakmak için kilit almak, gerçekten yazan istekleri bekletirdi.
+ * ============================================================================
+ */
+export interface BarcodeLookup {
+  barcode: string
+  productId: string
+  productName: string
+  sku: string
+  unit: Unit
+  /** Barkodun çarpanı. Koli barkodunda > 1 (D7). */
+  qtyMultiplier: number
+  /** Şu anki stok. Kilit ALINMADAN okundu, yani yazma anında değişebilir. */
+  qty: number
+  archivedAt: Date | null
+}
+
+export async function lookupBarcode(
+  actor: Actor,
+  barcode: string,
+  options: CreateMovementOptions = {},
+): Promise<BarcodeLookup> {
+  requirePermission(actor, 'stock:read')
+  const trimmed = barcode.trim()
+  if (trimmed === '') {
+    throw new AppError('BARCODE_UNKNOWN', 'empty barcode', { barcode: trimmed })
+  }
+
+  return withTenant(
+    actor.tenantId,
+    async (tx) => {
+      const [row] = await tx
+        .select({
+          productId: products.id,
+          productName: products.name,
+          sku: products.sku,
+          unit: products.unit,
+          archivedAt: products.archivedAt,
+          qtyMultiplier: productBarcodes.qtyMultiplier,
+          qty: currentStock.qty,
+        })
+        .from(productBarcodes)
+        .innerJoin(products, eq(products.id, productBarcodes.productId))
+        .leftJoin(
+          currentStock,
+          and(
+            eq(currentStock.tenantId, products.tenantId),
+            eq(currentStock.productId, products.id),
+          ),
+        )
+        .where(
+          and(
+            eq(productBarcodes.tenantId, actor.tenantId),
+            eq(productBarcodes.barcode, trimmed),
+            isNull(productBarcodes.archivedAt),
+          ),
+        )
+        .limit(1)
+
+      if (!row) {
+        throw new AppError('BARCODE_UNKNOWN', `barcode ${trimmed} not found`, { barcode: trimmed })
+      }
+
+      return {
+        barcode: trimmed,
+        productId: row.productId,
+        productName: row.productName,
+        sku: row.sku,
+        unit: row.unit as Unit,
+        qtyMultiplier: scaledToNumber(parseScaled(row.qtyMultiplier)),
+        // Hiç hareketi olmayan ürünün projeksiyon satırı yok; 0 göstermeli,
+        // boş değil. Boş hücre "bilinmiyor" der, oysa cevap "sıfır".
+        qty: row.qty === null ? 0 : scaledToNumber(parseScaled(row.qty)),
+        archivedAt: row.archivedAt,
+      }
+    },
+    options.db,
+  )
+}
+
 async function resolveBarcode(tx: Tx, tenantId: string, barcode: string) {
   const [row] = await tx
     .select({

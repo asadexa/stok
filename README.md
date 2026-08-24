@@ -38,6 +38,8 @@ Veritabanını sıfırlayıp örnek veriyi yeniden yüklemek için:
 
 ### Neyi deneyebilirsiniz
 
+- **Giriş/Çıkış** — barkod okutup mal kabulü veya satış girin; ürün adı ve
+  mevcut stok onaydan önce görünür, kayıttan sonra "439 → 446" gösterilir
 - **Panel** — kritik stok uyarısı, günün giriş/çıkış özeti, son hareketler
 - **Stok tablosu** — Türkçe arama (`ısıtıcı` yazın, `Isıtıcı Şerit` gelsin),
   kategori/kritik/arşiv filtreleri, sayfalama
@@ -57,10 +59,9 @@ işletmenin tek bir ürününü bile göremezsiniz (veritabanı seviyesinde RLS)
 
 ### Neyi DENEYEMEZSİNİZ — bilerek
 
-- **Stok hareketi giremezsiniz.** Mal kabulü / satış girişi ekranı henüz yok.
-  Hareket girişi başlangıçta yalnızca mobil uygulamaya planlanmıştı (T27) ve
-  web'e konmamıştı; bu bir plan boşluğu olarak fark edildi ve **T52** olarak
-  kaydedildi. Demodaki stok sayıları örnek veriden geliyor.
+- **Barkod okuyucu ile okutamazsınız** — kamera mobilde (Faz 5). Web'deki
+  Giriş/Çıkış ekranı barkodu elle yazmayı veya USB okuyucu (klavye
+  emülasyonu) kullanmayı bekliyor.
 - **Mobil uygulama yok.** Barkod okutma, offline kuyruk, PIN ile hızlı
   kullanıcı geçişi — hepsi Faz 5.
 - **Arka plan işçisi çalışmıyor.** 20.000 satırın üstündeki bir export

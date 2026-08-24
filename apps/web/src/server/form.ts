@@ -18,7 +18,28 @@ import { AppError, errorText } from '@stok/shared'
  * ============================================================================
  */
 
-const DETAIL_KEYS = ['sku', 'barcode', 'name', 'retryAfterSeconds'] as const
+/**
+ * Adres çubuğuna TAŞINMAYAN ayrıntılar.
+ *
+ * Liste ters çevrildi: eskiden taşınacak alanların beyaz listesi vardı ve
+ * eksikti — "Elde undefined adet var, undefined adet çıkışı yapılamaz"
+ * mesajı tarayıcı testinde böyle yakalandı. Beyaz liste her yeni hata
+ * kodunda güncellenmeyi unutulacak bir yer; unutulduğunda da hata
+ * vermiyor, kullanıcıya "undefined" gösteriyor.
+ *
+ * Artık her sayı/metin/bayrak taşınıyor, bunlar HARİÇ:
+ *   - kimlikler: adres çubuğunu okunmaz yapıyor ve metinde kullanılmıyor
+ *   - `issues`: dizi; ilk mesajı ayrıca `sorun` parametresiyle gidiyor
+ */
+const HIDDEN_DETAIL_KEYS = new Set([
+  'userId',
+  'productId',
+  'tenantId',
+  'barcodeId',
+  'jobId',
+  'permission',
+  'issues',
+])
 
 /**
  * Doğrulama hatasının İLK mesajı ayrıca taşınıyor. `issues` dizisini
@@ -42,10 +63,13 @@ const ISSUE_PARAM = 'sorun'
 export interface FormParams {
   hata?: string
   sorun?: string
-  sku?: string
-  barcode?: string
-  name?: string
-  retryAfterSeconds?: string
+  /**
+   * Hata ayrıntıları adres çubuğunda serbest anahtarlarla taşınıyor
+   * (`available`, `requested`, `limit`, `sku`, …). Sayfalar kendi bildikleri
+   * alanları bu arayüzü genişleterek tanımlıyor; `messageFrom` hepsini
+   * okuyor ve metin üreticisine veriyor.
+   */
+  [key: string]: string | undefined
 }
 
 /**
@@ -75,9 +99,9 @@ export function errorQuery(err: unknown): string {
   const search = new URLSearchParams()
   if (err instanceof AppError) {
     search.set('hata', err.code)
-    for (const key of DETAIL_KEYS) {
-      const value = err.details[key]
-      if (typeof value === 'string' || typeof value === 'number') {
+    for (const [key, value] of Object.entries(err.details)) {
+      if (HIDDEN_DETAIL_KEYS.has(key)) continue
+      if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
         search.set(key, String(value))
       }
     }
@@ -101,11 +125,15 @@ export function errorQuery(err: unknown): string {
 /** Sorgu parametrelerinden gösterilecek Türkçe metni üretir. */
 export function messageFrom(params: FormParams): string | null {
   if (!params.hata) return null
+  // Metin üreticileri sayı bekleyen alanlara sayı, metin bekleyenlere metin
+  // görmeli. Adres çubuğundan her şey metin geliyor; sayıya çevrilebilenler
+  // çevriliyor — "Elde 3 adet" ile "Elde \"3\" adet" arasındaki fark.
   const details: Record<string, unknown> = {}
-  for (const key of DETAIL_KEYS) {
-    if (params[key] !== undefined) details[key] = params[key]
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || key === 'hata' || key === ISSUE_PARAM) continue
+    const asNumber = Number(value)
+    details[key] = value !== '' && Number.isFinite(asNumber) ? asNumber : value
   }
-  if (params.retryAfterSeconds) details.retryAfterSeconds = Number(params.retryAfterSeconds)
   if (params[ISSUE_PARAM]) details.issues = [{ message: params[ISSUE_PARAM] }]
   return errorText(params.hata, details)
 }

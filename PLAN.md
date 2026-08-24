@@ -1032,7 +1032,7 @@ G1, G2 ve G4 kapandı. G3 (yazıcı) TODOS E5'e bağlı, aşağıda gerekçesi y
     gruplayarak tarıyor, her panel yenilemesinde beklenemez. Panelde kapı var.
   - Her satırda durum + ne yapmalı. "3 bekleyen iş" bir şey söylemez;
     "en eskisi 2 saattir bekliyor, işçi çalışmıyor olabilir" söyler.
-- [ ] **T52 (P1, human: ~3sa / CC: ~25dk)** - web - **Web'de elle hareket girişi** (barkod + miktar + sebep)
+- [x] **T52 (P1, human: ~3sa / CC: ~25dk)** - web - **Web'de elle hareket girişi** (barkod + miktar + sebep)
   - **PLAN BOŞLUĞU, sonradan fark edildi.** Hareket girişi sadece mobilde
     (T27) planlanmıştı. Sonuç: web arayüzü tamamlandığında bile `createMovement`
     — ürünün kalbi, tek yazma kapısı — hiçbir ekrandan çağrılamıyor. Kullanıcı
@@ -1044,6 +1044,23 @@ G1, G2 ve G4 kapandı. G3 (yazıcı) TODOS E5'e bağlı, aşağıda gerekçesi y
   - **Kullanıcı testine başlamadan ÖNCE yapılmalı**; aksi halde test, kurulum
     ekranlarının testine iner.
   - Kaynak: Bölüm 8
+
+### Faz 4.5: Mobilin ön şartı
+
+- [ ] **T53 (P1, human: ~6sa / CC: ~45dk)** - api - **`/api/v1` REST uçları** (mobil için)
+  - **PLAN BOŞLUĞU, sonradan fark edildi.** `/api/v1/*` mimari bölümünde
+    (satır 24, 224, 286) ve tehdit modelinde (S2) anlatılıyor ama numaralı
+    bir görevi YOK. T26-T33'ün hepsi "mobil" ve API'nin var olduğunu
+    varsayıyor.
+  - Bugünkü durum: `bearerToken()` yazıldı ve test edildi, ama hiçbir
+    yerden çağrılmıyor. Web `httpOnly` çerez kullanıyor; mobilin taşıma
+    yolu kodda hazır, ucu yok.
+  - **Faz 5'in tamamı buna bağlı.** T26 (auth), T27 (okutma), T28 (outbox)
+    hiçbiri API olmadan başlayamaz.
+  - Kapsam: login/refresh, ürün arama, barkod çözümleme, `POST /movements`
+    (idempotency başlığıyla), stok sorgusu. `route()` sarmalayıcısı ve hata
+    → HTTP eşlemesi zaten var (`apps/web/src/server/http.ts`).
+  - `X-Client-Version` kontrolü (T33) bu uçlara takılacak.
 
 ### Faz 5: Mobil
 
