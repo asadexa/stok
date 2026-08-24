@@ -1085,6 +1085,44 @@ G1, G2 ve G4 kapandı. G3 (yazıcı) TODOS E5'e bağlı, aşağıda gerekçesi y
   - P3: kural ihlalini kapatıyor ama mevcut ekranlar çalışıyor. T53 ve
     T34'ten sonra.
 
+- [x] **T57 (P1, human: ~2sa / CC: ~20dk)** - altyapı - **Demo yolu her platformda çalışsın**
+  - **KULLANICI TESTİNDE ORTAYA ÇIKTI.** Windows'ta demo hiç başlamadı;
+    kullanıcı ilk komutta duvara tosladı. İki ayrı hata vardı ve ikisi de
+    "bende çalışıyor" sınıfındandı.
+  - **(1) `scripts/demo.sh` bash'e bağlıydı.** CMD `./scripts/demo.sh`
+    satırını tanımıyor, Git Bash her kurulumda PATH'te değil, WSL'de
+    dağıtım kurulu olmayabiliyor. README ise onu "tek komut" diye
+    gösteriyordu. `scripts/demo.mjs` ile değiştirildi: Node zaten zorunlu
+    bir bağımlılık. `.sh` SİLİNDİ — iki koşucu iki kaynak demek olurdu.
+    - `pg_isready` yerine TCP yoklaması: o komut Postgres istemci
+      paketiyle geliyor ve Docker kullanan Windows makinesinde yok.
+      Eski sürüm buna güvendiği için "çalışan Postgres yok" deyip
+      gereksiz yere Docker yoluna sapıyordu.
+    - Seed koruması ayrı bir dosyaya taşındı (`product-count.ts`):
+      `tsx -e "..."` ile çok satırlı kod göndermek, tırnak kaçışları
+      platforma göre değiştiği için Windows'ta sessizce bozuluyor.
+  - **(2) `pnpm --filter X <script>` Windows'ta çalışmıyor.** pnpm ilk
+    kelimeyi script değil çalıştırılabilir sayıyor:
+    `'migrate' is not recognized`. `run` eklendi — README, kök
+    package.json ve CI dahil on iki çağrı.
+  - Kaynak: kullanıcı testi, 24.08.2026
+
+- [x] **T58 (P1, human: ~1sa / CC: ~10dk)** - web - **`apps/web` kök `.env`'i kendisi yüklesin**
+  - **T57'nin altından çıktı ve daha ciddiydi.** Next.js `.env` dosyalarını
+    yalnızca kendi dizininde arıyor (`apps/web/.env`); bu depoda tek `.env`
+    kökte. Uygulama derleniyor, açılıyor ve İLK GİRİŞ DENEMESİNDE
+    "DATABASE_URL tanımlı değil" ile düşüyordu.
+  - **Neden bugüne kadar görünmedi:** `demo.sh` `.env`'i kendi kabuğuna
+    export ediyordu ve sunucu onu miras alıyordu. Yani `pnpm demo`
+    çalışıyor, README'nin belgelediği `pnpm dev` çalışmıyordu. Script
+    uygulamanın hatasını gizliyordu.
+  - Çözüm `next.config.ts` içinde: yol dosyanın kendi konumundan türüyor,
+    çalışma dizininden değil. `dotenv` mevcut değişkenlerin üstüne
+    yazmıyor — gerçek ortam değişkeni her zaman kazanıyor.
+  - **Ders:** kurulum scripti ortamı hazırlıyorsa, uygulamanın o ortam
+    olmadan çalışmadığını kimse fark etmiyor. Ortamı hazırlamak
+    uygulamanın işi.
+
 ### Faz 4.5: Mobilin ön şartı
 
 - [ ] **T53 (P1, human: ~6sa / CC: ~45dk)** - api - **`/api/v1` REST uçları** (mobil için)

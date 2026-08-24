@@ -89,7 +89,7 @@ jobs:
           pnpm --filter @stok/db exec drizzle-kit generate
           if [ -n "$(git status --porcelain packages/db/migrations)" ]; then
             echo "::error::schema.ts değişmiş ama migration üretilmemiş."
-            echo "Yerelde çalıştır: pnpm --filter @stok/db generate"
+            echo "Yerelde çalıştır: pnpm --filter @stok/db run generate"
             git status --porcelain packages/db/migrations
             git diff -- packages/db/migrations
             exit 1
@@ -109,4 +109,4 @@ jobs:
       # Veritabanı gerekmiyor: her sayfa `cookies()` okuduğu için dinamik,
       # derleme sırasında hiçbiri sorgu çalıştırmıyor.
       - name: Web derlemesi
-        run: pnpm --filter @stok/web build
+        run: pnpm --filter @stok/web run build

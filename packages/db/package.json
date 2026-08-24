@@ -15,6 +15,7 @@
     "migrate": "drizzle-kit migrate",
     "studio": "drizzle-kit studio",
     "seed": "tsx src/seed.ts",
+    "product-count": "tsx src/product-count.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },

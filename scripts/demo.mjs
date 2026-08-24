@@ -1,0 +1,271 @@
+#!/usr/bin/env node
+/**
+ * Demo kurulumu: sıfırdan çalışır bir sisteme tek komutla.
+ *
+ *   pnpm demo          örnek veri zaten varsa dokunmaz
+ *   pnpm demo --seed   veritabanını sıfırlayıp örnek veriyi yeniden yükler
+ *
+ * NEDEN NODE, BASH DEĞİL. Önceki sürüm bir `.sh` dosyasıydı ve Windows'ta
+ * hiç çalışmıyordu: CMD `./scripts/demo.sh` satırını tanımıyor, Git Bash
+ * her kurulumda PATH'te olmuyor, WSL'de dağıtım kurulu olmayabiliyor.
+ * README ise "tek komut" diye onu gösteriyordu. Node zaten zorunlu bir
+ * bağımlılık — projeyi kuran herkeste var.
+ *
+ * HER ADIMDA DURUYOR ve her adımın kendi hata mesajı var; "command failed
+ * with exit code 1" satırı ilk kez kuran birine hiçbir şey söylemez.
+ */
+
+import { spawn, spawnSync } from 'node:child_process'
+import { copyFileSync, existsSync, readFileSync } from 'node:fs'
+import { createConnection } from 'node:net'
+import { dirname, join } from 'node:path'
+import process from 'node:process'
+import { fileURLToPath } from 'node:url'
+
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
+process.chdir(ROOT)
+
+// ---------------------------------------------------------------------------
+// Çıktı
+// ---------------------------------------------------------------------------
+
+// Renk yalnızca gerçek bir terminalde. Çıktı bir dosyaya veya CI loguna
+// yönlendirildiğinde kaçış dizileri okunabilirliği bozuyor.
+const COLOR = process.stdout.isTTY && !process.env.NO_COLOR
+const paint = (code, text) => (COLOR ? `\x1b[${code}m${text}\x1b[0m` : text)
+
+const step = (text) => console.log(`\n${paint('0;34', `▶ ${text}`)}`)
+const ok = (text) => console.log(paint('0;32', `  ✓ ${text}`))
+const warn = (text) => console.log(paint('0;33', `  ! ${text}`))
+
+function die(message) {
+  console.error(`\n${paint('0;31', `✗ ${message}`)}\n`)
+  process.exit(1)
+}
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+// ---------------------------------------------------------------------------
+// Komut çalıştırma
+// ---------------------------------------------------------------------------
+
+/**
+ * Windows'ta `pnpm` ve `docker` birer `.cmd` sarmalayıcı ve Node onları
+ * kabuk olmadan çalıştıramaz — `spawn` doğrudan `ENOENT` veriyor.
+ *
+ * `shell` yalnızca Windows'ta açık: POSIX'te kapalı tutmak, argümanların
+ * kabuk tarafından yeniden yorumlanmasını (glob, kelime bölme) engelliyor.
+ * Buradaki argümanların hiçbirinde boşluk veya kabuk metakarakteri yok,
+ * o yüzden Windows tarafı da güvende.
+ */
+const SHELL = process.platform === 'win32'
+
+function run(command, args, options = {}) {
+  return spawnSync(command, args, { stdio: 'inherit', shell: SHELL, ...options })
+}
+
+function capture(command, args) {
+  const result = run(command, args, { stdio: ['ignore', 'pipe', 'pipe'] })
+  return {
+    okStatus: result.status === 0,
+    stdout: (result.stdout ?? '').toString(),
+  }
+}
+
+const quiet = (command, args) => run(command, args, { stdio: 'ignore' }).status === 0
+
+/**
+ * `run` KELİMESİ ZORUNLU. pnpm, `--filter` ile verilen ilk kelimeyi bir
+ * script adı değil çalıştırılabilir olarak yorumlayabiliyor; Windows'ta
+ * `pnpm --filter @stok/db migrate` komutu "'migrate' is not recognized"
+ * hatasıyla düşüyor. `run` belirsizliği tamamen kaldırıyor ve her
+ * platformda aynı davranıyor.
+ */
+const pnpmScript = (pkg, script) => run('pnpm', ['--filter', pkg, 'run', script])
+
+// ---------------------------------------------------------------------------
+// Veritabanı yoklaması
+// ---------------------------------------------------------------------------
+
+/**
+ * Portu TCP ile yokluyoruz, `pg_isready` ile değil: `pg_isready` Postgres
+ * istemci paketiyle geliyor ve Docker kullanan bir Windows makinesinde
+ * kurulu olmuyor. Önceki bash sürümü buna güvendiği için o makinelerde
+ * "çalışan Postgres yok" deyip Docker yoluna sapıyordu.
+ */
+function portOpen(port, host = '127.0.0.1', timeoutMs = 1000) {
+  return new Promise((resolve) => {
+    const socket = createConnection({ port, host })
+    const finish = (value) => {
+      socket.destroy()
+      resolve(value)
+    }
+    socket.setTimeout(timeoutMs)
+    socket.once('connect', () => finish(true))
+    socket.once('timeout', () => finish(false))
+    socket.once('error', () => finish(false))
+  })
+}
+
+/** `.env` dosyasını okur. Değer tırnaklıysa tırnakları soyar. */
+function readEnvFile(path) {
+  const values = {}
+  for (const line of readFileSync(path, 'utf8').split(/\r?\n/)) {
+    const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/)
+    if (!match) continue
+    let value = match[2].trim()
+    const quoted =
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    if (quoted && value.length >= 2) value = value.slice(1, -1)
+    values[match[1]] = value
+  }
+  return values
+}
+
+// ---------------------------------------------------------------------------
+
+async function main() {
+  const reseedRequested = process.argv.slice(2).includes('--seed')
+
+  // -------------------------------------------------------------------------
+  step('Gereksinimler')
+  // -------------------------------------------------------------------------
+  const nodeMajor = Number(process.versions.node.split('.')[0])
+  if (nodeMajor < 22) {
+    die(`Node.js ${nodeMajor} bulundu, 22 veya üstü gerekli. https://nodejs.org`)
+  }
+  ok(`Node.js v${process.versions.node}`)
+
+  const pnpmVersion = capture('pnpm', ['--version'])
+  if (!pnpmVersion.okStatus) {
+    die('pnpm kurulu değil. Kurmak için: npm install -g pnpm')
+  }
+  ok(`pnpm ${pnpmVersion.stdout.trim()}`)
+
+  // -------------------------------------------------------------------------
+  step('Ayar dosyası')
+  // -------------------------------------------------------------------------
+  if (existsSync('.env')) {
+    ok('.env zaten var, dokunulmadı')
+  } else {
+    if (!existsSync('.env.example')) die('.env.example bulunamadı. Depo eksik klonlanmış olabilir.')
+    copyFileSync('.env.example', '.env')
+    ok('.env oluşturuldu (.env.example kopyalandı)')
+  }
+
+  const env = readEnvFile('.env')
+  if (!env.DATABASE_URL) die('.env içinde DATABASE_URL yok.')
+
+  let dbPort
+  try {
+    dbPort = Number(new URL(env.DATABASE_URL).port || 5432)
+  } catch {
+    die(`DATABASE_URL çözümlenemedi: ${env.DATABASE_URL}`)
+  }
+
+  // -------------------------------------------------------------------------
+  step('Veritabanı')
+  // -------------------------------------------------------------------------
+  // Çalışan bir Postgres varsa ona bağlanıyoruz; yoksa Docker ile açıyoruz.
+  // Docker'ı zorunlu tutmak, elinde zaten Postgres olan kullanıcıyı gereksiz
+  // yere ikinci bir kuruluma sokardı.
+  if (await portOpen(dbPort)) {
+    ok(`localhost:${dbPort} üzerinde çalışan bir Postgres bulundu`)
+  } else if (quiet('docker', ['info'])) {
+    if (!quiet('docker', ['compose', 'up', '-d'])) {
+      die("docker compose başarısız. 'docker compose up -d' çıktısına bakın.")
+    }
+
+    process.stdout.write('  Hazır olması bekleniyor')
+    let ready = false
+    for (let attempt = 0; attempt < 30; attempt++) {
+      // Konteynerin İÇİNDEN soruyoruz: `pg_isready` orada her zaman var ve
+      // açık bir portun aksine gerçekten hizmet verdiğini söylüyor.
+      if (quiet('docker', ['compose', 'exec', '-T', 'db', 'pg_isready', '-U', 'postgres', '-d', 'stok'])) {
+        ready = true
+        break
+      }
+      process.stdout.write('.')
+      await sleep(1000)
+    }
+    process.stdout.write('\n')
+
+    if (!ready) die("Veritabanı 30 saniyede açılmadı. 'docker compose logs db' ile bakın.")
+    ok('Veritabanı hazır (Docker)')
+  } else {
+    die(`Ne çalışan bir Postgres ne de Docker bulundu.
+  Seçenek 1: Docker Desktop'ı kurup açın, sonra bu komutu tekrar çalıştırın.
+  Seçenek 2: Kendi Postgres'inizi ${dbPort} portunda çalıştırın ve .env içindeki
+             DATABASE_URL / MIGRATION_DATABASE_URL satırlarını ona göre düzenleyin.`)
+  }
+
+  // -------------------------------------------------------------------------
+  step('Bağımlılıklar')
+  // -------------------------------------------------------------------------
+  if (run('pnpm', ['install', '--frozen-lockfile'], { stdio: 'ignore' }).status !== 0) {
+    die('pnpm install başarısız. Elle görmek için: pnpm install')
+  }
+  ok('Paketler kurulu')
+
+  // -------------------------------------------------------------------------
+  step("Migration'lar")
+  // -------------------------------------------------------------------------
+  if (pnpmScript('@stok/db', 'migrate').status !== 0) {
+    die('Migration başarısız.\n  Elle görmek için: pnpm --filter @stok/db run migrate')
+  }
+  ok('Şema güncel')
+
+  // -------------------------------------------------------------------------
+  step('Örnek veri')
+  // -------------------------------------------------------------------------
+  // Seed MEVCUT VERİYİ SİLİYOR. Demo verisiyle oynanmış bir veritabanını
+  // sessizce sıfırlamak, "bir saattir test ediyordum" diyen kullanıcı için
+  // kabul edilemez.
+  let reseed = reseedRequested
+  if (!reseed) {
+    const count = capture('pnpm', ['--filter', '@stok/db', 'run', 'product-count'])
+    const parsed = Number(count.stdout.trim().split(/\r?\n/).pop())
+
+    if (!count.okStatus || !Number.isFinite(parsed)) {
+      // Sayamadıysak VERİ VAR SAYIYORUZ. Yanlış tarafa düşmek, birinin
+      // saatlerce girdiği kayıtları silmek demek olurdu.
+      warn('Ürün sayısı okunamadı; örnek veri yeniden yüklenmedi.')
+      warn('Sıfırdan başlamak için: pnpm demo --seed')
+    } else if (parsed > 0) {
+      warn(`Veritabanında zaten ${parsed} ürün var, örnek veri yeniden yüklenmedi.`)
+      warn('Sıfırdan başlamak için: pnpm demo --seed')
+    } else {
+      reseed = true
+    }
+  }
+
+  if (reseed && pnpmScript('@stok/db', 'seed').status !== 0) {
+    die('Seed başarısız.')
+  }
+
+  // -------------------------------------------------------------------------
+  step('Hazır')
+  // -------------------------------------------------------------------------
+  console.log(`
+  Adres:     ${env.APP_URL || 'http://localhost:3000'}
+
+  Yönetici:  admin@yilmaz.example          / admin123
+  Çalışan:   ahmet@yilmazkirtasiye.example / calisan123
+
+  Neyi deneyebilirsiniz ve neyi DENEYEMEZSİNİZ: README.md → "Demo"
+`)
+  console.log(paint('0;34', '▶ Sunucu başlatılıyor (durdurmak için Ctrl+C)\n'))
+
+  // Sunucu ön planda kalıyor ve çıkış kodunu devralıyoruz: `pnpm demo`
+  // başarısız bir derlemede sıfırla dönmemeli.
+  const server = spawn('pnpm', ['--filter', '@stok/web', 'run', 'dev'], {
+    stdio: 'inherit',
+    shell: SHELL,
+  })
+  server.on('exit', (code, signal) => {
+    process.exit(signal ? 1 : (code ?? 0))
+  })
+}
+
+await main()

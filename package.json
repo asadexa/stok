@@ -15,10 +15,10 @@
     "typecheck": "pnpm -r --if-present typecheck",
     "test": "pnpm -r --if-present test",
     "lint": "pnpm -r --if-present lint",
-    "demo": "./scripts/demo.sh",
-    "dev": "pnpm --filter @stok/web dev",
-    "seed": "pnpm --filter @stok/db seed",
-    "migrate": "pnpm --filter @stok/db migrate"
+    "demo": "node scripts/demo.mjs",
+    "dev": "pnpm --filter @stok/web run dev",
+    "seed": "pnpm --filter @stok/db run seed",
+    "migrate": "pnpm --filter @stok/db run migrate"
   },
   "devDependencies": {
     "typescript": "^5.7.3"

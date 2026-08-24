@@ -13,17 +13,20 @@ sadece "nasıl çalıştırırım" sorusunu cevaplıyor.
 Tek komut:
 
 ```bash
-./scripts/demo.sh
+pnpm demo
 ```
 
-Script veritabanını ayağa kaldırır, şemayı uygular, örnek veriyi yükler ve
+Veritabanını ayağa kaldırır, şemayı uygular, örnek veriyi yükler ve
 `http://localhost:3000` adresinde sunucuyu başlatır. Her adımda ne yaptığını
 yazar; bir şey eksikse ne yapmanız gerektiğini söyler.
+
+Windows, macOS ve Linux'ta aynı komut. Windows'ta CMD veya PowerShell yeter —
+Git Bash veya WSL gerekmiyor.
 
 Veritabanını sıfırlayıp örnek veriyi yeniden yüklemek için:
 
 ```bash
-./scripts/demo.sh --seed
+pnpm demo --seed
 ```
 
 ### Giriş bilgileri
@@ -73,21 +76,27 @@ işletmenin tek bir ürününü bile göremezsiniz (veritabanı seviyesinde RLS)
 
 ## Geliştirme
 
+`.env` yoksa önce `.env.example` dosyasını `.env` adıyla kopyalayın
+(`pnpm demo` bunu kendisi yapar).
+
 ```bash
 pnpm install
-cp .env.example .env
 docker compose up -d              # veya 5433 portunda kendi Postgres'iniz
-pnpm --filter @stok/db migrate
-pnpm --filter @stok/db seed
-pnpm --filter @stok/web dev
+pnpm --filter @stok/db run migrate
+pnpm --filter @stok/db run seed
+pnpm --filter @stok/web run dev
 ```
+
+`--filter` ile çağırırken **`run` kelimesi zorunlu**: pnpm onsuz ilk kelimeyi
+script değil çalıştırılabilir sayıyor ve Windows'ta
+`'migrate' is not recognized` hatası veriyor.
 
 | Komut | Ne yapar |
 |---|---|
 | `pnpm test` | Tüm testler (gerçek PostgreSQL gerekir) |
 | `pnpm typecheck` | Dört paketin tip kontrolü |
-| `pnpm --filter @stok/db generate` | Şema değişikliğinden migration üretir |
-| `pnpm --filter @stok/web build` | Üretim derlemesi |
+| `pnpm --filter @stok/db run generate` | Şema değişikliğinden migration üretir |
+| `pnpm --filter @stok/web run build` | Üretim derlemesi |
 
 ### Paketler
 

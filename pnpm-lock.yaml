@@ -23,6 +23,9 @@ importers:
       '@stok/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.6.1
       next:
         specifier: ^15.5.0
         version: 15.5.23(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
