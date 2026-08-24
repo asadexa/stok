@@ -139,6 +139,10 @@ async function main() {
     const adminPin = await hashSecret('1234')
     const staffPin = await hashSecret('1111')
     const adminPass = await hashSecret('admin123')
+    // Çalışanlara da parola veriliyor: demo ve kullanıcı testi İKİ ROLLÜ
+    // yapılıyor ve parolasız bir çalışan web'e hiç giremez. Üretimde
+    // parolayı yönetici belirliyor (T24); bu sadece seed verisi.
+    const staffPass = await hashSecret('calisan123')
 
     let totalProducts = 0
     let totalMovements = 0
@@ -169,6 +173,7 @@ async function main() {
           email: s.email,
           name: s.name,
           role: 'STAFF',
+          passwordHash: staffPass,
           pinHash: staffPin,
         })
       }
@@ -375,7 +380,12 @@ async function main() {
     }
     console.log(`Süre: ${((Date.now() - startedAt) / 1000).toFixed(1)} sn`)
     console.log('')
-    console.log('Giriş bilgileri: admin@yilmaz.example / admin123, PIN 1234 (admin) 1111 (çalışan)')
+    console.log('GİRİŞ BİLGİLERİ')
+    console.log('  Yönetici : admin@yilmaz.example        / admin123')
+    console.log('  Çalışan  : ahmet@yilmazkirtasiye.example / calisan123')
+    console.log('  İkinci işletme (izolasyon denemesi için):')
+    console.log('             admin@demir.example          / admin123')
+    console.log('  PIN (mobil, E10): yönetici 1234, çalışan 1111')
   } finally {
     await client.end()
   }
