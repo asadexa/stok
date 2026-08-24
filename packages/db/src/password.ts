@@ -1,12 +1,13 @@
 import { type ScryptOptions, randomBytes, scrypt as scryptCb, timingSafeEqual } from 'node:crypto'
 import { promisify } from 'node:util'
 
-// promisify, scrypt'in dört argümanlı (options'lı) aşırı yüklemesini
-// göremiyor ve üç argümanlı imzayı seçiyor. Maliyet parametrelerini
-// vermek zorunlu olduğu için imzayı elle yazıyoruz.
+// promisify, scrypt'in aşırı yüklerinden yalnızca 3 parametrelisini seçiyor.
+// Maliyet parametrelerini (N, r, p) geçebilmek için imzayı açıkça yazıyoruz.
+// Girdiler `string | Buffer`: çağıranlar parolayı string, tuzu Buffer
+// veriyor ve dar bir imza ikisinden birini tip hatasına düşürürdü.
 const scrypt = promisify(scryptCb) as (
-  password: string,
-  salt: Buffer,
+  password: string | Buffer,
+  salt: string | Buffer,
   keylen: number,
   options: ScryptOptions,
 ) => Promise<Buffer>
