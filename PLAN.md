@@ -1045,6 +1045,46 @@ G1, G2 ve G4 kapandı. G3 (yazıcı) TODOS E5'e bağlı, aşağıda gerekçesi y
     ekranlarının testine iner.
   - Kaynak: Bölüm 8
 
+- [x] **T54 (P2, human: ~2sa / CC: ~20dk)** - tasarım - **Tasarım kuralları tuvali** (`design/`)
+  - Kullanıcının gönderdiği envanter panosu görselinden YAPI ve YOĞUNLUK
+    alındı; grafik mobilyası alınmadı. Bölüm 11 zaten yasaklıyor: "Genel
+    dashboard şablonu, anlamsız pasta grafikleri, gradient kartlar bu üründe
+    zarar verir."
+  - Renk, ölçü ve tipografi değerleri UYDURULMADI: `globals.css`,
+    `field.tsx` ve `hareket/page.tsx` dosyalarından alındı. Tuval bir
+    öneri değil, mevcut sistemin yazıya dökülmüş hali.
+  - Kontrast oranları hesaplandı (oklch → sRGB → WCAG), tahmin edilmedi.
+    Hesap üç açık çıkardı → T55.
+  - Yedi artboard: Kurallar, Renk, Tipografi, Bileşenler + uygulanmış
+    Panel / Stok / Hareket ekranları.
+
+- [ ] **T55 (P2, human: ~2sa / CC: ~15dk)** - web - **Ölçülen erişilebilirlik açıklarını kapat**
+  - T54'teki kontrast hesabının bulguları. Üçü de WCAG eşiğinin ALTINDA
+    ve depoda ışık kötü — bu ürün için "sınırda geçer" yeterli değil.
+  - `border-slate-300` → `border-slate-500` girdi kenarlığında.
+    1,48:1 → 4,77:1. WCAG 1.4.11 arayüz sınırları için 3:1 istiyor;
+    slate-300 kutunun nerede bittiğini kötü ışıkta göstermiyor.
+  - `outline-none focus:border-slate-900` → 2 px odak halkası.
+    Bugünkü işaret 1 px'lik bir ton değişimi. Admin barkod okuyucuyu
+    klavye olarak kullanıyor, faresi yok: odak görünmezse hangi alana
+    yazdığını bilmiyor.
+  - İpucu metni `text-slate-500` → `text-slate-600`. 4,77:1 → 7,56:1;
+    12 px'te sınırda bir orandan kaçınılır.
+  - Doğrula: `field.tsx` içindeki `INPUT` sabiti tek yerden değişiyor;
+    elle yazılmış kopyalar (`stok/page.tsx`, `hareket/page.tsx`) da
+    aynı değere çekilmeli, yoksa ekranlar ayrışır.
+
+- [ ] **T56 (P3, human: ~4sa / CC: ~30dk)** - web - **Sol kenar çubuğu + yapışkan arama şeridi**
+  - T54'ün referans görselden aldığı TEK yapısal değişiklik. Bugün üst
+    şerit + `max-w-6xl` (1152 px) var.
+  - Kazanç: menü hedefleri 56 px satıra çıkıyor (bugün `py-2`, yani
+    ~36 px — kural 02 ihlali), arama kutusu her sayfada ve odaklı
+    oluyor (kural 05), tablo tam genişliğe yayılıyor.
+  - Bedel: 240 px yatay alan. 1100 px altında 72 px'lik ikon rayına
+    inecek, yoksa dar ekranda tablo sıkışır.
+  - P3: kural ihlalini kapatıyor ama mevcut ekranlar çalışıyor. T53 ve
+    T34'ten sonra.
+
 ### Faz 4.5: Mobilin ön şartı
 
 - [ ] **T53 (P1, human: ~6sa / CC: ~45dk)** - api - **`/api/v1` REST uçları** (mobil için)

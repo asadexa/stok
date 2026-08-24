@@ -1,0 +1,210 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0}
+.rt{
+  font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  background:oklch(0.984 0.003 247.858);color:oklch(0.208 0.042 265.755);
+  -webkit-font-smoothing:antialiased;overflow:hidden;display:flex;
+}
+.tab{font-variant-numeric:tabular-nums}
+.mono{font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;font-size:0.92em}
+
+/* KENAR ÇUBUĞU — 240 px, satır 56 px */
+.side{width:240px;flex:none;background:#fff;border-right:1px solid oklch(0.929 0.013 255.508);display:flex;flex-direction:column;padding:16px 12px}
+.brand{font-size:16px;font-weight:600;padding:0 14px 16px;letter-spacing:-0.01em}
+.nav{display:flex;flex-direction:column;gap:2px}
+.navitem{height:56px;display:flex;align-items:center;gap:12px;padding:0 14px;border-radius:6px;font-size:15px;font-weight:500;color:oklch(0.372 0.044 257.287)}
+.navitem.on{background:oklch(0.208 0.042 265.755);color:#fff}
+.navitem .ic{width:20px;text-align:center;font-size:16px}
+.navitem .dot{margin-left:auto;font-size:12px;font-weight:600;color:oklch(0.55 0.21 27)}
+.navitem.on .dot{color:#fff}
+.sidefoot{margin-top:auto;border-top:1px solid oklch(0.929 0.013 255.508);padding-top:12px}
+.who{padding:0 14px;font-size:14px;line-height:20px;font-weight:500}
+.who span{display:block;font-size:12px;line-height:16px;color:oklch(0.446 0.03 256.802);font-weight:400}
+.logout{height:44px;display:flex;align-items:center;padding:0 14px;margin-top:8px;font-size:14px;color:oklch(0.372 0.044 257.287);border-radius:6px}
+
+/* ÜST ŞERİT — yapışkan, arama hep burada ve odaklı */
+.main{flex:1;min-width:0;display:flex;flex-direction:column}
+.top{height:80px;flex:none;background:#fff;border-bottom:1px solid oklch(0.929 0.013 255.508);display:flex;align-items:center;gap:16px;padding:0 24px}
+.search{position:relative;flex:1;max-width:560px}
+.search .inp{height:56px;width:100%;border:2px solid oklch(0.208 0.042 265.755);border-radius:6px;background:#fff;padding:0 14px 0 42px;font-size:16px;line-height:52px;color:oklch(0.446 0.03 256.802)}
+.search .mg{position:absolute;left:14px;top:18px;font-size:16px;color:oklch(0.446 0.03 256.802)}
+.topright{margin-left:auto;display:flex;align-items:center;gap:16px;font-size:14px;color:oklch(0.446 0.03 256.802)}
+.content{flex:1;min-height:0;padding:24px;overflow:hidden}
+
+h1.pg{margin:0;font-size:20px;line-height:28px;font-weight:600}
+.pgrow{display:flex;align-items:center;gap:16px;margin-bottom:20px}
+.pgrow .acts{margin-left:auto;display:flex;gap:12px}
+.btn{height:56px;border-radius:6px;padding:0 22px;font-size:16px;font-weight:500;display:inline-flex;align-items:center;border:1px solid transparent;white-space:nowrap}
+.btn.p{background:oklch(0.208 0.042 265.755);color:#fff}
+.btn.s{background:#fff;border-color:oklch(0.554 0.046 257.417);color:oklch(0.208 0.042 265.755)}
+.card{background:#fff;border:1px solid oklch(0.929 0.013 255.508);border-radius:6px}
+.card > .hd{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid oklch(0.929 0.013 255.508)}
+.card > .hd h2{margin:0;font-size:16px;line-height:22px;font-weight:600}
+.card > .hd a{font-size:14px;color:oklch(0.446 0.03 256.802);text-decoration:underline;text-underline-offset:2px}
+.pill{display:inline-flex;align-items:center;gap:6px;border:1px solid currentColor;border-radius:6px;padding:3px 9px;font-size:12px;line-height:18px;font-weight:600}
+table.t{width:100%;border-collapse:collapse}
+table.t th{text-align:left;font-size:12px;line-height:16px;font-weight:600;color:oklch(0.554 0.046 257.417);padding:8px 16px;background:oklch(0.968 0.007 247.896);border-bottom:1px solid oklch(0.929 0.013 255.508);white-space:nowrap}
+table.t td{padding:8px 16px;font-size:14px;line-height:20px;border-top:1px solid oklch(0.968 0.007 247.896);vertical-align:top}
+table.t td.nw{white-space:nowrap}
+table.t tr:first-child td{border-top:0}
+.r{text-align:right}
+.muted{color:oklch(0.446 0.03 256.802)}
+.sku{font-size:12px;line-height:16px;color:oklch(0.446 0.03 256.802)}
+.link{text-decoration:underline;text-underline-offset:2px;text-decoration-color:oklch(0.869 0.022 252.894);font-weight:500}
+.in{color:oklch(0.52 0.15 155)}
+.out{color:oklch(0.55 0.19 27)}
+.crit{color:oklch(0.55 0.21 27)}
+.critbg{background:oklch(0.96 0.03 27)}
+
+.lab{font-size:14px;line-height:20px;font-weight:500;display:block}
+.hero{margin-top:4px;height:64px;border-radius:6px;border:2px solid oklch(0.554 0.046 257.417);background:#fff;padding:0 16px;font-size:20px;line-height:60px}
+.hero.focus{border-color:oklch(0.208 0.042 265.755);box-shadow:0 0 0 2px #fff,0 0 0 4px oklch(0.208 0.042 265.755)}
+.hero.ph{color:oklch(0.446 0.03 256.802)}
+.inp{margin-top:4px;height:56px;border-radius:6px;border:1px solid oklch(0.554 0.046 257.417);background:#fff;padding:0 12px;font-size:16px;line-height:54px;color:oklch(0.446 0.03 256.802)}
+.hint{margin:4px 0 0;font-size:12px;line-height:16px;color:oklch(0.446 0.03 256.802)}
+.rg{border:1px solid oklch(0.929 0.013 255.508);border-radius:6px;padding:12px}
+.rg .t{font-size:14px;line-height:20px;font-weight:600;margin:0 0 6px}
+.opt{display:flex;align-items:center;gap:10px;height:44px;font-size:14px}
+.radio{width:20px;height:20px;border:1px solid oklch(0.554 0.046 257.417);border-radius:999px;background:#fff;flex:none}
+.radio.on{border:6px solid oklch(0.208 0.042 265.755)}
+.step{background:#fff;border:1px solid oklch(0.929 0.013 255.508);border-radius:6px;padding:16px}
+.stepcap{font-size:12px;line-height:16px;font-weight:600;letter-spacing:0.05em;color:oklch(0.446 0.03 256.802);margin:0 0 12px}
+.note{font-size:12px;line-height:18px;color:oklch(0.446 0.03 256.802);margin:12px 0 0}
+.note b{color:oklch(0.208 0.042 265.755)}
+  </style>
+</helmet>
+<div class="rt" style="width:1440px;height:1060px">
+
+  <aside class="side">
+    <div class="brand">Stok Takip</div>
+    <nav class="nav">
+      <div class="navitem"><span class="ic">▣</span>Panel</div>
+      <div class="navitem on"><span class="ic">⇅</span>Giriş / Çıkış</div>
+      <div class="navitem"><span class="ic">☰</span>Stok<span class="dot">⚠ 4</span></div>
+      <div class="navitem"><span class="ic">⟳</span>Hareketler</div>
+      <div class="navitem"><span class="ic">◍</span>Kullanıcılar</div>
+      <div class="navitem"><span class="ic">⚙</span>Sağlık</div>
+    </nav>
+    <div class="sidefoot">
+      <div class="who">Ahmet Demir<span>Depo çalışanı</span></div>
+      <div class="logout">Çıkış</div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="top">
+      <div class="search">
+        <span class="mg">⌕</span>
+        <div class="inp" style="color:oklch(0.446 0.03 256.802)">Barkod okutun veya ürün arayın</div>
+      </div>
+      <div class="topright"><span class="tab">24 Ağustos 2026, 14:31</span></div>
+    </header>
+
+    <div class="content">
+      <div class="pgrow">
+        <h1 class="pg">Stok hareketi</h1>
+        <span class="muted" style="font-size:14px;text-decoration:underline;text-underline-offset:2px">Geçmiş hareketler</span>
+      </div>
+
+      <div style="display:grid;grid-template-columns:576px 1fr;gap:24px;align-items:start">
+
+        <!-- ADIM 2 — ürün çözümlendi, miktar ve yön -->
+        <div>
+          <p class="stepcap" style="margin-bottom:8px">ADIM 2 · ÜRÜN GÖRÜNÜR, MİKTAR VE YÖN SEÇİLİR</p>
+          <label class="lab" style="margin-bottom:20px">Barkod
+            <div class="hero tab">8690123456789</div>
+          </label>
+
+          <div class="card" style="padding:20px">
+            <p style="margin:0;font-size:24px;line-height:32px;font-weight:600">M6 Vida 20 mm</p>
+            <p style="margin:2px 0 0;font-size:12px;line-height:16px" class="tab muted">VDA-0620</p>
+            <p style="margin:12px 0 0;font-size:18px;line-height:28px">Mevcut stok: <b class="tab">456 adet</b></p>
+
+            <p style="margin:12px 0 0;background:oklch(0.968 0.007 247.896);border-radius:6px;padding:10px 12px;font-size:14px;line-height:20px">
+              <b>Koli barkodu:</b> girdiğiniz miktar <b class="tab">×6</b> ile çarpılacak.
+            </p>
+
+            <label class="lab" style="margin-top:20px">Miktar
+              <div class="hero focus tab">5</div>
+            </label>
+
+            <fieldset style="border:0;padding:0;margin:20px 0 0">
+              <legend style="padding:0;font-size:14px;line-height:20px;font-weight:500">İşlem</legend>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px">
+                <div class="rg">
+                  <p class="t in">↑ Giriş</p>
+                  <div class="opt"><span class="radio on"></span>Mal kabulü</div>
+                  <div class="opt"><span class="radio"></span>İade girişi</div>
+                  <div class="opt"><span class="radio"></span>Sayım fazlası</div>
+                </div>
+                <div class="rg">
+                  <p class="t out">↓ Çıkış</p>
+                  <div class="opt"><span class="radio"></span>Satış</div>
+                  <div class="opt"><span class="radio"></span>Fire</div>
+                  <div class="opt"><span class="radio"></span>Sayım eksiği</div>
+                </div>
+              </div>
+            </fieldset>
+
+            <label class="lab" style="margin-top:20px">Not (isteğe bağlı)
+              <div class="inp">Kaya Hırdavat, 14512 numaralı irsaliye</div>
+            </label>
+
+            <div style="margin-top:20px"><span class="btn p">Kaydet</span></div>
+          </div>
+        </div>
+
+        <!-- ADIM 1 ve 3 -->
+        <div style="display:flex;flex-direction:column;gap:20px">
+
+          <div class="step">
+            <p class="stepcap">ADIM 1 · OKUTMAYI BEKLİYOR</p>
+            <label class="lab">Barkod
+              <div class="hero focus ph">Okutun veya elle yazın</div>
+            </label>
+            <p class="hint">İmleç burada. Okuyucu satır sonu gönderdiğinde form kendiliğinden gidiyor.</p>
+            <p class="note">
+              Barkod adımı <b>GET</b>: çözümleme salt okunur, adres çubuğunda taşınıyor. Sayfa yenilenebiliyor, geri tuşu çalışıyor, JavaScript gerekmiyor — depodaki eski Android tarayıcıda da açılıyor.
+            </p>
+          </div>
+
+          <div class="step">
+            <p class="stepcap">ADIM 3 · KAYDEDİLDİ</p>
+            <div style="border:1px solid oklch(0.52 0.15 155);border-radius:6px;padding:16px;display:flex;flex-wrap:wrap;align-items:center;gap:12px">
+              <span class="in" style="font-size:24px">✓</span>
+              <span style="font-size:16px;font-weight:600">M6 Vida 20 mm</span>
+              <span class="tab" style="font-size:18px">456 <span class="muted">→</span> <b class="in">486</b></span>
+            </div>
+            <p class="note">
+              <b>Eski ve yeni sayı birlikte gösteriliyor.</b> Yalnız yeni sayı yazsaydı kullanıcı doğru miktarın işlendiğini doğrulayamazdı — 5 × 6 = 30 farkı ancak burada görülüyor.
+              Kaydın ardından odak <b>tekrar barkod alanında</b>: arka arkaya okutma akışı kesilmiyor.
+            </p>
+          </div>
+
+          <div class="step" style="background:oklch(0.96 0.03 27);border-color:oklch(0.55 0.21 27)">
+            <p class="stepcap" style="color:oklch(0.55 0.21 27)">HATA DURUMU</p>
+            <div style="display:flex;gap:10px;font-size:14px;line-height:20px" class="crit">
+              <span>⚠</span><span>Elde <b class="tab">456</b> adet var, <b class="tab">999.999</b> adet çıkışı yapılamaz.</span>
+            </div>
+            <p class="note">
+              Mesaj <b>sayıyı söylüyor</b>. “İşlem başarısız” yazsaydı kullanıcı ne gireceğini bilemezdi. Hata sonrası <b>barkod korunuyor</b> — etiket ikinci kez okutulmuyor.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

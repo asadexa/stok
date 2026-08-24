@@ -1,0 +1,211 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0}
+.rt{
+  font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  background:oklch(0.984 0.003 247.858);
+  color:oklch(0.208 0.042 265.755);
+  -webkit-font-smoothing:antialiased;
+  overflow:hidden;
+}
+.tab{font-variant-numeric:tabular-nums}
+.mono{font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace}
+
+.band{background:oklch(0.208 0.042 265.755);color:#fff;padding:26px 40px 28px}
+.band h1{margin:0;font-size:30px;line-height:36px;font-weight:600;letter-spacing:-0.01em}
+.band p{margin:8px 0 0;font-size:16px;line-height:24px;color:oklch(0.869 0.022 252.894);max-width:820px}
+.band .src{margin-top:14px;font-size:12px;line-height:16px;color:oklch(0.704 0.04 256.788)}
+
+.body{padding:28px 40px 36px}
+h2{margin:0 0 4px;font-size:20px;line-height:28px;font-weight:600}
+h2 .n{display:inline-block;min-width:26px;color:oklch(0.554 0.046 257.417);font-weight:500}
+.lede{margin:0 0 14px;font-size:14px;line-height:20px;color:oklch(0.446 0.03 256.802);max-width:900px}
+
+.split{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.card{background:#fff;border:1px solid oklch(0.929 0.013 255.508);border-radius:6px}
+.card > .hd{padding:12px 16px;border-bottom:1px solid oklch(0.929 0.013 255.508);font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px}
+.card ul{margin:0;padding:6px 0;list-style:none}
+.card li{padding:9px 16px;font-size:14px;line-height:20px;display:flex;gap:10px;align-items:flex-start;border-top:1px solid oklch(0.968 0.007 247.896)}
+.card li:first-child{border-top:0}
+.card li .m{flex:none;width:16px;text-align:center;font-size:14px;line-height:20px}
+.card li b{font-weight:600}
+.card li i{font-style:normal;color:oklch(0.446 0.03 256.802)}
+.in .m{color:oklch(0.52 0.15 155)}
+.out .m{color:oklch(0.55 0.21 27)}
+.in .hd{color:oklch(0.52 0.15 155)}
+.out .hd{color:oklch(0.55 0.21 27)}
+
+.rules{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:14px}
+.rule{background:#fff;border:1px solid oklch(0.929 0.013 255.508);border-radius:6px;padding:16px 16px 14px;display:flex;flex-direction:column}
+.rule .num{font-size:12px;line-height:16px;font-weight:600;color:oklch(0.554 0.046 257.417);letter-spacing:0.06em}
+.rule h3{margin:4px 0 0;font-size:16px;line-height:22px;font-weight:600}
+.rule .val{margin-top:10px;background:oklch(0.968 0.007 247.896);border-radius:6px;padding:8px 10px;font-size:12px;line-height:18px;color:oklch(0.208 0.042 265.755)}
+.rule .why{margin:10px 0 0;font-size:13px;line-height:19px;color:oklch(0.446 0.03 256.802)}
+
+table.chg{width:100%;border-collapse:collapse;background:#fff;border:1px solid oklch(0.929 0.013 255.508);border-radius:6px;overflow:hidden}
+table.chg th{text-align:left;font-size:12px;line-height:16px;font-weight:600;color:oklch(0.446 0.03 256.802);padding:10px 16px;background:oklch(0.968 0.007 247.896);border-bottom:1px solid oklch(0.929 0.013 255.508)}
+table.chg td{padding:11px 16px;font-size:13px;line-height:19px;border-top:1px solid oklch(0.968 0.007 247.896);vertical-align:top}
+table.chg tr:first-child td{border-top:0}
+.was{color:oklch(0.446 0.03 256.802)}
+.now{font-weight:600}
+.arrow{color:oklch(0.554 0.046 257.417);padding:0 6px}
+.foot{margin-top:22px;font-size:12px;line-height:18px;color:oklch(0.554 0.046 257.417)}
+  </style>
+</helmet>
+<div class="rt" style="width:1280px;height:1980px">
+  <div class="band">
+    <h1>Stok Takip — Arayüz Tasarım Kuralları</h1>
+    <p>Bu bir depo yazılımı. Referans görselden <b>yapı ve yoğunluk</b> alındı; grafik mobilyası alınmadı.
+       Her kural bir sayıya bağlı — “temiz dursun” bir kural değil, ölçülebilir bir değer kuraldır.</p>
+    <div class="src">Kaynak değerler: apps/web/src/app/globals.css · components/field.tsx · components/shell.tsx · PLAN.md §11</div>
+  </div>
+
+  <div class="body">
+
+    <h2><span class="n">A.</span> Referans görselden ne alındı, ne alınmadı</h2>
+    <p class="lede">Görsel genel bir SaaS envanter panosu. Yapısı iyi, mobilyası bu ürün için zararlı.
+       PLAN.md §11: “Genel dashboard şablonu, anlamsız pasta grafikleri, gradient kartlar bu üründe zarar verir.”</p>
+
+    <div class="split">
+      <div class="card in">
+        <div class="hd"><span>↑</span> Alındı</div>
+        <ul>
+          <li><span class="m">✓</span><span><b>Sol kenar çubuğu, kalıcı gezinme.</b> <i>240 px, 56 px satır. Menü ekranın her yerinde aynı yerde; eldivenli elle hedef büyük.</i></span></li>
+          <li><span class="m">✓</span><span><b>Yapışkan üst şerit + her sayfada arama.</b> <i>Barkod okuyucu klavye taklidi yapıyor: odaklı bir kutu her zaman hazır olmalı.</i></span></li>
+          <li><span class="m">✓</span><span><b>Üstte KPI satırı.</b> <i>Ama içinde grafik değil, 30 px net sayı var.</i></span></li>
+          <li><span class="m">✓</span><span><b>Yoğun tablo, durum rozeti, barkod sütunu.</b> <i>Satır başına 36 px. Ekranda 20+ satır görünür.</i></span></li>
+          <li><span class="m">✓</span><span><b>Başlık ile birincil eylem aynı satırda.</b> <i>“+ Yeni ürün” aranmıyor, hep sağ üstte.</i></span></li>
+        </ul>
+      </div>
+
+      <div class="card out">
+        <div class="hd"><span>✕</span> Alınmadı</div>
+        <ul>
+          <li><span class="m">✕</span><span><b>Halka / pasta grafik.</b> <i>“12 giriş” yazısı dilimden hızlı okunur. Dilim sayıyı gizler, açı okunmaz.</i></span></li>
+          <li><span class="m">✕</span><span><b>Gradient KPI kartı.</b> <i>Gradient, üstündeki sayının kontrastını konuma göre değiştirir. Depoda ışık zaten kötü.</i></span></li>
+          <li><span class="m">✕</span><span><b>Sparkline.</b> <i>7 günlük eğri hiçbir kararı değiştirmiyor. Kritik ürün listesi değiştiriyor — yer ona verildi.</i></span></li>
+          <li><span class="m">✕</span><span><b>Dekoratif harita ve illüstrasyon.</b> <i>Tek depo var. Harita, doldurulacak boşluk arayan bir şablonun izidir.</i></span></li>
+          <li><span class="m">✕</span><span><b>Pastel dolgu rozet.</b> <i>Ölçüldü: pastel zemin/metin 3:1’in altında kalıyor. Yerine kenarlık + ikon + metin.</i></span></li>
+        </ul>
+      </div>
+    </div>
+
+    <h2 style="margin-top:30px"><span class="n">B.</span> Dokuz kural</h2>
+    <p class="lede">Her kuralın yanındaki değer bağlayıcıdır; “yaklaşık” değildir.</p>
+
+    <div class="rules">
+      <div class="rule">
+        <div class="num">KURAL 01</div>
+        <h3>Büyük net sayı, grafik değil</h3>
+        <div class="val">30 px / 600 · <span class="tab">tabular-nums</span> · ölçü birimi 16 px normal</div>
+        <p class="why">İki metre öteden okunmalı. Sayının yanında birim ve kapsam yazılı olmalı (“12 hareket · 340 adet”), yoksa rakam yorumsuz kalır.</p>
+      </div>
+
+      <div class="rule">
+        <div class="num">KURAL 02</div>
+        <h3>56 px dokunma hedefi</h3>
+        <div class="val">Standart kontrol 56 · barkod ve miktar 64 · seçenek satırı en az 44</div>
+        <p class="why">Depoda eldiven var, soğuk var, acele var. 40 px’lik bir düğme bu üç şartın altında ıskalanır.</p>
+      </div>
+
+      <div class="rule">
+        <div class="num">KURAL 03</div>
+        <h3>Renk tek başına anlam taşımaz</h3>
+        <div class="val">Her durum = renk + ikon + metin. Üçü birden.</div>
+        <p class="why">Renk körlüğü yaygın, depo aydınlatması kötü, ekran parlıyor. Kırmızı satır kırmızı görünmeyebilir; “⚠ kritik” her koşulda okunur.</p>
+      </div>
+
+      <div class="rule">
+        <div class="num">KURAL 04</div>
+        <h3>Tablo yoğun olur</h3>
+        <div class="val">14 px metin · hücre 16/8 px · ayırıcı 1 px slate-100 · zebra yok</div>
+        <p class="why">Zebra dolgusu, kritik satırın kırmızı zeminiyle yarışır. Ayırıcı çizgi yeter ve satırı 36 px’te tutar.</p>
+      </div>
+
+      <div class="rule">
+        <div class="num">KURAL 05</div>
+        <h3>Arama hep görünür, hep odaklı</h3>
+        <div class="val">Üst şeritte sabit · sayfa açılınca <span class="mono">autofocus</span></div>
+        <p class="why">Barkod okuyucu klavye taklidi yapar ve okuduğunu odaktaki alana yazar. Odak boştaysa okutma kaybolur — kullanıcı bunu fark etmez.</p>
+      </div>
+
+      <div class="rule">
+        <div class="num">KURAL 06</div>
+        <h3>Marka rengi yok, anlam rengi var</h3>
+        <div class="val">giriş · çıkış · kritik. Başka vurgu rengi eklenmez.</div>
+        <p class="why">Dördüncü bir renk, üçünün anlamını sulandırır. Ekrandaki her renkli piksel bir olguyu göstermek zorunda.</p>
+      </div>
+
+      <div class="rule">
+        <div class="num">KURAL 07</div>
+        <h3>Gölge yok, gradient yok</h3>
+        <div class="val">Yarıçap 6 px · kenarlık 1 px · yükseklik hissi yok</div>
+        <p class="why">Katman ayrımını çizgi yapar. Gölge, ekran parlarken görünmez; gradient, üstündeki metnin kontrastını bozar.</p>
+      </div>
+
+      <div class="rule">
+        <div class="num">KURAL 08</div>
+        <h3>Odak halkası kaldırılmaz</h3>
+        <div class="val">2 px slate-900 halka + 2 px boşluk. <span class="mono">outline:none</span> yasak.</div>
+        <p class="why">Admin barkod okuyucuyu klavye olarak kullanıyor, faresi yok. Odak görünmezse hangi alana yazdığını bilemez.</p>
+      </div>
+
+      <div class="rule">
+        <div class="num">KURAL 09</div>
+        <h3>Boş durum bir özelliktir</h3>
+        <div class="val">Her boş liste: ne olduğu + oradan çıkaran eylem</div>
+        <p class="why">“Henüz ürün yok” tek başına çıkmaz sokaktır. Yanında “Excel’den toplu aktar” olmalı — ilk gün 800 ürün tek tek girilmeyecek.</p>
+      </div>
+    </div>
+
+    <h2 style="margin-top:30px"><span class="n">C.</span> Bugünkü koddan değişecekler</h2>
+    <p class="lede">Renk ve ölçü değerleri zaten uygulamadan alındı. Bu dört madde ise değişiklik önerisi — ilk üçü ölçülmüş bir erişilebilirlik açığını kapatıyor.</p>
+
+    <table class="chg">
+      <tr>
+        <th style="width:190px">Ne</th>
+        <th style="width:330px">Bugün</th>
+        <th style="width:330px">Kural</th>
+        <th>Neden</th>
+      </tr>
+      <tr>
+        <td>Girdi kenarlığı</td>
+        <td class="was"><span class="mono">border-slate-300</span> — beyaza karşı 1,48:1</td>
+        <td class="now"><span class="mono">border-slate-500</span> — 4,77:1</td>
+        <td>WCAG 1.4.11 arayüz sınırları için 3:1 istiyor. slate-300 kutunun nerede bittiğini kötü ışıkta göstermiyor.</td>
+      </tr>
+      <tr>
+        <td>Odak</td>
+        <td class="was"><span class="mono">outline-none focus:border-slate-900</span> — 1 px’lik renk değişimi</td>
+        <td class="now">2 px halka, kenarlıktan bağımsız</td>
+        <td>Klavyeyle gezinen kullanıcı için tek işaret bu. 1 px’lik ton farkı, parlayan ekranda işaret sayılmaz.</td>
+      </tr>
+      <tr>
+        <td>İpucu metni</td>
+        <td class="was"><span class="mono">text-xs text-slate-500</span> — 12 px, 4,77:1</td>
+        <td class="now"><span class="mono">text-xs text-slate-600</span> — 7,56:1</td>
+        <td>Sınırda geçen bir orandan 12 px’te kaçınılır. slate-600 aynı hiyerarşiyi kurup okunaklı kalıyor.</td>
+      </tr>
+      <tr>
+        <td>Gezinme ve genişlik</td>
+        <td class="was">Üst şerit + <span class="mono">max-w-6xl</span> (1152 px)</td>
+        <td class="now">Sol kenar çubuğu 240 px + tam genişlik içerik</td>
+        <td>Referans görselden alınan tek yapısal değişiklik. 1100 px altında çubuk 72 px’lik ikon rayına iner; tablo genişliği geri gelir.</td>
+      </tr>
+    </table>
+
+    <p class="foot">Renk, ölçü ve kontrast değerlerinin tamamı ayrı tuvallerde: <b>Renk</b>, <b>Tipografi ve Ölçü</b>, <b>Bileşenler</b>. Uygulanmış hali: <b>Panel</b>, <b>Stok</b>, <b>Hareket</b>.</p>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

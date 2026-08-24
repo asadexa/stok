@@ -31,3 +31,7 @@ pnpm-debug.log*
 .vercel
 .turbo
 /db/data/
+
+# Tasarım tuvali çıktısı: 2 MB editör yükü taşıyor, her tohumlamada yeniden üretiliyor.
+design/*.html
+!design/*.dc.html

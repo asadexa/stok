@@ -1,0 +1,114 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0}
+.rt{
+  font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  background:oklch(0.984 0.003 247.858);color:oklch(0.208 0.042 265.755);
+  -webkit-font-smoothing:antialiased;overflow:hidden;padding:32px 40px 40px;
+}
+.tab{font-variant-numeric:tabular-nums}
+.mono{font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace}
+h1{margin:0;font-size:24px;line-height:32px;font-weight:600;letter-spacing:-0.01em}
+.sub{margin:6px 0 22px;font-size:14px;line-height:20px;color:oklch(0.446 0.03 256.802);max-width:940px}
+h2{margin:26px 0 10px;font-size:16px;line-height:22px;font-weight:600}
+h2:first-of-type{margin-top:0}
+.note{margin:0 0 12px;font-size:13px;line-height:19px;color:oklch(0.446 0.03 256.802);max-width:940px}
+table{width:100%;border-collapse:collapse;background:#fff;border:1px solid oklch(0.929 0.013 255.508);border-radius:6px;overflow:hidden}
+th{text-align:left;font-size:12px;line-height:16px;font-weight:600;color:oklch(0.446 0.03 256.802);padding:9px 14px;background:oklch(0.968 0.007 247.896);border-bottom:1px solid oklch(0.929 0.013 255.508);white-space:nowrap}
+td{padding:10px 14px;font-size:13px;line-height:19px;border-top:1px solid oklch(0.968 0.007 247.896);vertical-align:middle}
+tr:first-child td{border-top:0}
+.split{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.panel{background:#fff;border:1px solid oklch(0.929 0.013 255.508);border-radius:6px;padding:16px}
+.cap{font-size:12px;line-height:16px;font-weight:600;letter-spacing:0.04em;margin-bottom:12px}
+.cap.y{color:oklch(0.52 0.15 155)}
+.cap.n{color:oklch(0.55 0.21 27)}
+.small{font-size:12px;line-height:17px;color:oklch(0.446 0.03 256.802);margin-top:12px}
+.numcol{font-size:18px;line-height:28px;text-align:right}
+.prop{font-variant-numeric:proportional-nums}
+.bar{display:inline-block;height:14px;background:oklch(0.208 0.042 265.755);border-radius:2px;vertical-align:middle;margin-right:10px}
+.sp{display:flex;align-items:center;gap:12px;padding:7px 0;font-size:13px}
+.sp .lbl{width:150px;color:oklch(0.446 0.03 256.802)}
+.sp .mono{width:64px}
+  </style>
+</helmet>
+<div class="rt" style="width:1280px;height:1680px">
+  <h1>Tipografi ve Ölçü</h1>
+  <p class="sub">Yazı tipi <b>sistem yığını</b> — <span class="mono">ui-sans-serif, system-ui, sans-serif</span>. Web fontu yüklenmiyor: depo bağlantısı zayıf, font gelene kadar ekranda metin olmaması kabul edilemez.
+     Ölçek Tailwind varsayılanı; uygulamada zaten kullanılan yedi kademe dışında kademe yok.</p>
+
+  <h2>Kademeler ve nerede kullanıldıkları</h2>
+  <table>
+    <tr><th style="width:110px">Sınıf</th><th style="width:150px">Boyut / satır</th><th style="width:120px">Ağırlık</th><th style="width:330px">Örnek</th><th>Nerede</th></tr>
+    <tr><td class="mono">text-3xl</td><td class="mono">30 / 36 px</td><td>600</td><td style="font-size:30px;line-height:36px;font-weight:600" class="tab">12</td><td>KPI sayısı. Ekranda sayfa başına en fazla iki tane.</td></tr>
+    <tr><td class="mono">text-2xl</td><td class="mono">24 / 32 px</td><td>600</td><td style="font-size:24px;line-height:32px;font-weight:600">Kırmızı Defter</td><td>Barkod okutulunca çıkan ürün adı. Yanlış ürüne yazmayı bu satır engelliyor.</td></tr>
+    <tr><td class="mono">text-xl</td><td class="mono">20 / 28 px</td><td>400 / 600</td><td style="font-size:20px;line-height:28px" class="tab">8690123456789</td><td>Barkod ve miktar alanının içi; sayfa başlığı (600).</td></tr>
+    <tr><td class="mono">text-lg</td><td class="mono">18 / 28 px</td><td>400</td><td style="font-size:18px;line-height:28px">Mevcut stok: <b class="tab">456 adet</b></td><td>Onaydan önce gösterilen mevcut stok.</td></tr>
+    <tr><td class="mono">text-base</td><td class="mono">16 / 24 px</td><td>400 / 500</td><td style="font-size:16px;line-height:24px">Kaydet</td><td>Form alanı içeriği, düğme metni. Kontrollerin varsayılanı.</td></tr>
+    <tr><td class="mono">text-sm</td><td class="mono">14 / 20 px</td><td>400 / 500 / 600</td><td style="font-size:14px;line-height:20px">M6 Vida 20 mm · VDA-0620</td><td>Tablo gövdesi, etiketler, gezinme. Ekrandaki metnin çoğu.</td></tr>
+    <tr><td class="mono">text-xs</td><td class="mono">12 / 16 px</td><td>400 / 600</td><td style="font-size:12px;line-height:16px;color:oklch(0.446 0.03 256.802)">Koli barkodu · ×6</td><td>İpucu ve üst etiket. <b>Renk en az slate-600</b> — 12 px’te sınırda oran kullanılmaz.</td></tr>
+  </table>
+
+  <h2>Sayılar hizalanır</h2>
+  <p class="note">Miktar, fiyat, barkod ve saat gösteren her hücrede <span class="mono">font-variant-numeric: tabular-nums</span> (<span class="mono">.tabular</span>) zorunlu.</p>
+  <div class="split">
+    <div class="panel">
+      <div class="cap y">✓ tabular-nums</div>
+      <div class="numcol tab">1.284</div>
+      <div class="numcol tab">999</div>
+      <div class="numcol tab">12</div>
+      <div class="numcol tab">1.000.045</div>
+      <p class="small">Basamaklar aynı genişlikte: göz sütunu tarayarak büyüklük farkını okuyor. Sayım yaparken satır atlamak zorlaşıyor.</p>
+    </div>
+    <div class="panel">
+      <div class="cap n">✕ orantılı rakam</div>
+      <div class="numcol prop">1.284</div>
+      <div class="numcol prop">999</div>
+      <div class="numcol prop">12</div>
+      <div class="numcol prop">1.000.045</div>
+      <p class="small">“1” dar, “0” geniş: aynı basamak sayısına sahip iki sayı farklı uzunlukta görünüyor. Depoda yanlış satır okunmasının sessiz sebebi.</p>
+      <p class="small" style="border-top:1px solid oklch(0.929 0.013 255.508);padding-top:10px"><b>Fark bu ekranda görünmeyebilir:</b> bazı sistem yazı tiplerinin rakamları zaten eşit genişlikte. Kural yine de yazılır — kullanıcının yazı tipi bizim kontrolümüzde değil ve SF Pro ile Segoe UI’de varsayılan rakamlar orantılıdır.</p>
+    </div>
+  </div>
+
+  <h2>Ölçüler</h2>
+  <div class="split">
+    <div class="panel">
+      <div class="cap" style="color:oklch(0.446 0.03 256.802)">BOŞLUK ÖLÇEĞİ — 4 px tabanlı, altı kademe</div>
+      <div class="sp"><span class="lbl">Satır içi ayrım</span><span class="mono">4 px</span><span class="bar" style="width:4px"></span></div>
+      <div class="sp"><span class="lbl">Etiket → alan</span><span class="mono">4 px</span><span class="bar" style="width:4px"></span></div>
+      <div class="sp"><span class="lbl">Tablo hücresi dikey</span><span class="mono">8 px</span><span class="bar" style="width:8px"></span></div>
+      <div class="sp"><span class="lbl">Düğmeler arası</span><span class="mono">12 px</span><span class="bar" style="width:12px"></span></div>
+      <div class="sp"><span class="lbl">Kart dolgusu / hücre yatay</span><span class="mono">16 px</span><span class="bar" style="width:16px"></span></div>
+      <div class="sp"><span class="lbl">Form alanları arası</span><span class="mono">20 px</span><span class="bar" style="width:20px"></span></div>
+      <div class="sp"><span class="lbl">Bölümler arası</span><span class="mono">24 px</span><span class="bar" style="width:24px"></span></div>
+      <p class="small">Ara değer yok. 18 px veya 14 px boşluk, ölçeğin dışında bir karardır ve ekranlar arası tutarlılığı bozar.</p>
+    </div>
+    <div class="panel">
+      <div class="cap" style="color:oklch(0.446 0.03 256.802)">KENARLIK, YARIÇAP, GÖLGE</div>
+      <table style="border:0">
+        <tr><td style="width:170px;border-top:0"><b>Yarıçap</b></td><td style="border-top:0"><span class="mono">6 px</span> — her yerde. Rozet dahil; hap şekli (999 px) yok.</td></tr>
+        <tr><td><b>Kenarlık, kart</b></td><td><span class="mono">1 px slate-200</span></td></tr>
+        <tr><td><b>Kenarlık, girdi</b></td><td><span class="mono">1 px slate-500</span> — 3:1 eşiği için</td></tr>
+        <tr><td><b>Kenarlık, ana alan</b></td><td><span class="mono">2 px slate-500</span> — barkod ve miktar</td></tr>
+        <tr><td><b>Ayırıcı, tablo</b></td><td><span class="mono">1 px slate-100</span></td></tr>
+        <tr><td><b>Odak</b></td><td><span class="mono">2 px slate-900 halka + 2 px boşluk</span></td></tr>
+        <tr><td><b>Gölge</b></td><td><b>Yok.</b> Hiçbir yüzeyde. Katman ayrımını çizgi yapıyor.</td></tr>
+        <tr><td><b>Gradient</b></td><td><b>Yok.</b> Zeminler düz renk.</td></tr>
+        <tr><td><b>Animasyon</b></td><td>Yalnızca <span class="mono">:hover</span> zemin değişimi, geçiş süresi yok. Yükleme iskeleti yok — sunucu tarafında basılıyor.</td></tr>
+      </table>
+      <p class="small">Bu tabloda “tercihe bağlı” satır yok. Yeni bir yüzeye gölge eklenecekse önce bu kural değişmeli.</p>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

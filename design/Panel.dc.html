@@ -1,0 +1,179 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0}
+.rt{
+  font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  background:oklch(0.984 0.003 247.858);color:oklch(0.208 0.042 265.755);
+  -webkit-font-smoothing:antialiased;overflow:hidden;display:flex;
+}
+.tab{font-variant-numeric:tabular-nums}
+.mono{font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;font-size:0.92em}
+
+/* KENAR ÇUBUĞU — 240 px, satır 56 px */
+.side{width:240px;flex:none;background:#fff;border-right:1px solid oklch(0.929 0.013 255.508);display:flex;flex-direction:column;padding:16px 12px}
+.brand{font-size:16px;font-weight:600;padding:0 14px 16px;letter-spacing:-0.01em}
+.nav{display:flex;flex-direction:column;gap:2px}
+.navitem{height:56px;display:flex;align-items:center;gap:12px;padding:0 14px;border-radius:6px;font-size:15px;font-weight:500;color:oklch(0.372 0.044 257.287)}
+.navitem.on{background:oklch(0.208 0.042 265.755);color:#fff}
+.navitem .ic{width:20px;text-align:center;font-size:16px}
+.navitem .dot{margin-left:auto;font-size:12px;font-weight:600;color:oklch(0.55 0.21 27)}
+.navitem.on .dot{color:#fff}
+.sidefoot{margin-top:auto;border-top:1px solid oklch(0.929 0.013 255.508);padding-top:12px}
+.who{padding:0 14px;font-size:14px;line-height:20px;font-weight:500}
+.who span{display:block;font-size:12px;line-height:16px;color:oklch(0.446 0.03 256.802);font-weight:400}
+.logout{height:44px;display:flex;align-items:center;padding:0 14px;margin-top:8px;font-size:14px;color:oklch(0.372 0.044 257.287);border-radius:6px}
+
+/* ÜST ŞERİT — yapışkan, arama hep burada ve odaklı */
+.main{flex:1;min-width:0;display:flex;flex-direction:column}
+.top{height:80px;flex:none;background:#fff;border-bottom:1px solid oklch(0.929 0.013 255.508);display:flex;align-items:center;gap:16px;padding:0 24px}
+.search{position:relative;flex:1;max-width:560px}
+.search .inp{height:56px;width:100%;border:2px solid oklch(0.208 0.042 265.755);border-radius:6px;background:#fff;padding:0 14px 0 42px;font-size:16px;line-height:52px;color:oklch(0.446 0.03 256.802)}
+.search .mg{position:absolute;left:14px;top:18px;font-size:16px;color:oklch(0.446 0.03 256.802)}
+.topright{margin-left:auto;display:flex;align-items:center;gap:16px;font-size:14px;color:oklch(0.446 0.03 256.802)}
+.content{flex:1;min-height:0;padding:24px;overflow:hidden}
+
+h1.pg{margin:0;font-size:20px;line-height:28px;font-weight:600}
+.pgrow{display:flex;align-items:center;gap:16px;margin-bottom:20px}
+.pgrow .acts{margin-left:auto;display:flex;gap:12px}
+.btn{height:56px;border-radius:6px;padding:0 22px;font-size:16px;font-weight:500;display:inline-flex;align-items:center;border:1px solid transparent;white-space:nowrap}
+.btn.p{background:oklch(0.208 0.042 265.755);color:#fff}
+.btn.s{background:#fff;border-color:oklch(0.554 0.046 257.417);color:oklch(0.208 0.042 265.755)}
+.card{background:#fff;border:1px solid oklch(0.929 0.013 255.508);border-radius:6px}
+.card > .hd{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid oklch(0.929 0.013 255.508)}
+.card > .hd h2{margin:0;font-size:16px;line-height:22px;font-weight:600}
+.card > .hd a{font-size:14px;color:oklch(0.446 0.03 256.802);text-decoration:underline;text-underline-offset:2px}
+.pill{display:inline-flex;align-items:center;gap:6px;border:1px solid currentColor;border-radius:6px;padding:3px 9px;font-size:12px;line-height:18px;font-weight:600}
+table.t{width:100%;border-collapse:collapse}
+table.t th{text-align:left;font-size:12px;line-height:16px;font-weight:600;color:oklch(0.554 0.046 257.417);padding:8px 16px;background:oklch(0.968 0.007 247.896);border-bottom:1px solid oklch(0.929 0.013 255.508);white-space:nowrap}
+table.t td{padding:8px 16px;font-size:14px;line-height:20px;border-top:1px solid oklch(0.968 0.007 247.896);vertical-align:top}
+table.t td.nw{white-space:nowrap}
+table.t tr:first-child td{border-top:0}
+.r{text-align:right}
+.muted{color:oklch(0.446 0.03 256.802)}
+.sku{font-size:12px;line-height:16px;color:oklch(0.446 0.03 256.802)}
+.link{text-decoration:underline;text-underline-offset:2px;text-decoration-color:oklch(0.869 0.022 252.894);font-weight:500}
+.in{color:oklch(0.52 0.15 155)}
+.out{color:oklch(0.55 0.19 27)}
+.crit{color:oklch(0.55 0.21 27)}
+.critbg{background:oklch(0.96 0.03 27)}
+  </style>
+</helmet>
+<div class="rt" style="width:1440px;height:1000px">
+
+  <aside class="side">
+    <div class="brand">Stok Takip</div>
+    <nav class="nav">
+      <div class="navitem on"><span class="ic">▣</span>Panel</div>
+      <div class="navitem"><span class="ic">⇅</span>Giriş / Çıkış</div>
+      <div class="navitem"><span class="ic">☰</span>Stok<span class="dot">⚠ 4</span></div>
+      <div class="navitem"><span class="ic">⟳</span>Hareketler</div>
+      <div class="navitem"><span class="ic">◍</span>Kullanıcılar</div>
+      <div class="navitem"><span class="ic">⚙</span>Sağlık</div>
+    </nav>
+    <div class="sidefoot">
+      <div class="who">Ayşe Kaya<span>Yönetici</span></div>
+      <div class="logout">Çıkış</div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="top">
+      <div class="search">
+        <span class="mg">⌕</span>
+        <div class="inp">Barkod okutun veya ürün arayın</div>
+      </div>
+      <div class="topright">
+        <span class="tab">24 Ağustos 2026, Pazartesi</span>
+      </div>
+    </header>
+
+    <div class="content">
+      <div class="pgrow">
+        <h1 class="pg">Panel</h1>
+        <div class="acts">
+          <span class="btn s">Excel indir</span>
+          <span class="btn p">+ Yeni ürün</span>
+        </div>
+      </div>
+
+      <!-- 1. UYARILAR — patronun ilk sorusu: "bir sorun var mı?" -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px">
+        <div class="card critbg" style="border-color:oklch(0.55 0.21 27);display:flex;align-items:center;gap:12px;padding:16px">
+          <span class="crit" style="font-size:22px">⚠</span>
+          <span class="crit" style="font-size:16px;font-weight:600">4 ürün kritik seviyede</span>
+          <span class="muted" style="margin-left:auto;font-size:14px">→</span>
+        </div>
+        <div class="card critbg" style="border-color:oklch(0.55 0.21 27);display:flex;align-items:center;gap:12px;padding:16px">
+          <span class="crit" style="font-size:22px">⚠</span>
+          <span class="crit" style="font-size:16px;font-weight:600">2 arka plan işi başarısız</span>
+          <span class="muted" style="margin-left:auto;font-size:14px">→</span>
+        </div>
+        <div class="card" style="display:flex;align-items:center;gap:12px;padding:16px">
+          <span class="in" style="font-size:22px">✓</span>
+          <span style="font-size:16px;color:oklch(0.372 0.044 257.287)">Stok kaydı tutarlı — 09:00’da denetlendi</span>
+        </div>
+      </div>
+
+      <!-- 2. BUGÜN — grafik değil, sayı -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px">
+        <div class="card" style="padding:16px">
+          <p style="margin:0;font-size:14px;line-height:20px" class="muted">Bugün giriş</p>
+          <p style="margin:4px 0 0;font-size:30px;line-height:36px;font-weight:600" class="tab in">12
+            <span style="font-size:16px;line-height:24px;font-weight:400" class="muted">hareket · 340 adet</span></p>
+        </div>
+        <div class="card" style="padding:16px">
+          <p style="margin:0;font-size:14px;line-height:20px" class="muted">Bugün çıkış</p>
+          <p style="margin:4px 0 0;font-size:30px;line-height:36px;font-weight:600" class="tab out">28
+            <span style="font-size:16px;line-height:24px;font-weight:400" class="muted">hareket · 95 adet</span></p>
+        </div>
+        <div class="card" style="padding:16px">
+          <p style="margin:0;font-size:14px;line-height:20px" class="muted">Toplam ürün</p>
+          <p style="margin:4px 0 0;font-size:30px;line-height:36px;font-weight:600" class="tab">1.284
+            <span style="font-size:16px;line-height:24px;font-weight:400" class="muted">kalem · 12 kategori</span></p>
+        </div>
+      </div>
+
+      <!-- 3. SON HAREKETLER + KRİTİK ÜRÜNLER -->
+      <div style="display:grid;grid-template-columns:1fr 400px;gap:16px">
+        <div class="card">
+          <div class="hd"><h2>Son Hareketler</h2><a>Tümü</a></div>
+          <table class="t">
+            <tr><th style="width:76px">Saat</th><th style="width:152px">Kullanıcı</th><th class="r" style="width:110px">Miktar</th><th>Ürün</th><th style="width:172px">İşlem</th></tr>
+            <tr><td class="nw tab muted">14:30</td><td class="nw">Ahmet Demir</td><td class="r tab in" style="font-weight:600">↑ +50</td><td>Kırmızı Defter A5</td><td class="nw muted">Mal kabulü</td></tr>
+            <tr><td class="nw tab muted">14:12</td><td class="nw">Mehmet Yıldız</td><td class="r tab out" style="font-weight:600">↓ −2</td><td>Mavi Tükenmez Kalem</td><td class="nw muted">Satış</td></tr>
+            <tr><td class="nw tab muted">13:58</td><td class="nw">Ahmet Demir</td><td class="r tab out" style="font-weight:600">↓ −24</td><td>M6 Vida 20 mm</td><td class="nw muted">Satış</td></tr>
+            <tr><td class="nw tab muted">13:41</td><td class="nw">Ayşe Kaya</td><td class="r tab in" style="font-weight:600">↑ +6</td><td>Çizgili Kalemtıraş</td><td class="nw muted">Sayım düzeltmesi</td></tr>
+            <tr><td class="nw tab muted">11:20</td><td class="nw">Mehmet Yıldız</td><td class="r tab out" style="font-weight:600">↓ −18</td><td>A4 Fotokopi Kâğıdı</td><td class="nw muted">Fire</td></tr>
+            <tr><td class="nw tab muted">10:05</td><td class="nw">Ahmet Demir</td><td class="r tab in" style="font-weight:600">↑ +300</td><td>M6 Vida 20 mm</td><td class="nw muted">Mal kabulü</td></tr>
+            <tr><td class="nw tab muted">09:47</td><td class="nw">Ayşe Kaya</td><td class="r tab out" style="font-weight:600">↓ −1</td><td>Zımba Makinesi</td><td class="nw muted">İade çıkışı</td></tr>
+          </table>
+        </div>
+
+        <div class="card">
+          <div class="hd"><h2>Kritik seviyedeki ürünler</h2><a>Tümü</a></div>
+          <table class="t">
+            <tr><td><span class="link">M6 Vida 20 mm</span><div class="sku tab">A-03-2</div></td><td class="r tab crit" style="font-weight:600">⚠ 12 / 50</td></tr>
+            <tr><td><span class="link">Mavi Tükenmez Kalem</span><div class="sku tab">B-01-4</div></td><td class="r tab crit" style="font-weight:600">⚠ 8 / 40</td></tr>
+            <tr><td><span class="link">A4 Fotokopi Kâğıdı</span><div class="sku tab">C-02-1</div></td><td class="r tab crit" style="font-weight:600">⚠ 3 / 25</td></tr>
+            <tr><td><span class="link">Zımba Teli 24/6</span><div class="sku tab">B-02-2</div></td><td class="r tab crit" style="font-weight:600">⚠ 0 / 15</td></tr>
+          </table>
+          <p style="margin:0;padding:12px 16px;border-top:1px solid oklch(0.929 0.013 255.508);font-size:12px;line-height:17px" class="muted">
+            Bu listenin yerinde referans görselde bir halka grafik vardı. Halka “hangi ürün, ne kadar eksik” sorusuna cevap vermiyor; bu dört satır veriyor.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

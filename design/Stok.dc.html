@@ -1,0 +1,224 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0}
+.rt{
+  font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  background:oklch(0.984 0.003 247.858);color:oklch(0.208 0.042 265.755);
+  -webkit-font-smoothing:antialiased;overflow:hidden;display:flex;
+}
+.tab{font-variant-numeric:tabular-nums}
+.mono{font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;font-size:0.92em}
+
+/* KENAR ÇUBUĞU — 240 px, satır 56 px */
+.side{width:240px;flex:none;background:#fff;border-right:1px solid oklch(0.929 0.013 255.508);display:flex;flex-direction:column;padding:16px 12px}
+.brand{font-size:16px;font-weight:600;padding:0 14px 16px;letter-spacing:-0.01em}
+.nav{display:flex;flex-direction:column;gap:2px}
+.navitem{height:56px;display:flex;align-items:center;gap:12px;padding:0 14px;border-radius:6px;font-size:15px;font-weight:500;color:oklch(0.372 0.044 257.287)}
+.navitem.on{background:oklch(0.208 0.042 265.755);color:#fff}
+.navitem .ic{width:20px;text-align:center;font-size:16px}
+.navitem .dot{margin-left:auto;font-size:12px;font-weight:600;color:oklch(0.55 0.21 27)}
+.navitem.on .dot{color:#fff}
+.sidefoot{margin-top:auto;border-top:1px solid oklch(0.929 0.013 255.508);padding-top:12px}
+.who{padding:0 14px;font-size:14px;line-height:20px;font-weight:500}
+.who span{display:block;font-size:12px;line-height:16px;color:oklch(0.446 0.03 256.802);font-weight:400}
+.logout{height:44px;display:flex;align-items:center;padding:0 14px;margin-top:8px;font-size:14px;color:oklch(0.372 0.044 257.287);border-radius:6px}
+
+/* ÜST ŞERİT — yapışkan, arama hep burada ve odaklı */
+.main{flex:1;min-width:0;display:flex;flex-direction:column}
+.top{height:80px;flex:none;background:#fff;border-bottom:1px solid oklch(0.929 0.013 255.508);display:flex;align-items:center;gap:16px;padding:0 24px}
+.search{position:relative;flex:1;max-width:560px}
+.search .inp{height:56px;width:100%;border:2px solid oklch(0.208 0.042 265.755);border-radius:6px;background:#fff;padding:0 14px 0 42px;font-size:16px;line-height:52px;color:oklch(0.446 0.03 256.802)}
+.search .mg{position:absolute;left:14px;top:18px;font-size:16px;color:oklch(0.446 0.03 256.802)}
+.topright{margin-left:auto;display:flex;align-items:center;gap:16px;font-size:14px;color:oklch(0.446 0.03 256.802)}
+.content{flex:1;min-height:0;padding:24px;overflow:hidden}
+
+h1.pg{margin:0;font-size:20px;line-height:28px;font-weight:600}
+.pgrow{display:flex;align-items:center;gap:16px;margin-bottom:20px}
+.pgrow .acts{margin-left:auto;display:flex;gap:12px}
+.btn{height:56px;border-radius:6px;padding:0 22px;font-size:16px;font-weight:500;display:inline-flex;align-items:center;border:1px solid transparent;white-space:nowrap}
+.btn.p{background:oklch(0.208 0.042 265.755);color:#fff}
+.btn.s{background:#fff;border-color:oklch(0.554 0.046 257.417);color:oklch(0.208 0.042 265.755)}
+.card{background:#fff;border:1px solid oklch(0.929 0.013 255.508);border-radius:6px}
+.card > .hd{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid oklch(0.929 0.013 255.508)}
+.card > .hd h2{margin:0;font-size:16px;line-height:22px;font-weight:600}
+.card > .hd a{font-size:14px;color:oklch(0.446 0.03 256.802);text-decoration:underline;text-underline-offset:2px}
+.pill{display:inline-flex;align-items:center;gap:6px;border:1px solid currentColor;border-radius:6px;padding:3px 9px;font-size:12px;line-height:18px;font-weight:600}
+table.t{width:100%;border-collapse:collapse}
+table.t th{text-align:left;font-size:12px;line-height:16px;font-weight:600;color:oklch(0.554 0.046 257.417);padding:8px 16px;background:oklch(0.968 0.007 247.896);border-bottom:1px solid oklch(0.929 0.013 255.508);white-space:nowrap}
+table.t td{padding:8px 16px;font-size:14px;line-height:20px;border-top:1px solid oklch(0.968 0.007 247.896);vertical-align:top}
+table.t td.nw{white-space:nowrap}
+table.t td.r,table.t td.tab{white-space:nowrap}
+table.t tr:first-child td{border-top:0}
+.r{text-align:right}
+.muted{color:oklch(0.446 0.03 256.802)}
+.sku{font-size:12px;line-height:16px;color:oklch(0.446 0.03 256.802)}
+.link{text-decoration:underline;text-underline-offset:2px;text-decoration-color:oklch(0.869 0.022 252.894);font-weight:500}
+.in{color:oklch(0.52 0.15 155)}
+.out{color:oklch(0.55 0.19 27)}
+.crit{color:oklch(0.55 0.21 27)}
+.critbg{background:oklch(0.96 0.03 27)}
+
+.filters{display:flex;flex-wrap:wrap;align-items:flex-end;gap:12px;margin-bottom:16px}
+.fl{display:block}
+.fl > span{font-size:14px;line-height:20px;font-weight:500;display:block}
+.fi{margin-top:4px;height:56px;border-radius:6px;border:1px solid oklch(0.554 0.046 257.417);background:#fff;padding:0 12px;font-size:16px;line-height:54px}
+.chk{display:flex;align-items:center;gap:10px;height:56px;font-size:14px}
+.box{width:20px;height:20px;border:1px solid oklch(0.554 0.046 257.417);border-radius:4px;background:#fff;flex:none}
+.box.on{background:oklch(0.208 0.042 265.755);border-color:oklch(0.208 0.042 265.755);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px}
+.pag{display:flex;align-items:center;justify-content:space-between;border-top:1px solid oklch(0.929 0.013 255.508);padding:12px 16px;font-size:14px}
+.pgbtn{height:44px;border:1px solid oklch(0.554 0.046 257.417);border-radius:6px;padding:0 16px;display:inline-flex;align-items:center;font-size:14px;background:#fff}
+.pgbtn.off{border-color:oklch(0.929 0.013 255.508);color:oklch(0.704 0.04 256.788)}
+  </style>
+</helmet>
+<div class="rt" style="width:1440px;height:1000px">
+
+  <aside class="side">
+    <div class="brand">Stok Takip</div>
+    <nav class="nav">
+      <div class="navitem"><span class="ic">▣</span>Panel</div>
+      <div class="navitem"><span class="ic">⇅</span>Giriş / Çıkış</div>
+      <div class="navitem on"><span class="ic">☰</span>Stok<span class="dot">⚠ 4</span></div>
+      <div class="navitem"><span class="ic">⟳</span>Hareketler</div>
+      <div class="navitem"><span class="ic">◍</span>Kullanıcılar</div>
+      <div class="navitem"><span class="ic">⚙</span>Sağlık</div>
+    </nav>
+    <div class="sidefoot">
+      <div class="who">Ayşe Kaya<span>Yönetici</span></div>
+      <div class="logout">Çıkış</div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="top">
+      <div class="search">
+        <span class="mg">⌕</span>
+        <div class="inp">Barkod okutun veya ürün arayın</div>
+      </div>
+      <div class="topright"><span class="tab">24 Ağustos 2026, Pazartesi</span></div>
+    </header>
+
+    <div class="content">
+      <div class="pgrow">
+        <h1 class="pg">Stok</h1>
+        <span class="pill" style="color:oklch(0.446 0.03 256.802)">1.284 kalem</span>
+        <div class="acts">
+          <span class="btn s">Excel indir</span>
+          <span class="btn s">Toplu aktar</span>
+          <span class="btn p">+ Yeni ürün</span>
+        </div>
+      </div>
+
+      <!-- Filtreler adres çubuğunda: /stok?ara=vida&kritik=1
+           Yer imine eklenebiliyor, paylaşılabiliyor, geri tuşu çalışıyor. -->
+      <div class="filters">
+        <label class="fl" style="flex:1;min-width:280px">
+          <span>Ara</span>
+          <div class="fi tab" style="width:100%">vida</div>
+        </label>
+        <label class="fl" style="width:200px">
+          <span>Kategori</span>
+          <div class="fi" style="width:100%;color:oklch(0.446 0.03 256.802)">Bağlantı ▾</div>
+        </label>
+        <label class="fl" style="width:200px">
+          <span>Konum</span>
+          <div class="fi" style="width:100%;color:oklch(0.446 0.03 256.802)">Tümü ▾</div>
+        </label>
+        <div class="chk"><span class="box on">✓</span>Sadece kritik</div>
+        <div class="chk"><span class="box"></span>Arşiv dahil</div>
+        <span class="btn p">Filtrele</span>
+        <span style="height:56px;line-height:56px;font-size:14px;text-decoration:underline;text-underline-offset:2px" class="muted">Temizle</span>
+      </div>
+
+      <div class="card">
+        <table class="t">
+          <tr>
+            <th style="width:250px">Ürün</th>
+            <th style="width:105px">Kategori</th>
+            <th style="width:90px">Konum</th>
+            <th class="r" style="width:118px">Stok</th>
+            <th class="r" style="width:95px">En az</th>
+            <th class="r" style="width:88px">Alış</th>
+            <th class="r" style="width:88px">Satış</th>
+            <th style="width:148px">Barkod</th>
+            <th style="width:150px">Son hareket</th>
+          </tr>
+          <tr class="critbg">
+            <td><span class="link">M6 Vida 20 mm</span><div class="sku tab">VDA-0620 · Kaya Hırdavat</div></td>
+            <td class="muted">Bağlantı</td><td class="muted tab">A-03-2</td>
+            <td class="r tab crit" style="font-weight:600">⚠ 12 adet</td>
+            <td class="r tab muted">50 adet</td>
+            <td class="r tab muted">0,85 ₺</td><td class="r tab muted">2,40 ₺</td>
+            <td class="tab muted">8690123456789</td>
+            <td class="tab muted">24.08.2026 13:58</td>
+          </tr>
+          <tr class="critbg">
+            <td><span class="link">M8 Vida 40 mm</span><div class="sku tab">VDA-0840 · Kaya Hırdavat</div></td>
+            <td class="muted">Bağlantı</td><td class="muted tab">A-03-3</td>
+            <td class="r tab crit" style="font-weight:600">⚠ 4 adet</td>
+            <td class="r tab muted">30 adet</td>
+            <td class="r tab muted">1,20 ₺</td><td class="r tab muted">3,10 ₺</td>
+            <td class="tab muted">8690123456796</td>
+            <td class="tab muted">23.08.2026 17:02</td>
+          </tr>
+          <tr>
+            <td><span class="link">M6 Vida 30 mm</span><div class="sku tab">VDA-0630 · Kaya Hırdavat</div></td>
+            <td class="muted">Bağlantı</td><td class="muted tab">A-03-2</td>
+            <td class="r tab" style="font-weight:600">840 adet</td>
+            <td class="r tab muted">50 adet</td>
+            <td class="r tab muted">0,95 ₺</td><td class="r tab muted">2,70 ₺</td>
+            <td class="tab muted">8690123456802</td>
+            <td class="tab muted">22.08.2026 10:44</td>
+          </tr>
+          <tr>
+            <td><span class="link">Vida Somunu M6</span><div class="sku tab">SMN-06</div></td>
+            <td class="muted">Bağlantı</td><td class="muted tab">A-03-4</td>
+            <td class="r tab" style="font-weight:600">2.150 adet</td>
+            <td class="r tab muted">200 adet</td>
+            <td class="r tab muted">0,30 ₺</td><td class="r tab muted">0,90 ₺</td>
+            <td class="tab muted">8690123456819</td>
+            <td class="tab muted">21.08.2026 09:15</td>
+          </tr>
+          <tr>
+            <td><span class="link">Ahşap Vidası 4×30</span><div class="sku tab">VDA-A430</div></td>
+            <td class="muted">Bağlantı</td><td class="muted tab">A-04-1</td>
+            <td class="r tab" style="font-weight:600">375 adet</td>
+            <td class="r tab muted">100 adet</td>
+            <td class="r tab muted">0,60 ₺</td><td class="r tab muted">1,80 ₺</td>
+            <td class="tab muted">8690123456826</td>
+            <td class="tab muted">20.08.2026 15:31</td>
+          </tr>
+          <tr>
+            <td><span class="link">Vidalı Kelepçe 25 mm</span><div class="sku tab">KLP-25 · arşivde</div></td>
+            <td class="muted">Bağlantı</td><td class="muted">—</td>
+            <td class="r tab" style="font-weight:600">0 adet</td>
+            <td class="r tab muted">10 adet</td>
+            <td class="r tab muted">—</td><td class="r tab muted">—</td>
+            <td class="muted">—</td>
+            <td class="tab muted">14.08.2026 11:07</td>
+          </tr>
+        </table>
+        <div class="pag">
+          <span class="tab muted">1–6 / 6</span>
+          <span style="display:flex;gap:12px"><span class="pgbtn off">← Önceki</span><span class="pgbtn off">Sonraki →</span></span>
+        </div>
+      </div>
+
+      <p style="margin:16px 0 0;font-size:12px;line-height:18px" class="muted" style="max-width:900px">
+        Kritik satırlar <b>en üstte</b> — sıralamayı sunucu yapıyor, kullanıcı sütun başlığına tıklamak zorunda değil.
+        Fiyat sütunları <b>rolden değil cevaptan</b> türüyor: yetkisi olmayan role sunucu alanı hiç göndermiyor, ekran da sütunu hiç çizmiyor.
+      </p>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>
