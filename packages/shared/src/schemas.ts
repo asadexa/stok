@@ -5,11 +5,13 @@ import {
   multiplierMatchesKind,
 } from './barcodes.js'
 import { MOVEMENT_REASON_VALUES, MOVEMENT_REASONS, type MovementReason } from './reasons.js'
+import { ROLE_VALUES, type Role } from './roles.js'
 import { UNIT_VALUES, type Unit } from './units.js'
 
 const reasonEnum = z.enum(MOVEMENT_REASON_VALUES as [MovementReason, ...MovementReason[]])
 const unitEnum = z.enum(UNIT_VALUES as [Unit, ...Unit[]])
 const barcodeKindEnum = z.enum(BARCODE_KIND_VALUES as [BarcodeKind, ...BarcodeKind[]])
+const roleEnum = z.enum(ROLE_VALUES as [Role, ...Role[]])
 
 /** NUMERIC(14,3): en fazla 3 ondalık basamak. */
 const MAX_DECIMALS = 3
@@ -185,6 +187,70 @@ export const updateProductSchema = z.object({
 })
 
 export type UpdateProductInput = z.infer<typeof updateProductSchema>
+
+/**
+ * ============================================================================
+ * KULLANICI YÖNETİMİ (T24)
+ * ============================================================================
+ */
+
+/**
+ * Parola kuralı: en az 8 karakter, üst sınır 200.
+ *
+ * Karmaşıklık kuralı (büyük harf + rakam + sembol) BİLEREK YOK. Depoda
+ * çalışan biri o kuralı "Depo2024!" ile karşılar ve parolayı monitöre
+ * yapıştırır — kural güvenliği artırmadan kullanılabilirliği düşürür.
+ * Asıl koruma uzunluk, scrypt ve kaba kuvvet kilidi (T51).
+ *
+ * Üst sınır güvenlik gereği: sınırsız uzunluk scrypt'i hizmet reddi
+ * aracına çevirir.
+ */
+export const passwordSchema = z
+  .string()
+  .min(8, 'Parola en az 8 karakter olmalı')
+  .max(200)
+
+export const createUserSchema = z.object({
+  email: z.string().trim().toLowerCase().email('Geçerli bir e-posta girin').max(200),
+  name: z.string().trim().min(1, 'Ad boş olamaz').max(120),
+  role: roleEnum,
+  password: passwordSchema,
+  /** Paylaşılan telefonda hızlı kullanıcı geçişi (E10). Şimdilik opsiyonel. */
+  pin: z
+    .string()
+    .trim()
+    .regex(/^\d{4,8}$/, 'PIN 4-8 rakam olmalı')
+    .optional(),
+})
+
+export type CreateUserInput = z.infer<typeof createUserSchema>
+
+/**
+ * Kullanıcı güncelleme. Parola BURADA YOK: ayrı bir uç noktası var.
+ *
+ * Aynı forma konsaydı, adı düzeltmek için açılan her kayıtta boş parola
+ * alanı bulunurdu ve "boş bırakırsam ne olur" sorusu her seferinde
+ * sorulurdu. Parola değiştirmek ayrı ve bilinçli bir eylem.
+ */
+export const updateUserSchema = z.object({
+  name: z.string().trim().min(1).max(120).optional(),
+  role: roleEnum.optional(),
+  active: z.boolean().optional(),
+  pin: z
+    .string()
+    .trim()
+    .regex(/^\d{4,8}$/, 'PIN 4-8 rakam olmalı')
+    .nullable()
+    .optional(),
+})
+
+export type UpdateUserInput = z.infer<typeof updateUserSchema>
+
+export const setPasswordSchema = z.object({
+  password: passwordSchema,
+})
+
+export type SetPasswordInput = z.infer<typeof setPasswordSchema>
 
 /** Var olan ürüne barkod ekleme. */
 export const addBarcodeSchema = barcodeInputSchema

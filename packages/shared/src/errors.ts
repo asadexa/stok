@@ -117,6 +117,27 @@ export const ERROR_CODES = {
     tr: () => 'Ürünün son barkodu kaldırılamaz. Önce yenisini ekleyin.',
   },
 
+  // --- Kullanıcı yönetimi (T24) ---
+  EMAIL_EXISTS: {
+    http: 409,
+    retryable: false,
+    tr: (d) => `${d.email} adresi bu işletmede zaten kayıtlı`,
+  },
+  LAST_ADMIN: {
+    http: 409,
+    retryable: false,
+    // Son yöneticiyi düşürmek işletmeyi kendi sisteminden kilitler ve
+    // geri dönüşü veritabanına elle müdahale gerektirir.
+    tr: () => 'Son yöneticinin rolü değiştirilemez veya pasifleştirilemez',
+  },
+  SELF_LOCKOUT: {
+    http: 409,
+    retryable: false,
+    // Kendi rolünü düşüren veya kendini pasifleştiren yönetici, bir
+    // sonraki sayfa yenilemesinde dışarıda kalır.
+    tr: () => 'Kendi rolünüzü düşüremez veya kendinizi pasifleştiremezsiniz',
+  },
+
   // --- Toplu içe aktarma (T23 / E1) ---
   IMPORT_NO_HEADER: {
     http: 400,

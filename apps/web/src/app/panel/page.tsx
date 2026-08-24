@@ -72,6 +72,21 @@ export default async function DashboardPage() {
           </p>
         )}
 
+        {actor.role === 'ADMIN' ? (
+          // Sağlık AYRINTISI kendi sayfasında (invariant taraması pahalı),
+          // panelde sadece kapı duruyor. Panelin ilk sorusu "bir sorun var
+          // mı" ve o soruya giden yol görünür olmalı.
+          <Link
+            href="/saglik"
+            className="flex items-center gap-3 rounded-md border border-slate-200 bg-white p-4 text-slate-700 hover:bg-slate-50"
+          >
+            <span aria-hidden className="text-xl">
+              ⚙
+            </span>
+            <span>Sistem sağlığını kontrol et</span>
+          </Link>
+        ) : null}
+
         {summary.failedJobCount ? (
           // KRİTİK AÇIK G4: rapor gönderilemediyse admin bunu panelde görür.
           <p className="flex items-center gap-3 rounded-md border border-kritik bg-kritik-bg p-4 text-kritik">

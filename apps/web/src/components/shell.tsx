@@ -22,6 +22,8 @@ const NAV: NavItem[] = [
   { href: '/panel', label: 'Panel', adminOnly: false },
   { href: '/stok', label: 'Stok', adminOnly: false },
   { href: '/hareketler', label: 'Hareketler', adminOnly: false },
+  { href: '/kullanicilar', label: 'Kullanıcılar', adminOnly: true },
+  { href: '/saglik', label: 'Sağlık', adminOnly: true },
 ]
 
 export function Shell({

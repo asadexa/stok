@@ -1017,8 +1017,32 @@ G1, G2 ve G4 kapandı. G3 (yazıcı) TODOS E5'e bağlı, aşağıda gerekçesi y
     etiketleri destekleniyor — hepsi muhasebeden gelen dosyanın gerçeği.
   - Bu ekran JavaScript gerektiriyor (bilinçli istisna, gerekçesi
     actions.ts'te): kurulum günü masa başında yapılan tek seferlik iş.
-- [ ] **T24 (P2, human: ~3sa / CC: ~20dk)** - web - Kullanıcı yönetimi (ekle, rol ver, pasifleştir)
-- [ ] **T25 (P2, human: ~2sa / CC: ~15dk)** - web - "Sistem Sağlığı" kartı (son senkron, bekleyen kayıt, aktif cihaz)
+- [x] **T24 (P2, human: ~3sa / CC: ~20dk)** - web - Kullanıcı yönetimi (ekle, rol ver, pasifleştir)
+  - Parolayı yönetici belirliyor, davet e-postası yok: depoda çalışanın iş
+    e-postası çoğu zaman yok, davet gidecek adres de yok.
+  - İki kilit: yönetici kendi rolünü düşüremez/kendini pasifleştiremez ve
+    son aktif yönetici korunur. İkisi de gerekli — biri olmadan tek
+    yönetici kendini, diğeri olmadan iki yönetici birbirini düşürür.
+  - Pasifleştirme ve rol değişikliği oturumları iptal ediyor. Access token
+    imzadan doğrulandığı için etki en fazla 15 dk gecikmeli (bilinçli takas).
+- [x] **T25 (P2, human: ~2sa / CC: ~15dk)** - web - "Sistem Sağlığı" kartı (son senkron, bekleyen kayıt, aktif cihaz)
+  - Üç sessiz bozulma yolu izleniyor: defter/projeksiyon ayrışması,
+    kuyrukta çürüyen iş, hareketsizlik.
+  - Panelde DEĞİL kendi sayfasında: invariant taraması bütün hareketleri
+    gruplayarak tarıyor, her panel yenilemesinde beklenemez. Panelde kapı var.
+  - Her satırda durum + ne yapmalı. "3 bekleyen iş" bir şey söylemez;
+    "en eskisi 2 saattir bekliyor, işçi çalışmıyor olabilir" söyler.
+- [ ] **T52 (P1, human: ~3sa / CC: ~25dk)** - web - **Web'de elle hareket girişi** (barkod + miktar + sebep)
+  - **PLAN BOŞLUĞU, sonradan fark edildi.** Hareket girişi sadece mobilde
+    (T27) planlanmıştı. Sonuç: web arayüzü tamamlandığında bile `createMovement`
+    — ürünün kalbi, tek yazma kapısı — hiçbir ekrandan çağrılamıyor. Kullanıcı
+    ürün tanımlayabiliyor, listeye bakabiliyor, Excel alabiliyor ama TEK BİR
+    MAL KABULÜ giremiyor.
+  - Mobil beklenemez: Faz 5 sekiz görev ve kullanıcı testi ondan önce yapılacak.
+  - Mobil gelse de gerekli kalıyor: barkodsuz mal kabulü, iade, sayım
+    düzeltmesi — elle giriş depoda kalıcı bir ihtiyaç.
+  - **Kullanıcı testine başlamadan ÖNCE yapılmalı**; aksi halde test, kurulum
+    ekranlarının testine iner.
   - Kaynak: Bölüm 8
 
 ### Faz 5: Mobil
