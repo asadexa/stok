@@ -1,28 +1,238 @@
 @import 'tailwindcss';
 
 /*
- * Depo yazılımı. PLAN.md Bölüm 11:
- *   - Yüksek kontrast: depoda ışık kötü, ekran parlar.
- *   - Renk TEK BAŞINA anlam taşımasın (kritik = kırmızı + ikon + metin).
- *   - Minimum 56 px dokunma hedefi (eldiven var, acele var).
- * Gradient, pastel, pasta grafik yok: süsleme güveni azaltır.
+ * ============================================================================
+ * TASARIM TOKEN'LARI  —  T65  (tasarım incelemesi 2026-08-25, karar TD1)
+ *
+ * Referans görselin tasarım dili uygulandı: mor vurgu, yumuşak kart, tint
+ * ikon karesi, dolgu rozet, koyu tema. Görselin HİSSİ alındı, ölçüleri
+ * alınmadı: her renk çifti WCAG 2.1 ile hesaplandı ve geçirildi.
+ *
+ * Depoda ışık kötü, ekran parlıyor, eldiven var. Bu yüzden "yaklaşık olsun"
+ * diye bir değer yok; oranlar yorum satırında yazılı ve bağlayıcı.
+ *
+ * İKİ AYRI KENARLIK TOKEN'I VAR VE KARIŞTIRILMASI YASAK:
+ *   --line          dekoratif ayırıcı (kart kenarı, tablo satırı). Oran şartı yok.
+ *   --line-control  girdi/düğme SINIRI. WCAG 1.4.11 gereği en az 3:1.
+ * Bir kartın kenarı bilgi taşımıyor; bir girdinin kenarı taşıyor.
+ * ============================================================================
  */
-@theme {
-  --color-kritik: oklch(0.55 0.21 27);
-  --color-kritik-bg: oklch(0.96 0.03 27);
-  --color-giris: oklch(0.52 0.15 155);
-  --color-cikis: oklch(0.55 0.19 27);
-}
 
 :root {
-  color-scheme: light;
+  color-scheme: light dark;
+
+  /* Zeminler — nötrler mora doğru hafif kaydırıldı ki vurgu zemine yapışsın */
+  --ground: #f6f7fb;
+  --surface: #ffffff;
+  --surface-2: #f1f3f9;
+
+  /* Kenarlıklar */
+  --line: #e4e7f0; /* dekoratif, oran şartı yok */
+  --line-control: #848aa8; /* beyaza 3,40:1 · zemine 3,17:1 — WCAG 1.4.11 */
+
+  /* Metin */
+  --ink: #171827; /* beyaza 17,55:1 */
+  --ink-2: #565a73; /* beyaza  6,76:1 */
+  --ink-3: #6e7391; /* beyaza  4,64:1 — 12px ipucu metni burada durur */
+
+  /* Vurgu — SADECE gezinme, birincil eylem ve bağlantıda.
+     Tablo hücresine, rozete, sayıya GİRMEZ: orada anlam renkleri konuşur. */
+  --accent: #5b5bd6; /* beyaza 5,37:1 · üstündeki beyaz metin 5,37:1 */
+  --accent-ink: #ffffff;
+  --accent-soft: #ededfb;
+  --accent-soft-ink: #4646c0; /* soft üstünde 6,25:1 */
+  --focus: #4646c0; /* beyaza 7,25:1 · zemine 6,77:1 */
+
+  /* Anlam renkleri — giriş / düşük / kritik. Dördüncüsü eklenmez. */
+  --ok: #0f7b4f; /* 5,29:1 */
+  --ok-soft: #e4f4eb;
+  --ok-soft-ink: #0c6742; /* soft üstünde 6,08:1 */
+
+  --warn: #8a5300; /* 6,33:1 */
+  --warn-soft: #fbf0dc;
+  --warn-soft-ink: #7a4900; /* soft üstünde 6,69:1 */
+
+  --crit: #c2261f; /* 5,85:1 */
+  --crit-soft: #fceae9;
+  --crit-soft-ink: #a81e18; /* soft üstünde 6,31:1 */
+
+  --card-shadow:
+    0 1px 2px rgb(23 24 39 / 0.06), 0 1px 3px rgb(23 24 39 / 0.04);
+}
+
+/*
+ * Koyu tema, üç durum için de kuruluyor:
+ *   1. Kullanıcı hiçbir şey seçmemiş  → prefers-color-scheme karar verir
+ *   2. Kullanıcı "açık" seçmiş        → :not([data-theme='light']) koruması
+ *   3. Kullanıcı "koyu" seçmiş        → [data-theme='dark'] her koşulda kazanır
+ * Bir rengin TEK tanımı media veya [data-theme] bloğunun içinde OLMAMALI:
+ * o zaman işaretlenmemiş durumda hiç uygulanmaz ve sayfa bir temanın metnini
+ * diğerinin zemininde basar.
+ */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --ground: #0f1017;
+    --surface: #171926;
+    --surface-2: #1f2233;
+    --line: #2c3049;
+    --line-control: #686e8e; /* 3,50:1 */
+    --ink: #edeef5; /* 15,08:1 */
+    --ink-2: #a5a9c4; /*  7,54:1 */
+    --ink-3: #8b90ad; /*  5,56:1 */
+    --accent: #9a9af5; /*  6,91:1 */
+    --accent-ink: #0f1017;
+    --accent-soft: #232640;
+    --accent-soft-ink: #b4b4f8;
+    --focus: #a9a9f8; /*  8,07:1 */
+    --ok: #4ade9b; /* 10,15:1 */
+    --ok-soft: #12281e;
+    --ok-soft-ink: #5fe3a8;
+    --warn: #f0b454; /*  9,44:1 */
+    --warn-soft: #2c2210;
+    --warn-soft-ink: #f5c270;
+    --crit: #ff7a73; /*  6,88:1 */
+    --crit-soft: #2e1614;
+    --crit-soft-ink: #ff938c;
+    --card-shadow: 0 1px 2px rgb(0 0 0 / 0.5);
+  }
+}
+
+:root[data-theme='dark'] {
+  --ground: #0f1017;
+  --surface: #171926;
+  --surface-2: #1f2233;
+  --line: #2c3049;
+  --line-control: #686e8e;
+  --ink: #edeef5;
+  --ink-2: #a5a9c4;
+  --ink-3: #8b90ad;
+  --accent: #9a9af5;
+  --accent-ink: #0f1017;
+  --accent-soft: #232640;
+  --accent-soft-ink: #b4b4f8;
+  --focus: #a9a9f8;
+  --ok: #4ade9b;
+  --ok-soft: #12281e;
+  --ok-soft-ink: #5fe3a8;
+  --warn: #f0b454;
+  --warn-soft: #2c2210;
+  --warn-soft-ink: #f5c270;
+  --crit: #ff7a73;
+  --crit-soft: #2e1614;
+  --crit-soft-ink: #ff938c;
+  --card-shadow: 0 1px 2px rgb(0 0 0 / 0.5);
+}
+
+/*
+ * `@theme inline`: üretilen yardımcı sınıf DEĞERİ değil, `var()` referansını
+ * taşıyor. `bg-surface` → `background-color: var(--surface)`. Tema değişince
+ * sınıfları yeniden üretmeye gerek kalmıyor, değişken kayıyor ve bitiyor.
+ * `inline` olmadan Tailwind değeri kopyalar ve koyu tema hiç uygulanmazdı.
+ */
+@theme inline {
+  --color-ground: var(--ground);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--line);
+  --color-line-control: var(--line-control);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-soft-ink: var(--accent-soft-ink);
+  --color-focus: var(--focus);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-ok-soft-ink: var(--ok-soft-ink);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-warn-soft-ink: var(--warn-soft-ink);
+  --color-crit: var(--crit);
+  --color-crit-soft: var(--crit-soft);
+  --color-crit-soft-ink: var(--crit-soft-ink);
+
+  /* Yüzler `layout.tsx` içinde next/font ile yükleniyor ve bu değişkenlere
+     bağlanıyor: CDN yok, düzen kayması yok, çevrimdışı derleme sonrası çalışır. */
+  --font-display: var(--font-outfit), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-plex-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, monospace;
+
+  --shadow-card: var(--card-shadow);
+
+  /*
+   * GERİYE UYUMLU TAKMA ADLAR — geçici, T76 kapatınca silinecek.
+   *
+   * Eski adlar 67 yerde kullanılıyor (`text-kritik`, `bg-kritik-bg`,
+   * `text-giris`, `text-cikis`, `border-giris`). Token dosyasını değiştirip
+   * o 67 çağrıyı aynı commit'te güncellemek, tek bir yazım hatasının kritik
+   * stok uyarısını görünmez bırakması demekti. Takma ad bu riski ortadan
+   * kaldırıyor: eski adlar YENİ değerleri gösteriyor, ekranlar tek tek
+   * geçirilirken hiçbir an kırık kalmıyor.
+   *
+   * `cikis` ile `kritik` aynı kırmızıya bağlı: ikisi de "stok azalıyor"
+   * anlamına geliyor ve eski `globals.css` de ikisini neredeyse aynı
+   * kırmızıda tutuyordu.
+   */
+  --color-kritik: var(--crit);
+  --color-kritik-bg: var(--crit-soft);
+  --color-giris: var(--ok);
+  --color-cikis: var(--crit);
 }
 
 body {
-  @apply bg-slate-50 text-slate-900 antialiased;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/*
+ * ODAK HALKASI — Kural 08, tavizsiz.
+ *
+ * Eski kod `outline-none focus:border-slate-900` kullanıyordu: klavyeyle
+ * gezinen kullanıcının tek işareti 1 px'lik bir ton farkıydı ve parlayan
+ * ekranda görünmüyordu. Admin barkod okuyucuyu klavye olarak kullanıyor ve
+ * faresi yok; hangi alana yazdığını göremezse okuttuğu şey yanlış yere gider.
+ *
+ * `:focus-visible` kullanılıyor, `:focus` değil: fareyle tıklamada halka
+ * çıkmıyor, klavyeyle gelince çıkıyor.
+ */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 1px;
+  border-radius: 4px;
 }
 
 /* Tablo sayıları hizalansın: 1.000 ile 999 alt alta okunabilmeli. */
 .tabular {
   font-variant-numeric: tabular-nums;
+}
+
+/*
+ * İskelet ekran nabzı (T69). `prefers-reduced-motion` açıksa duruyor:
+ * vestibüler rahatsızlığı olan kullanıcı için yanıp sönen bir yüzey,
+ * bilgi taşımadığı halde rahatsız edici.
+ */
+@keyframes iskelet-nabiz {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.iskelet {
+  background: var(--surface-2);
+  border-radius: 6px;
+  animation: iskelet-nabiz 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .iskelet {
+    animation: none;
+  }
 }
