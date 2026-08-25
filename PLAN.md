@@ -1379,22 +1379,37 @@ https://claude.ai/code/artifact/5579f41a-2794-4146-862b-114c9469c7a8
   - Neden: /api/rapor/* dört endpoint ile çalışıyor ama ekranı yok; kullanıcı raporun var olduğunu bilmiyor.
 - [x] **T75 (P2, human: ~5sa / CC: ~35dk)** - özellik - ayarlar/page.tsx: profil, parola, toplu kritik eşik, tema tercihi (karar TD2)
   - Neden: Kritik eşik bugün ürün ürün giriliyor. Tema tercihinin saklanacağı bir yer yok.
-- [ ] **T76 (P2, human: ~1g / CC: ~50dk)** - arayüz - Kalan 8 ekranı yeni bileşenlere geçir (giris, hareket, hareketler, kullanicilar, saglik, urunler/*, not-found)
+- [x] **T76 (P2, human: ~1g / CC: ~50dk)** - arayüz - Kalan 8 ekranı yeni bileşenlere geçir (giris, hareket, hareketler, kullanicilar, saglik, urunler/*, not-found)
   - Neden: Yeni tasarım sistemi tüm ekranlarda tutarlı olmazsa iki dil aynı üründe çarpışır.
-- [ ] **T77 (P2, human: ~1g / CC: ~45dk)** - belgeleme - design/*.dc.html tuvalini yeni sisteme göre yeniden yaz (karar TD5)
+- [x] **T77 (P2, human: ~1g / CC: ~45dk)** - belgeleme - design/*.dc.html tuvalini yeni sisteme göre yeniden yaz (karar TD5)
   - Neden: Tuvalin dokuz kuralının üçü artık geçersiz. İki çelişen tasarım sistemi aynı depoda duruyor; üç ay sonra bakan biri yanlış kurala uyar.
-- [ ] **T78 (P3, human: ~1g / CC: ~40dk)** - performans - Aylık stok değeri özet tablosu veya materialized view (panel grafiğinin veri kaynağı)
-  - Neden: Grafik stock_movements.unit_cost üstünden türetilebilir ama her panel açılışında 5000+ satır taramak pahalı.
-- [ ] **T79 (P3, human: ~2sa / CC: ~15dk)** - erişilebilirlik - Atlama bağlantısı (skip link) + hareket onay şeridine aria-live
+- [ ] **T78 (P3, human: ~1g / CC: ~40dk)** - performans - Aylık stok DEĞERİ özet tablosu — **U2 KARARINA BAĞLI, BEKLİYOR**
+  - Neden: Bu görev "panel grafiğinin veri kaynağı" diye açılmıştı. Panel grafiği T71'de
+    yazıldı ve stok DEĞERİ değil hareket HACMİ gösteriyor: hacim `stock_movements.created_at`
+    üstünde indexli, pencere 14 günle sınırlı ve tarayıcıda ölçüldüğünde hızlı. Yani özet
+    tablosu bugün hiçbir sorguyu hızlandırmıyor.
+  - **Asıl engel U2:** geçmişe dönük stok değeri bir maliyet yöntemi kararı gerektiriyor
+    (ağırlıklı ortalama mı FIFO mu). Karar verilmeden hesaplanacak her seri yanlış olur.
+    Bu yüzden özet tablosu ŞİMDİ yazılmıyor: kullanılmayan şema hazırlık değil bakım
+    borcudur (mühendislik incelemesi D4 ile aynı gerekçe) ve özellik geldiğinde tasarımı
+    büyük ihtimalle U2'nin cevabına göre değişecek.
+  - **Tetikleyici:** U2 cevaplandığı gün. Ondan önce açılmamalı.
+- [x] **T79 (P3, human: ~2sa / CC: ~15dk)** - erişilebilirlik - Atlama bağlantısı (skip link) + hareket onay şeridine aria-live
   - Neden: Klavye kullanıcısı her sayfada 9 menü satırını geçmek zorunda. Kayıt onayı ("446 → 496") ekran okuyucuya hiç duyurulmuyor.
 
-**T87 (P1, human: ~1g / CC: ~1sa)** - auth - Oturum yenilemeyi render'dan çıkar
+- [x] **T87 (P1, human: ~1g / CC: ~1sa)** - auth - Oturum yenilemeyi render'dan çıkar
   - Neden: `currentActor()` süresi dolmuş access token'ı render sırasında yeniliyor ve
     çerez yazmaya çalışıyor. Next.js 15 bunu Server Component render'ında yasaklıyor;
     sonuç, giriş yaptıktan 15 dakika sonra HER sayfada 500 hatasıydı. Çökme try/catch
     ile kapatıldı (yenileme token'ı döndürülmediği için yutmak güvenli), ama çerez
     tazelenene kadar her render bir yenileme sorgusu yapıyor. Kalıcı çözüm: yenilemeyi
     bir route handler'a veya Node çalışma zamanlı middleware'e taşımak.
+
+**Faz 9 tamamlandı (T65-T87), T78 hariç.**
+
+T78 kapsamı düzeltildi ve U2'ye bağlandı: panel grafiği stok değeri değil hareket
+hacmi gösteriyor (hacim indexli ve ucuz), yani özet tablosu bugün hiçbir sorguyu
+hızlandırmıyor. Değerin zaman serisi maliyet yöntemi kararına bağlı.
 
 **Faz 9 temel katmanı + TD2 ekranları tamamlandı (T65-T75).**
 
@@ -1458,19 +1473,19 @@ Görseldeki özellikler tek tek değerlendirildi. Üçü girdi, biri kapsam dı�
 | **TD6.4** | Tedarikçiler / Siparişler | **Çıkar** — "KAPSAM DIŞI → Faz 2" kararı teyit edildi |
 | — | Kiracı değiştirici | **Uygulanamaz** — `users.tenantId` notNull tek FK, bir kullanıcı tek işletmeye ait. Kontrol hesap menüsü olarak yorumlandı |
 
-- [ ] **T80 (P2, human: ~4sa / CC: ~30dk)** - özellik - Bildirim zili: kritik ürün + başarısız arka plan işi sayısı + açılır liste (E7 web karşılığı)
+- [x] **T80 (P2, human: ~4sa / CC: ~30dk)** - özellik - Bildirim zili: kritik ürün + başarısız arka plan işi sayısı + açılır liste (E7 web karşılığı)
   - Neden: PLAN.md E7 v1 kapsamında ama yapılmadı. Referans görselde zil var; sayı bağlanmazsa boş süs kalır.
-- [ ] **T81 (P2, human: ~4sa / CC: ~25dk)** - arayüz - Barkod kaydında sesli + titreşimli geri bildirim + sessiz mod tercihi (E4 web karşılığı)
+- [x] **T81 (P2, human: ~4sa / CC: ~25dk)** - arayüz - Barkod kaydında sesli + titreşimli geri bildirim + sessiz mod tercihi (E4 web karşılığı)
   - Neden: PLAN.md E4 v1 kapsamında: "çalışan ekrana bakmaz, dinler, hız 2 katına çıkar". Web hareket ekranında hiç yok.
-- [ ] **T82 (P2, human: ~2sa / CC: ~20dk)** - şema - products.image_url sütunu + migration + depolama yapılandırması
+- [x] **T82 (P2, human: ~2sa / CC: ~20dk)** - şema - products.image_url sütunu + migration + depolama yapılandırması
   - Neden: Referans görselde her ürünün fotoğrafı var; products tablosunda görsel sütunu yok. T83 ve T84 buna bağlı.
-- [ ] **T83 (P2, human: ~2g / CC: ~1,5sa)** - özellik - Ürün görseli yükleme + boyutlandırma + baş harf karesi ZORUNLU geri düşüş
+- [x] **T83 (P2, human: ~2g / CC: ~1,5sa)** - özellik - Ürün görseli yükleme + boyutlandırma + baş harf karesi ZORUNLU geri düşüş
   - Neden: Fotoğrafsız ürün bozuk görünmemeli: 800 kalemlik katalogda çoğu satır uzun süre fotoğrafsız kalacak.
-- [ ] **T84 (P2, human: ~4sa / CC: ~30dk)** - özellik - Toplu aktarmada görsel URL sütunu + önizlemede görsel doğrulama
+- [x] **T84 (P2, human: ~4sa / CC: ~30dk)** - özellik - Toplu aktarmada görsel URL sütunu + önizlemede görsel doğrulama
   - Neden: Elle fotoğraf çekmeden tedarikçi kataloğundan eşleştirme yolu; fotoğrafın gerçekten dolmasının tek pratik yolu.
-- [ ] **T85 (P2, human: ~1g / CC: ~50dk)** - özellik - Birleşik arama endpoint: ürün + barkod + hareket, Türkçe normalizasyonla
+- [x] **T85 (P2, human: ~1g / CC: ~50dk)** - özellik - Birleşik arama endpoint: ürün + barkod + hareket, Türkçe normalizasyonla
   - Neden: Bugün arama sadece /stok içinde. Tasarım Kural 05 "arama hep görünür, hep odaklı" diyor; barkod okuyucu odak bulamazsa okutma sessizce kayboluyor.
-- [ ] **T86 (P2, human: ~1g / CC: ~45dk)** - arayüz - Ctrl+K komut paleti: barkod tam eşleşme → Giriş/Çıkış, SKU/ad → ürün, sonuç yok → yeni ürün ekle
+- [x] **T86 (P2, human: ~1g / CC: ~45dk)** - arayüz - Ctrl+K komut paleti: barkod tam eşleşme → Giriş/Çıkış, SKU/ad → ürün, sonuç yok → yeni ürün ekle
   - Neden: PLAN.md boş durum tablosu zaten "arama sonuç yok → Yeni ürün olarak ekle" diyor; palet bunu her ekrandan erişilebilir kılıyor.
 
 **T83'de baş harf karesi zorunlu geri düşüş.** Fotoğraf isteğe bağlı bir alan;
