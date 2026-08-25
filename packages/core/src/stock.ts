@@ -38,6 +38,8 @@ export interface StockRow {
   name: string
   category: string | null
   brand: string | null
+  /** Ürün görselinin adresi. Yoksa arayüz baş harf karesine düşüyor. */
+  imageUrl: string | null
   unit: Unit
   qty: number
   minStock: number
@@ -115,6 +117,7 @@ export async function listStock(
           name: products.name,
           category: products.category,
           brand: products.brand,
+          imageUrl: products.imageUrl,
           unit: products.unit,
           minStock: products.minStock,
           purchasePrice: products.purchasePrice,
@@ -153,6 +156,7 @@ export async function listStock(
           name: r.name,
           category: r.category,
           brand: r.brand,
+          imageUrl: r.imageUrl,
           unit: r.unit as Unit,
           qty,
           minStock,

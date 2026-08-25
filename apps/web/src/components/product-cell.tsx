@@ -7,11 +7,21 @@ import Link from 'next/link'
  * Referans görselde her satırda ürün fotoğrafı var. `products` tablosunda
  * görsel sütunu YOK; TD6.2 ile ekleniyor ama ayrı iş (T82-T84).
  *
- * BURADAKİ BAŞ HARF KARESİ GEÇİCİ BİR ÇÖZÜM DEĞİL, KALICI GERİ DÜŞÜŞ.
+ * BAŞ HARF KARESİ GEÇİCİ BİR ÇÖZÜM DEĞİL, KALICI GERİ DÜŞÜŞ.
  * 800 kalemlik bir katalogda satırların çoğu uzun süre fotoğrafsız kalacak;
  * fotoğraf geldiğinde bile gelmeyenler olacak. Fotoğrafsız satırın boş bir
  * gri kutu göstermesi, tabloyu bugünkünden daha karmaşık ama daha az
  * bilgilendirici yapardı. Baş harf en azından tarama sırasında ayırt edici.
+ *
+ * GÖRSEL `<img>` İLE BASILIYOR, `next/image` İLE DEĞİL. Adresler DIŞARIDAN
+ * geliyor (tedarikçi kataloğu, toplu aktarma) ve `next/image` her alan adının
+ * `next.config` içinde önceden tanımlanmasını istiyor — bilinmeyen bir alan
+ * adı 400 döndürüyor. Kullanıcının girdiği geçerli bir adres, yapılandırmada
+ * yazmıyor diye kırık görünürdü.
+ *
+ * `onError` YOK çünkü sunucu bileşeni. Kırık adres tarayıcının kendi kırık
+ * görsel işaretini gösteriyor; `alt` metni de ürün adı olduğu için satır
+ * yine okunabiliyor.
  *
  * BAŞ HARF TÜRKÇEYE GÖRE BÜYÜTÜLÜYOR. `toUpperCase()` tek başına yanlış:
  * JavaScript'te "isıtıcı".toUpperCase() → "ISITICI" (doğru), ama "i" harfi
@@ -28,11 +38,40 @@ export function initials(name: string): string {
   return (first + second).toLocaleUpperCase('tr-TR')
 }
 
-export function ProductThumb({ name, size = 38 }: { name: string; size?: number }) {
+export function ProductThumb({
+  name,
+  imageUrl,
+  size = 38,
+}: {
+  name: string
+  imageUrl?: string | null
+  size?: number
+}) {
+  const box =
+    'grid shrink-0 place-items-center overflow-hidden rounded-[9px] border border-line bg-surface-2'
+
+  if (imageUrl) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={imageUrl}
+        // `alt=""`: görsel yanındaki metnin TEKRARI. Ürün adı hemen yanında
+        // yazıyor; ekran okuyucuya iki kez okutmak gürültü.
+        alt=""
+        width={size}
+        height={size}
+        loading="lazy"
+        decoding="async"
+        className={`${box} object-cover`}
+        style={{ width: size, height: size }}
+      />
+    )
+  }
+
   return (
     <span
       aria-hidden
-      className="grid shrink-0 place-items-center rounded-[9px] border border-line bg-surface-2 font-display font-semibold text-ink-2"
+      className={`${box} font-display font-semibold text-ink-2`}
       style={{ width: size, height: size, fontSize: Math.round(size * 0.34) }}
     >
       {initials(name)}
@@ -45,12 +84,14 @@ export function ProductCell({
   name,
   sku,
   brand,
+  imageUrl,
   archived,
 }: {
   id?: string
   name: string
   sku: string
   brand?: string | null
+  imageUrl?: string | null
   archived?: boolean
 }) {
   const label = (
@@ -69,7 +110,7 @@ export function ProductCell({
 
   return (
     <span className="flex items-center gap-3">
-      <ProductThumb name={name} />
+      <ProductThumb name={name} imageUrl={imageUrl} />
       <span className="min-w-0">
         {id ? (
           <Link href={`/urunler/${id}`} className="underline-offset-2 hover:underline">

@@ -133,6 +133,21 @@ export const products = pgTable(
     nameNorm: text('name_norm').generatedAlwaysAs(sql`tr_norm(name)`),
     category: text('category'),
     brand: text('brand'),
+    /**
+     * Ürün görselinin ADRESİ. Dosyanın kendisi burada DEĞİL.
+     *
+     * Neden URL: bu üründe henüz bir dosya deposu yok ve seçilmesi
+     * PLAN.md ÇÖZÜLMEMİŞ KARAR U3'e (hosting) bağlı — LAN sunucusunda
+     * disk, Supabase'de bucket, serverless'ta ikisi de değil. Karar
+     * verilmeden bir depolama yolu gömmek, U3'ü sessizce karara
+     * bağlamak olurdu.
+     *
+     * URL modeli bugün çalışan yolu açıyor: tedarikçi kataloğundaki
+     * görsel adresi toplu aktarmayla doldurulabiliyor. 800 kalemlik bir
+     * katalogda fotoğrafın gerçekten dolmasının pratik yolu bu; elle
+     * çekmek değil.
+     */
+    imageUrl: text('image_url'),
     unit: text('unit').notNull().default('ADET'),
     purchasePrice: moneyCol('purchase_price'),
     salePrice: moneyCol('sale_price'),

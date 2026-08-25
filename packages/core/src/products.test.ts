@@ -394,3 +394,55 @@ function move(barcode: string, qty = 1) {
     opts,
   )
 }
+
+/**
+ * ============================================================================
+ * T82-T84 — ÜRÜN GÖRSELİ
+ *
+ * Görselin KENDİSİ değil ADRESİ saklanıyor: dosya deposu seçimi PLAN.md
+ * ÇÖZÜLMEMİŞ KARAR U3'e (hosting) bağlı ve karar verilmeden bir yükleme yolu
+ * gömmek U3'ü sessizce karara bağlamak olurdu.
+ *
+ * En kritik test şema kısıtlaması: adres arayüzde bir `<img src>` içine
+ * giriyor ve toplu aktarmayla DIŞARIDAN geliyor.
+ * ============================================================================
+ */
+describe('T82-T84 - ürün görseli', () => {
+  it('görsel adresi kaydediliyor ve stok listesinde geri geliyor', async () => {
+    const url = 'https://ornek-tedarikci.com/g/urun.jpg'
+    const product = await createProduct(boss, draft({ imageUrl: url }), opts)
+
+    const page = await listStock(boss, { productId: product.productId, limit: 1 }, opts)
+    expect(page.rows[0]?.imageUrl).toBe(url)
+  })
+
+  it('görselsiz ürün null dönüyor — arayüz baş harf karesine düşüyor', async () => {
+    const product = await createProduct(boss, draft(), opts)
+    const page = await listStock(boss, { productId: product.productId, limit: 1 }, opts)
+    expect(page.rows[0]?.imageUrl).toBeNull()
+  })
+
+  it('görsel KALDIRILABİLİYOR', async () => {
+    // `optional` "dokunma", `null` "sil" demek. İkisi ayrılmasaydı görsel
+    // bir kez konduktan sonra geri alınamazdı.
+    const product = await createProduct(
+      boss,
+      draft({ imageUrl: 'https://ornek.com/x.png' }),
+      opts,
+    )
+    await updateProduct(boss, product.productId, { imageUrl: null }, opts)
+
+    const page = await listStock(boss, { productId: product.productId, limit: 1 }, opts)
+    expect(page.rows[0]?.imageUrl).toBeNull()
+  })
+
+  it('http olmayan şema REDDEDİLİYOR', async () => {
+    await expect(
+      createProduct(boss, draft({ imageUrl: 'javascript:alert(1)' }), opts),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' })
+
+    await expect(
+      createProduct(boss, draft({ imageUrl: 'data:image/svg+xml,<svg/>' }), opts),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' })
+  })
+})

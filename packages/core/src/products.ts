@@ -190,6 +190,7 @@ export async function createProduct(
           unit: input.unit,
           category: input.category ?? null,
           brand: input.brand ?? null,
+          imageUrl: input.imageUrl ?? null,
           purchasePrice: money(input.purchasePrice),
           salePrice: money(input.salePrice),
           minStock: qty(input.minStock),
@@ -246,6 +247,7 @@ export async function updateProduct(
   if ('unit' in input) patch.unit = input.unit
   if ('category' in input) patch.category = input.category
   if ('brand' in input) patch.brand = input.brand
+  if ('imageUrl' in input) patch.imageUrl = input.imageUrl
   if ('purchasePrice' in input) patch.purchasePrice = money(input.purchasePrice)
   if ('salePrice' in input) patch.salePrice = money(input.salePrice)
   if ('minStock' in input) patch.minStock = qty(input.minStock)

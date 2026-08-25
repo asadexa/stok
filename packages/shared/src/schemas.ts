@@ -135,12 +135,35 @@ const barcodeInputSchema = z
   })
 
 /** Ürün oluşturma. Sadece admin. */
+/**
+ * Ürün görselinin adresi.
+ *
+ * SADECE `http`/`https`. `javascript:` ve `data:` şemaları bilerek dışarıda:
+ * bu adres arayüzde bir `<img src>` içine giriyor ve toplu aktarmayla
+ * DIŞARIDAN geliyor. Şema kısıtlanmasaydı, hazırladığı Excel'i yükleten
+ * biri sayfaya kendi içeriğini sokabilirdi.
+ *
+ * Boş string `undefined`'a düşüyor: Excel'de boş bırakılan hücre ile hiç
+ * olmayan sütun aynı şey — ikisi de "görsel yok".
+ */
+export const imageUrlSchema = z
+  .string()
+  .trim()
+  .max(500)
+  .optional()
+  .transform((v) => (v === '' ? undefined : v))
+  .refine(
+    (v) => v === undefined || /^https?:\/\//i.test(v),
+    { message: 'Görsel adresi http:// veya https:// ile başlamalı' },
+  )
+
 export const createProductSchema = z.object({
   sku: z.string().trim().min(1).max(64),
   name: z.string().trim().min(1).max(200),
   unit: unitEnum.default('ADET'),
   category: z.string().trim().max(100).optional(),
   brand: z.string().trim().max(100).optional(),
+  imageUrl: imageUrlSchema,
   purchasePrice: moneySchema.optional(),
   salePrice: moneySchema.optional(),
   minStock: z
@@ -174,6 +197,10 @@ export const updateProductSchema = z.object({
   unit: unitEnum.optional(),
   category: z.string().trim().max(100).nullable().optional(),
   brand: z.string().trim().max(100).nullable().optional(),
+  // Güncellemede `nullable`: kullanıcı görseli KALDIRABİLMELİ. `optional`
+  // "dokunma", `null` "sil" demek; ikisi ayrı olmazsa görsel bir kez
+  // konduktan sonra geri alınamazdı.
+  imageUrl: imageUrlSchema.nullable(),
   purchasePrice: moneySchema.nullable().optional(),
   salePrice: moneySchema.nullable().optional(),
   minStock: z

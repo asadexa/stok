@@ -101,6 +101,7 @@ export default async function ProductPage({
           // Boş alan burada "temizle" demek, "dokunma" değil.
           category: nullableText(form, 'kategori'),
           brand: nullableText(form, 'marka'),
+          imageUrl: nullableText(form, 'gorsel'),
           purchasePrice: nullableNumber(form, 'alis'),
           salePrice: nullableNumber(form, 'satis'),
           minStock: numberOr(form, 'minStok', 0),
@@ -236,6 +237,13 @@ export default async function ProductPage({
           <div className="grid gap-5 sm:grid-cols-2">
             <TextField name="kategori" label="Kategori" defaultValue={product.category} />
             <TextField name="marka" label="Marka" defaultValue={product.brand} />
+            <TextField
+              name="gorsel"
+              label="Görsel adresi"
+              defaultValue={product.imageUrl}
+              placeholder="https://..."
+              hint="Tedarikçi kataloğundaki adres. Boş bırakırsanız ürün adının baş harfleri gösterilir."
+            />
           </div>
 
           <div className="grid gap-5 sm:grid-cols-3">

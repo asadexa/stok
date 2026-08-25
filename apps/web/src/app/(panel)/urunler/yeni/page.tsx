@@ -60,6 +60,7 @@ export default async function NewProductPage({
           unit: text(form, 'birim'),
           category: optionalText(form, 'kategori'),
           brand: optionalText(form, 'marka'),
+          imageUrl: optionalText(form, 'gorsel'),
           purchasePrice: optionalNumber(form, 'alis'),
           salePrice: optionalNumber(form, 'satis'),
           minStock: numberOr(form, 'minStok', 0),
@@ -113,6 +114,22 @@ export default async function NewProductPage({
         <div className="grid gap-5 sm:grid-cols-2">
           <TextField name="kategori" label="Kategori" />
           <TextField name="marka" label="Marka" />
+        </div>
+
+        {/*
+          GÖRSEL ADRES, DOSYA YÜKLEME DEĞİL (T82-T84). Dosya deposu seçimi
+          PLAN.md ÇÖZÜLMEMİŞ KARAR U3'e (hosting) bağlı; karar verilmeden bir
+          yükleme yolu gömmek U3'ü sessizce karara bağlamak olurdu. Adres
+          modeli bugün çalışan yolu açıyor ve asıl doldurma yolu zaten toplu
+          aktarma: 800 kalemi tek tek fotoğraflamak gerçekçi değil.
+        */}
+        <div className="grid gap-5 sm:grid-cols-2">
+          <TextField
+            name="gorsel"
+            label="Görsel adresi"
+            placeholder="https://..."
+            hint="Tedarikçi kataloğundaki adres. Boş bırakırsanız ürün adının baş harfleri gösterilir."
+          />
         </div>
 
         <div className="grid gap-5 sm:grid-cols-3">

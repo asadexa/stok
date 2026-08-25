@@ -322,6 +322,7 @@ export default async function StockPage({
                           name={row.name}
                           sku={row.sku}
                           brand={row.brand}
+                          imageUrl={row.imageUrl}
                           archived={Boolean(row.archivedAt)}
                         />
                       </td>

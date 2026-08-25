@@ -57,6 +57,13 @@
       "when": 1787468577881,
       "tag": "0007_barcode_archive",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1787643598096,
+      "tag": "0008_product_image_url",
+      "breakpoints": true
     }
   ]
 }

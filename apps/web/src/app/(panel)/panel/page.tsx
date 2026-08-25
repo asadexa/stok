@@ -294,7 +294,7 @@ export default async function DashboardPage() {
                       key={row.productId}
                       className="flex items-center gap-3 border-t border-line px-4 py-3 first:border-t-0"
                     >
-                      <ProductThumb name={row.name} />
+                      <ProductThumb name={row.name} imageUrl={row.imageUrl} />
                       <span className="min-w-0 flex-1">
                         <Link
                           href={`/urunler/${row.productId}`}
