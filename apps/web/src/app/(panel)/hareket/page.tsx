@@ -11,8 +11,10 @@ import { appDb } from '@stok/db'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { Alert, SubmitButton } from '@/components/field'
+import { SaveFeedback } from '@/components/save-feedback'
 import { type FormParams, errorQuery, messageFrom, numberOr, optionalText, text } from '@/server/form'
 import { currentActor } from '@/server/session'
+import { readSoundEnabled } from '@/server/theme'
 
 /**
  * ============================================================================
@@ -61,6 +63,7 @@ export default async function MovementEntryPage({
 
   const params = await searchParams
   const message = messageFrom(params)
+  const soundEnabled = await readSoundEnabled()
   const barcode = params.barkod?.trim()
 
   const db = appDb()
@@ -117,17 +120,49 @@ export default async function MovementEntryPage({
 
       {/* ONAY ŞERİDİ — "35 → 55". Sadece yeni sayıyı göstermek yetmez:
           kullanıcı doğru miktarın işlendiğini ancak farktan anlar. */}
+      {/*
+        KAYIT ONAYI — T79.
+
+        `role="status"`: ekran okuyucu için bu bir durum bildirimi, süs değil.
+        Sayfanın EN BAŞINDA duruyor ki kayıttan sonraki gezinmede ilk okunan
+        şey olsun.
+
+        GÖRSEL PARÇALAR `aria-hidden`, ALTINDA TEK BİR CÜMLE VAR. Eskiden ok
+        işareti gizli, sayılar açıktaydı; ekran okuyucu "446 496" diye
+        ilişkisiz iki sayı okuyordu ve hangisinin yeni stok olduğu
+        anlaşılmıyordu. Şimdi "... kaydedildi. Stok 446'dan 496'ya değişti."
+        diye tam bir cümle duyuluyor.
+
+        ODAK BURAYA ALINMIYOR. Alınsaydı barkod alanından çalınırdı ve arka
+        arkaya okutma akışı bozulurdu (Kural 05). Sesli geri bildirim T81'in
+        işi; bu şerit gözle ve ekran okuyucuyla okunan kanal.
+      */}
+      {/* Sesli + titreşimli geri bildirim (T81). Şeridin yanında, çünkü aynı
+          olayı iki farklı kanaldan anlatıyorlar: göz ve kulak. */}
       {params.yeni !== undefined && params.urun ? (
-        <p className="mb-4 flex flex-wrap items-center gap-3 rounded-md border border-giris bg-surface p-4">
-          <span aria-hidden className="text-2xl text-giris">
-            ✓
+        <SaveFeedback tone="ok" enabled={soundEnabled} signature={params.yeni} />
+      ) : null}
+      {message ? (
+        <SaveFeedback tone="error" enabled={soundEnabled} signature={message} />
+      ) : null}
+
+      {params.yeni !== undefined && params.urun ? (
+        <p
+          role="status"
+          className="mb-4 flex flex-wrap items-center gap-3 rounded-[10px] border border-ok bg-ok-soft p-4 text-ok-soft-ink"
+        >
+          <span aria-hidden className="flex flex-wrap items-center gap-3">
+            <span className="text-2xl">✓</span>
+            <span className="font-semibold">{params.urun}</span>
+            <span className="tabular text-lg">
+              {params.onceki} → <span className="font-bold">{params.yeni}</span>
+              {params.birim ? ` ${params.birim}` : ''}
+            </span>
           </span>
-          <span className="font-medium">{params.urun}</span>
-          <span className="tabular text-lg">
-            {params.onceki} <span aria-hidden>→</span>{' '}
-            <span className="font-semibold text-giris">{params.yeni}</span>
+          <span className="sr-only">
+            {params.urun} kaydedildi. Stok {params.onceki} birimden {params.yeni}
+            {params.birim ? ` ${params.birim}` : ''} birime değişti.
           </span>
-          <span className="sr-only">kaydedildi</span>
         </p>
       ) : null}
 

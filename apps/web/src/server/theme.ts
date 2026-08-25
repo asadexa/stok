@@ -4,7 +4,11 @@ import { secureCookies } from './session'
 
 /**
  * ============================================================================
- * TEMA TERCİHİ — T65 (tasarım incelemesi, karar TD1)
+ * KULLANICI TERCİHLERİ — TEMA (T65) ve SES (T81)
+ *
+ * İkisi de çerezde ve aynı gerekçeyle: sunucu okuyup ilk baytta doğru
+ * davranıyor. Tek dosyada duruyorlar çünkü ikisi de aynı şey — oturumdan
+ * bağımsız, tarayıcıya bağlı, gizli olmayan tercihler.
  *
  * Tercih ÇEREZDE, `localStorage`'da değil. Sebep tek kelimeyle: yanıp sönme.
  *
@@ -61,5 +65,44 @@ export async function writeTheme(theme: Theme | null): Promise<void> {
     secure: secureCookies(),
     path: '/',
     maxAge: THEME_MAX_AGE,
+  })
+}
+
+/**
+ * ============================================================================
+ * SES VE TİTREŞİM TERCİHİ — T81
+ *
+ * Varsayılan AÇIK. PLAN.md E4: "çalışan ekrana bakmaz, dinler; hız iki katına
+ * çıkar". Varsayılanı kapalı yapmak, özelliği ayarlara girip açan azınlığa
+ * indirmek olurdu.
+ *
+ * Çerezde SADECE "kapalı" durumu saklanıyor. Açık olan varsayılan ve varsayılanı
+ * çereze yazmak, tek durumu iki şekilde temsil etmek olurdu (tema tercihindeki
+ * 'system' ile aynı gerekçe).
+ * ============================================================================
+ */
+
+const SOUND_COOKIE = 'stok_ses'
+const SOUND_MAX_AGE = 60 * 60 * 24 * 365
+
+export async function readSoundEnabled(): Promise<boolean> {
+  // Yalnızca açık bir "kapalı" işareti sesi kapatıyor; çerez yoksa açık.
+  return (await cookies()).get(SOUND_COOKIE)?.value !== 'kapali'
+}
+
+export async function writeSoundEnabled(enabled: boolean): Promise<void> {
+  const jar = await cookies()
+
+  if (enabled) {
+    jar.delete(SOUND_COOKIE)
+    return
+  }
+
+  jar.set(SOUND_COOKIE, 'kapali', {
+    httpOnly: false,
+    sameSite: 'lax',
+    secure: secureCookies(),
+    path: '/',
+    maxAge: SOUND_MAX_AGE,
   })
 }

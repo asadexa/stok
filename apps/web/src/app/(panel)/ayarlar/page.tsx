@@ -6,7 +6,13 @@ import { redirect } from 'next/navigation'
 import { Alert, Notice, SubmitButton } from '@/components/field'
 import { type FormParams, errorQuery, messageFrom, text } from '@/server/form'
 import { currentActor } from '@/server/session'
-import { type Theme, readTheme, writeTheme } from '@/server/theme'
+import {
+  type Theme,
+  readSoundEnabled,
+  readTheme,
+  writeSoundEnabled,
+  writeTheme,
+} from '@/server/theme'
 
 /**
  * ============================================================================
@@ -50,9 +56,10 @@ export default async function SettingsPage({
 
   const params = await searchParams
   const message = messageFrom(params)
-  const [profile, theme] = await Promise.all([
+  const [profile, theme, soundEnabled] = await Promise.all([
     currentProfile(actor, { db: appDb() }),
     readTheme(),
+    readSoundEnabled(),
   ])
 
   async function saveTheme(form: FormData) {
@@ -64,6 +71,15 @@ export default async function SettingsPage({
     await writeTheme(value === 'light' || value === 'dark' ? value : null)
     revalidatePath('/', 'layout')
     redirect('/ayarlar?kaydedildi=tema')
+  }
+
+  async function saveSound(form: FormData) {
+    'use server'
+    // Onay kutusu İŞARETLİ DEĞİLSE tarayıcı alanı hiç göndermiyor; yokluk
+    // "kapalı" demek. `=== 'acik'` yazmak, gönderilmeyen alanı da kapalı
+    // sayıyor ve iki durumu tek kontrolle ayırıyor.
+    await writeSoundEnabled(form.get('ses') === 'acik')
+    redirect('/ayarlar?kaydedildi=ses')
   }
 
   async function savePassword(form: FormData) {
@@ -97,6 +113,7 @@ export default async function SettingsPage({
     <div className="grid max-w-4xl gap-4">
       {message ? <Alert>{message}</Alert> : null}
       {params.kaydedildi === 'tema' ? <Notice>Tema tercihiniz kaydedildi.</Notice> : null}
+      {params.kaydedildi === 'ses' ? <Notice>Ses tercihiniz kaydedildi.</Notice> : null}
 
       {/* ── HESAP ─────────────────────────────────────────────── */}
       <section
@@ -164,6 +181,42 @@ export default async function SettingsPage({
 
           <div className="mt-4">
             <SubmitButton tone="secondary">Temayı kaydet</SubmitButton>
+          </div>
+        </form>
+      </section>
+
+      {/* ── SES VE TİTREŞİM ───────────────────────────────────── */}
+      <section
+        aria-label="Ses ve titreşim"
+        className="rounded-[14px] border border-line bg-surface p-4 shadow-card sm:p-5"
+      >
+        <h2 className="font-display text-base font-semibold">Ses ve titreşim</h2>
+        <p className="mt-1 max-w-[62ch] text-[13.5px] text-ink-2">
+          Giriş/Çıkış ekranında kayıt tamamlanınca kısa bir bip ve titreşim
+          verilir: başarılı tek bip, hata çift bip. Ekrana bakmadan çalışmak
+          içindir.
+        </p>
+
+        <form action={saveSound} className="mt-4">
+          <label className="flex max-w-md cursor-pointer gap-3 rounded-[10px] border border-line-control p-3">
+            <input
+              type="checkbox"
+              name="ses"
+              value="acik"
+              defaultChecked={soundEnabled}
+              className="mt-0.5 size-4 shrink-0 accent-[var(--accent)]"
+            />
+            <span>
+              <span className="block text-sm font-semibold">Sesli geri bildirim açık</span>
+              <span className="mt-0.5 block text-[12.5px] text-ink-3">
+                Sessiz bir ortamda çalışıyorsanız kapatın. Titreşim de birlikte
+                kapanır.
+              </span>
+            </span>
+          </label>
+
+          <div className="mt-4">
+            <SubmitButton tone="secondary">Kaydet</SubmitButton>
           </div>
         </form>
       </section>
