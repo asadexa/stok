@@ -1,3 +1,5 @@
+import { alertSummary } from '@stok/core'
+import { appDb } from '@stok/db'
 import { redirect } from 'next/navigation'
 import { SessionKeepAlive } from '@/components/session-keepalive'
 import { Shell } from '@/components/shell'
@@ -36,8 +38,12 @@ export default async function PanelLayout({ children }: { children: React.ReactN
   // gezinen kullanıcıda her sayfa bir yenileme sorgusu tetiklerdi.
   const needsPersist = await sessionNeedsPersist()
 
+  // Zilin sayısı düzende hesaplanıyor: her sayfada gerekiyor ve kabuk
+  // sunucu bileşeni. İki ince sayım sorgusu, satır döndürmüyor.
+  const alerts = await alertSummary(actor, { db: appDb() })
+
   return (
-    <Shell role={actor.role}>
+    <Shell role={actor.role} alerts={alerts}>
       {needsPersist ? <SessionKeepAlive /> : null}
       {children}
     </Shell>

@@ -1,7 +1,9 @@
 import { type Role, roleLabel } from '@stok/shared'
+import type { AlertSummary } from '@stok/core'
 import Link from 'next/link'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
+import { AlertBell } from '@/components/alert-bell'
 import { BottomNav, PageHeading, SidebarNav } from '@/components/panel-nav'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { endSession } from '@/server/session'
@@ -28,19 +30,22 @@ import { readTheme, writeTheme } from '@/server/theme'
  * eldivenle tutuyor. Ekranın tepesindeki bir hamburger o elle ıskalanır;
  * ekranın altındaki 97×64 px'lik bir sekme ıskalanmaz.
  *
- * ÜST ŞERİTTE ARAMA VAR, ZİL YOK. Zil (T80) ve Ctrl+K paleti (T86) ayrı
- * görevler. Sayı bağlanmamış bir zil ikonu koymak referans görseldeki öğeyi
- * taklit eder ama hiçbir şey söylemez: kullanıcı birkaç kez tıklar, boş
- * bulur, bir daha bakmaz. Boş süs, eksik özellikten kötüdür.
+ * ÜST ŞERİTTEKİ ZİL GERÇEK SAYI GÖSTERİYOR (T80): kritik ürün + başarısız
+ * arka plan işi. Sayı bağlanmamış bir zil ikonu koymak referans görseldeki
+ * öğeyi taklit eder ama hiçbir şey söylemezdi; kullanıcı birkaç kez tıklar,
+ * boş bulur, bir daha bakmazdı. Bu yüzden zil, sayısıyla BİRLİKTE geldi.
  * ============================================================================
  */
 
 export async function Shell({
   role,
+  alerts,
   title,
   children,
 }: {
   role: Role
+  /** Bildirim zilinin sayısı. Düzen hesaplıyor, kabuk yalnızca basıyor. */
+  alerts: AlertSummary
   /** Menüde karşılığı olmayan ekranlar için başlık (ör. "Yeni ürün"). */
   title?: string
   children: React.ReactNode
@@ -210,6 +215,7 @@ export async function Shell({
           </form>
 
           <div className="ml-auto flex items-center gap-2 lg:ml-0">
+            <AlertBell summary={alerts} />
             <ThemeToggle theme={theme} action={cycleTheme} />
           </div>
         </header>

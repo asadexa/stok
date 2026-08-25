@@ -209,6 +209,63 @@ export async function listCategories(
 }
 
 // ---------------------------------------------------------------------------
+// UYARI ÖZETİ (T80)
+// ---------------------------------------------------------------------------
+
+export interface AlertSummary {
+  criticalCount: number
+  /** `user:manage` yoksa alan HİÇ KONULMUYOR — kuyruk yönetim işi. */
+  failedJobCount?: number
+}
+
+/**
+ * Bildirim zilinin sayısı. HER SAYFADA çalışıyor, o yüzden mümkün olduğunca
+ * ince tutuldu: iki sayım sorgusu, satır döndürmüyor.
+ *
+ * `dashboardSummary` ile ÇAKIŞIYOR gibi görünüyor ama ayrı olması gerekiyor:
+ * o fonksiyon kategori dağılımı, 14 günlük hacim ve stok değeri de
+ * hesaplıyor. Zil için onu çağırmak, her sayfa geçişinde panelin bütün
+ * sorgularını koşturmak olurdu.
+ *
+ * Kritik sayımı `listStock(onlyCritical)` ve `dashboardSummary` ile AYNI
+ * karşılaştırmayı kullanıyor (`COALESCE(qty,0) <= min_stock`). Üçü ayrı
+ * yazılsaydı zil "3" derken tablo iki satır gösterebilirdi.
+ */
+export async function alertSummary(
+  actor: Actor,
+  options: StockOptions = {},
+): Promise<AlertSummary> {
+  requirePermission(actor, 'stock:read')
+  const seesJobs = actorCan(actor, 'user:manage')
+
+  return withTenant(
+    actor.tenantId,
+    async (tx) => {
+      const [critical] = await tx.execute<{ n: string }>(sql`
+        SELECT count(*)::text AS n
+          FROM products p
+          LEFT JOIN current_stock cs
+                 ON cs.tenant_id = p.tenant_id AND cs.product_id = p.id
+         WHERE p.archived_at IS NULL
+           AND COALESCE(cs.qty, 0) <= p.min_stock
+      `)
+
+      const summary: AlertSummary = { criticalCount: Number(critical?.n ?? 0) }
+
+      if (seesJobs) {
+        const [jobs] = await tx.execute<{ n: string }>(sql`
+          SELECT count(*)::text AS n FROM background_jobs WHERE status = 'FAILED'
+        `)
+        summary.failedJobCount = Number(jobs?.n ?? 0)
+      }
+
+      return summary
+    },
+    options.db,
+  )
+}
+
+// ---------------------------------------------------------------------------
 // KATEGORİ ÖZETİ (T73)
 // ---------------------------------------------------------------------------
 

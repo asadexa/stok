@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { Actor } from './authz.js'
 import { createMovement } from './movements.js'
 import {
+  alertSummary,
   categorySummary,
   dashboardSummary,
   getProduct,
@@ -543,5 +544,40 @@ describe('T73 - kategori özeti', () => {
     const rows = await categorySummary(boss, opts)
     expect(rows.map((r) => r.name)).not.toContain('GizliKategori')
     expect(yabanci.tenantId).not.toBe(tenant.tenantId)
+  })
+})
+
+/**
+ * T80 — bildirim zili sayısı.
+ *
+ * Zil her sayfada görünüyor; sayısı stok tablosuyla AYNI eşiği kullanmazsa
+ * kullanıcı "3" yazan bir zile tıklayıp iki satır görür ve hangisine
+ * güveneceğini bilemez.
+ */
+describe('T80 - uyarı özeti', () => {
+  it('kritik sayımı dashboard ve stok tablosuyla aynı', async () => {
+    const bell = await alertSummary(boss, opts)
+    const dash = await dashboardSummary(boss, new Date(0), opts)
+    const table = await listStock(boss, { onlyCritical: true, limit: 200 }, opts)
+
+    expect(bell.criticalCount).toBe(dash.criticalCount)
+    expect(bell.criticalCount).toBe(table.rows.length)
+  })
+
+  it('çalışana başarısız iş sayısı alanı HİÇ konulmuyor', async () => {
+    // Kuyruk yönetim işi. `0` döndürmek "hata yok" demek olurdu; doğrusu
+    // "bu kullanıcı bilmiyor" (dashboardSummary ile aynı kalıp).
+    const staffBell = await alertSummary(staff, opts)
+    expect('failedJobCount' in staffBell).toBe(false)
+
+    const bossBell = await alertSummary(boss, opts)
+    expect('failedJobCount' in bossBell).toBe(true)
+  })
+
+  it('kritik uyarısı çalışana da görünüyor', async () => {
+    // Kritik stok herkesin işi: çalışan görmezse depoda eksilen şeyi kimse
+    // fark etmez.
+    const staffBell = await alertSummary(staff, opts)
+    expect(staffBell.criticalCount).toBeGreaterThan(0)
   })
 })
