@@ -118,7 +118,7 @@ export default async function SettingsPage({
       {/* ── HESAP ─────────────────────────────────────────────── */}
       <section
         aria-label="Hesap"
-        className="rounded-[14px] border border-line bg-surface p-4 shadow-card sm:p-5"
+        className="rounded-card border border-line bg-surface p-4 shadow-card sm:p-5"
       >
         <h2 className="font-display text-base font-semibold">Hesap</h2>
         <p className="mt-1 text-[13.5px] text-ink-2">
@@ -135,7 +135,7 @@ export default async function SettingsPage({
       {/* ── GÖRÜNÜM ───────────────────────────────────────────── */}
       <section
         aria-label="Görünüm"
-        className="rounded-[14px] border border-line bg-surface p-4 shadow-card sm:p-5"
+        className="rounded-card border border-line bg-surface p-4 shadow-card sm:p-5"
       >
         <h2 className="font-display text-base font-semibold">Görünüm</h2>
         <p className="mt-1 text-[13.5px] text-ink-2">
@@ -152,7 +152,7 @@ export default async function SettingsPage({
                 return (
                   <label
                     key={opt.value}
-                    className={`flex cursor-pointer gap-3 rounded-[10px] border p-3 ${
+                    className={`flex cursor-pointer gap-3 rounded-control border p-3 ${
                       current ? 'border-accent bg-accent-soft' : 'border-line-control'
                     }`}
                   >
@@ -188,7 +188,7 @@ export default async function SettingsPage({
       {/* ── SES VE TİTREŞİM ───────────────────────────────────── */}
       <section
         aria-label="Ses ve titreşim"
-        className="rounded-[14px] border border-line bg-surface p-4 shadow-card sm:p-5"
+        className="rounded-card border border-line bg-surface p-4 shadow-card sm:p-5"
       >
         <h2 className="font-display text-base font-semibold">Ses ve titreşim</h2>
         <p className="mt-1 max-w-[62ch] text-[13.5px] text-ink-2">
@@ -198,7 +198,7 @@ export default async function SettingsPage({
         </p>
 
         <form action={saveSound} className="mt-4">
-          <label className="flex max-w-md cursor-pointer gap-3 rounded-[10px] border border-line-control p-3">
+          <label className="flex max-w-md cursor-pointer gap-3 rounded-control border border-line-control p-3">
             <input
               type="checkbox"
               name="ses"
@@ -224,7 +224,7 @@ export default async function SettingsPage({
       {/* ── PAROLA ────────────────────────────────────────────── */}
       <section
         aria-label="Parola"
-        className="rounded-[14px] border border-line bg-surface p-4 shadow-card sm:p-5"
+        className="rounded-card border border-line bg-surface p-4 shadow-card sm:p-5"
       >
         <h2 className="font-display text-base font-semibold">Parola değiştir</h2>
         <p className="mt-1 max-w-[62ch] text-[13.5px] text-ink-2">
@@ -293,7 +293,7 @@ function PasswordField({
         name={name}
         required
         autoComplete={autoComplete}
-        className="mt-1.5 h-13 w-full rounded-[10px] border border-line-control bg-surface px-3.5 text-base text-ink"
+        className="mt-1.5 h-13 w-full rounded-control border border-line-control bg-surface px-3.5 text-base text-ink"
       />
       {hint ? <span className="mt-1.5 block text-xs text-ink-3">{hint}</span> : null}
     </label>

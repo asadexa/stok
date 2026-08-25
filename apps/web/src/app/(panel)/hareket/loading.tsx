@@ -14,11 +14,11 @@ export default function Loading() {
         <Sk w="60px" h={13} />
         {/* Barkod alanı 64 px: gerçek alanla aynı yükseklik, yoksa içerik
             gelince alan zıplar ve odak kayar. */}
-        <Sk w="100%" h={64} className="mt-1.5 rounded-[10px]" />
+        <Sk w="100%" h={64} className="mt-1.5 rounded-control" />
 
         <SkCard className="mt-4 p-4">
           <div className="flex items-center gap-4">
-            <Sk w="52px" h={52} className="shrink-0 rounded-[9px]" />
+            <Sk w="52px" h={52} className="shrink-0 rounded-chip" />
             <div className="flex-1">
               <Sk w="55%" h={19} />
               <Sk w="35%" h={12} className="mt-1.5" />

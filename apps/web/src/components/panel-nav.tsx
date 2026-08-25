@@ -46,7 +46,7 @@ export function SidebarNav({ role }: { role: Role }) {
             <Link
               href={item.href}
               aria-current={current ? 'page' : undefined}
-              className={`flex h-12 items-center gap-3 rounded-[9px] px-3 text-[15px] font-medium ${
+              className={`flex h-12 items-center gap-3 rounded-chip px-3 text-[15px] font-medium ${
                 current
                   ? 'bg-accent-soft text-accent-soft-ink'
                   : 'text-ink-2 hover:bg-surface-2'

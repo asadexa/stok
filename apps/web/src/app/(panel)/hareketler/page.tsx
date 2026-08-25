@@ -9,6 +9,7 @@ import { appDb } from '@stok/db'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { ExportControl } from '@/components/export-control'
+import { EmptyState } from '@/components/empty-state'
 import { Pagination } from '@/components/pagination'
 import { dayEndIso, dayStartIso, formatDateTime, formatMoney } from '@/lib/format'
 import { type FormParams, errorQuery, messageFrom } from '@/server/form'
@@ -151,7 +152,7 @@ export default async function MovementsPage({
       {message ? (
         <p
           role="alert"
-          className="mb-4 flex gap-2 rounded-md border border-kritik bg-kritik-bg p-3 text-sm text-kritik"
+          className="mb-4 flex gap-2 rounded-control border border-kritik bg-kritik-bg p-3 text-sm text-kritik"
         >
           <span aria-hidden>⚠</span>
           <span>{message}</span>
@@ -159,7 +160,7 @@ export default async function MovementsPage({
       ) : null}
 
       {params.rapor === 'kuyrukta' ? (
-        <p className="mb-4 flex gap-2 rounded-md border border-giris bg-surface p-3 text-sm text-ink-2">
+        <p className="mb-4 flex gap-2 rounded-control border border-giris bg-surface p-3 text-sm text-ink-2">
           <span aria-hidden className="text-giris">
             ✓
           </span>
@@ -182,7 +183,7 @@ export default async function MovementsPage({
       ) : null}
 
       {actor.role !== 'ADMIN' ? (
-        <p className="mb-4 rounded-md border border-line bg-surface p-3 text-sm text-ink-2">
+        <p className="mb-4 rounded-card border border-line bg-surface shadow-card p-3 text-sm text-ink-2">
           Bu listede yalnızca sizin yaptığınız hareketler görünür.
         </p>
       ) : null}
@@ -199,7 +200,7 @@ export default async function MovementsPage({
             <select
               name="kullanici"
               defaultValue={userId ?? ''}
-              className="mt-1 h-14 w-full rounded-md border border-line-control bg-surface px-3 text-base"
+              className="mt-1 h-14 w-full rounded-control border border-line-control bg-surface px-3 text-base"
             >
               <option value="">Tümü</option>
               {people.map((p) => (
@@ -219,7 +220,7 @@ export default async function MovementsPage({
           <select
             name="sebep"
             defaultValue={reason ?? ''}
-            className="mt-1 h-14 w-full rounded-md border border-line-control bg-surface px-3 text-base"
+            className="mt-1 h-14 w-full rounded-control border border-line-control bg-surface px-3 text-base"
           >
             <option value="">Tümü</option>
             {/* Sayım düzeltmeleri de listede: giriş ekranında seçilemezler
@@ -251,7 +252,7 @@ export default async function MovementsPage({
             name="baslangic"
             type="date"
             defaultValue={params.baslangic ?? ''}
-            className="mt-1 h-14 w-full rounded-md border border-line-control bg-surface px-3 text-base"
+            className="mt-1 h-14 w-full rounded-control border border-line-control bg-surface px-3 text-base"
           />
         </label>
 
@@ -261,13 +262,13 @@ export default async function MovementsPage({
             name="bitis"
             type="date"
             defaultValue={params.bitis ?? ''}
-            className="mt-1 h-14 w-full rounded-md border border-line-control bg-surface px-3 text-base"
+            className="mt-1 h-14 w-full rounded-control border border-line-control bg-surface px-3 text-base"
           />
         </label>
 
         <button
           type="submit"
-          className="h-14 rounded-md bg-accent px-6 text-base font-medium text-accent-ink hover:brightness-110"
+          className="h-14 rounded-control bg-accent px-6 text-base font-medium text-accent-ink hover:brightness-110"
         >
           Filtrele
         </button>
@@ -289,11 +290,24 @@ export default async function MovementsPage({
         </p>
       ) : null}
 
-      <section aria-label="Hareket logu" className="rounded-md border border-line bg-surface">
+      <section aria-label="Hareket logu" className="rounded-card border border-line bg-surface shadow-card">
         {visible.length === 0 ? (
-          <p className="p-6 text-ink-2">
-            {hasFilter ? 'Bu filtrelere uyan hareket yok.' : 'Henüz hareket yok.'}
-          </p>
+          // FİLTRE BOŞ DÖNDÜ ile HİÇ HAREKET YOK farklı durumlar ve çıkış
+          // yolları da farklı: birinde filtreyi temizlemek, diğerinde ilk
+          // hareketi yazmak gerekiyor. Tek metin ikisini de karşılayamaz.
+          hasFilter ? (
+            <EmptyState
+              title="Bu filtrelere uyan hareket yok"
+              description="Tarih aralığını genişletmeyi veya kullanıcı/sebep süzmesini kaldırmayı deneyin."
+              action={{ href: '/hareketler', label: 'Filtreyi temizle' }}
+            />
+          ) : (
+            <EmptyState
+              title="Henüz hareket yok"
+              description="Defter boş. İlk mal kabulünü veya satışı girdiğinizde kayıtlar burada görünmeye başlar."
+              action={{ href: '/hareket', label: 'Giriş / Çıkış gir' }}
+            />
+          )
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">

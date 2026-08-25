@@ -41,7 +41,7 @@ export default async function CategoriesPage() {
   const totalProducts = rows.reduce((n, r) => n + r.productCount, 0)
 
   return (
-    <section aria-label="Kategoriler" className="rounded-[14px] border border-line bg-surface shadow-card">
+    <section aria-label="Kategoriler" className="rounded-card border border-line bg-surface shadow-card">
       {rows.length === 0 ? (
         <EmptyState
           title="Henüz kategori yok"

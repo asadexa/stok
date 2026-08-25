@@ -34,7 +34,7 @@ export default async function ImportPage() {
         </Link>
       </div>
 
-      <section className="mb-6 rounded-md border border-line bg-surface p-5 text-sm text-ink-2">
+      <section className="mb-6 rounded-card border border-line bg-surface shadow-card p-5 text-sm text-ink-2">
         <p className="mb-3">
           Elinizdeki listeyi Excel (.xlsx) veya CSV olarak yükleyin. Dosya{' '}
           <span className="font-medium">önce okunur ve size gösterilir</span>; hiçbir şey siz

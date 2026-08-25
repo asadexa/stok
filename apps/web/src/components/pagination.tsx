@@ -81,7 +81,7 @@ function PageLink({
   // gezinen kullanıcıyı hiçbir yere götürmeyen bir durakla karşılaştırır.
   if (!enabled) {
     return (
-      <span aria-disabled className="rounded-md border border-line px-3 py-2 text-ink-3">
+      <span aria-disabled className="rounded-control border border-line px-3 py-2 text-ink-3">
         {children}
       </span>
     )
@@ -89,7 +89,7 @@ function PageLink({
   return (
     <Link
       href={href}
-      className="rounded-md border border-line-control px-3 py-2 hover:bg-surface-2"
+      className="rounded-control border border-line-control px-3 py-2 hover:bg-surface-2"
     >
       {children}
     </Link>

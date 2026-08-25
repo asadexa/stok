@@ -20,7 +20,7 @@ export default function NotFound() {
         </p>
         <Link
           href="/panel"
-          className="mt-6 inline-block h-14 rounded-md bg-accent px-6 text-base font-medium leading-[3.5rem] text-accent-ink hover:brightness-110"
+          className="mt-6 inline-block h-14 rounded-control bg-accent px-6 text-base font-medium leading-[3.5rem] text-accent-ink hover:brightness-110"
         >
           Panele dön
         </Link>

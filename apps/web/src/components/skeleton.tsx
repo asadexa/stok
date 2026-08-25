@@ -47,7 +47,7 @@ export function SkCard({
   className?: string
 }) {
   return (
-    <div className={`rounded-[14px] border border-line bg-surface ${className}`}>{children}</div>
+    <div className={`rounded-card border border-line bg-surface shadow-card ${className}`}>{children}</div>
   )
 }
 
@@ -72,7 +72,7 @@ export function SkRows({ rows = 6, thumb = false }: { rows?: number; thumb?: boo
     <div>
       {Array.from({ length: rows }, (_, i) => (
         <div key={i} className="flex items-center gap-3 border-t border-line px-4 py-3 first:border-t-0">
-          {thumb ? <Sk w="38px" h={38} className="shrink-0 rounded-[9px]" /> : null}
+          {thumb ? <Sk w="38px" h={38} className="shrink-0 rounded-chip" /> : null}
           <div className="min-w-0 flex-1">
             <Sk w={widths[i % widths.length] ?? '60%'} h={13} />
             <Sk w="30%" h={10} className="mt-1.5" />
@@ -89,10 +89,10 @@ export function SkKpis({ count = 4 }: { count?: number }) {
   return (
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       {Array.from({ length: count }, (_, i) => (
-        <div key={i} className="rounded-[14px] border border-line bg-surface p-4">
+        <div key={i} className="rounded-card border border-line bg-surface shadow-card p-4">
           <div className="flex items-start justify-between">
             <Sk w="90px" h={13} />
-            <Sk w="42px" h={42} className="rounded-[11px]" />
+            <Sk w="42px" h={42} className="rounded-control" />
           </div>
           <Sk w="70%" h={31} className="mt-3" />
         </div>
@@ -105,9 +105,9 @@ export function SkKpis({ count = 4 }: { count?: number }) {
 export function SkFilters() {
   return (
     <div className="flex flex-wrap items-end gap-3">
-      <Sk w="240px" h={52} className="grow rounded-[10px]" />
-      <Sk w="180px" h={52} className="rounded-[10px]" />
-      <Sk w="120px" h={52} className="rounded-[10px]" />
+      <Sk w="240px" h={52} className="grow rounded-control" />
+      <Sk w="180px" h={52} className="rounded-control" />
+      <Sk w="120px" h={52} className="rounded-control" />
     </div>
   )
 }

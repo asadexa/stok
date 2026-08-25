@@ -48,7 +48,7 @@ export function ProductThumb({
   size?: number
 }) {
   const box =
-    'grid shrink-0 place-items-center overflow-hidden rounded-[9px] border border-line bg-surface-2'
+    'grid shrink-0 place-items-center overflow-hidden rounded-chip border border-line bg-surface-2'
 
   if (imageUrl) {
     return (

@@ -65,7 +65,7 @@ export default async function LoginPage({
           // Renk tek başına anlam taşımıyor: ikon + metin de var.
           <p
             role="alert"
-            className="flex gap-2 rounded-md border border-kritik bg-kritik-bg p-3 text-sm text-kritik"
+            className="flex gap-2 rounded-control border border-kritik bg-kritik-bg p-3 text-sm text-kritik"
           >
             <span aria-hidden>⚠</span>
             <span>{message}</span>
@@ -82,7 +82,7 @@ export default async function LoginPage({
           görürdü — ve büyük ihtimalle eski parolasıyla girmeyi denerdi.
         */}
         {params.bilgi === 'parola' ? (
-          <p className="flex gap-2 rounded-md border border-giris bg-surface p-3 text-sm text-ink-2">
+          <p className="flex gap-2 rounded-control border border-giris bg-surface p-3 text-sm text-ink-2">
             <span aria-hidden className="text-giris">
               ✓
             </span>
@@ -101,7 +101,7 @@ export default async function LoginPage({
             required
             autoFocus
             autoComplete="username"
-            className="mt-1 h-14 w-full rounded-md border border-line-control bg-surface px-3 text-base"
+            className="mt-1 h-14 w-full rounded-control border border-line-control bg-surface px-3 text-base"
           />
         </label>
 
@@ -112,14 +112,14 @@ export default async function LoginPage({
             type="password"
             required
             autoComplete="current-password"
-            className="mt-1 h-14 w-full rounded-md border border-line-control bg-surface px-3 text-base"
+            className="mt-1 h-14 w-full rounded-control border border-line-control bg-surface px-3 text-base"
           />
         </label>
 
         {/* 56 px: eldivenli elle basılabilmeli. */}
         <button
           type="submit"
-          className="h-14 w-full rounded-md bg-accent text-base font-medium text-accent-ink hover:brightness-110"
+          className="h-14 w-full rounded-control bg-accent text-base font-medium text-accent-ink hover:brightness-110"
         >
           Giriş yap
         </button>

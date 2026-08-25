@@ -89,7 +89,7 @@ export default async function NewProductPage({
         </Link>
       </div>
 
-      <form action={submit} className="max-w-2xl space-y-5 rounded-md border border-line bg-surface p-5">
+      <form action={submit} className="max-w-2xl space-y-5 rounded-card border border-line bg-surface shadow-card p-5">
         {message ? <Alert>{message}</Alert> : null}
 
         <TextField
@@ -163,7 +163,7 @@ export default async function NewProductPage({
           <SubmitButton>Kaydet</SubmitButton>
           <Link
             href="/stok"
-            className="h-14 rounded-md border border-line-control px-6 text-base font-medium leading-[3.5rem]"
+            className="h-14 rounded-control border border-line-control px-6 text-base font-medium leading-[3.5rem]"
           >
             Vazgeç
           </Link>

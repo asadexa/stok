@@ -159,6 +159,19 @@
   --font-sans: var(--font-plex-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-plex-mono), ui-monospace, monospace;
 
+  /*
+   * YARIÇAP ÖLÇEĞİ — T76.
+   *
+   * Üç adım, üçü de bir işi olan: kart, kontrol, jeton. Dördüncü bir değer
+   * eklemek "bu kutu neden 12px?" sorusunu doğurur ve cevabı olmaz.
+   *
+   * Adlandırılmış olmaları önemli: `rounded-[14px]` dağınık bir sihirli sayı,
+   * `rounded-card` bir karar. Yarıçap değişecekse tek yerde değişiyor.
+   */
+  --radius-card: 14px; /* kart, bölüm, açılır panel */
+  --radius-control: 10px; /* girdi, düğme, filtre şeridi */
+  --radius-chip: 9px; /* ürün jetonu, ikon karesi, gezinme satırı */
+
   --shadow-card: var(--card-shadow);
 
   /*

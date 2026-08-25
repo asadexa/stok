@@ -24,7 +24,7 @@ import type { ExportPlan } from '@stok/core'
  */
 
 const BUTTON =
-  'inline-flex h-14 items-center rounded-md border border-line-control bg-surface px-5 text-base font-medium hover:bg-surface-2'
+  'inline-flex h-14 items-center rounded-control border border-line-control bg-surface px-5 text-base font-medium hover:bg-surface-2'
 
 export function ExportControl({
   href,
@@ -42,7 +42,7 @@ export function ExportControl({
 }) {
   if (error) {
     return (
-      <p className="flex gap-2 rounded-md border border-kritik bg-kritik-bg p-3 text-sm text-kritik">
+      <p className="flex gap-2 rounded-control border border-kritik bg-kritik-bg p-3 text-sm text-kritik">
         <span aria-hidden>⚠</span>
         <span>{error}</span>
       </p>

@@ -29,7 +29,7 @@ export function ImportWizard({
       {error ? (
         <p
           role="alert"
-          className="flex gap-2 rounded-md border border-kritik bg-kritik-bg p-3 text-sm text-kritik"
+          className="flex gap-2 rounded-control border border-kritik bg-kritik-bg p-3 text-sm text-kritik"
         >
           <span aria-hidden>⚠</span>
           <span>{error}</span>
@@ -40,7 +40,7 @@ export function ImportWizard({
         <ResultPanel result={result} />
       ) : (
         <>
-          <form action={analyzeAction} className="space-y-4 rounded-md border border-line bg-surface p-5">
+          <form action={analyzeAction} className="space-y-4 rounded-card border border-line bg-surface shadow-card p-5">
             <label className="block">
               <span className="text-sm font-medium">Dosya (.xlsx veya .csv)</span>
               <input
@@ -48,13 +48,13 @@ export function ImportWizard({
                 name="dosya"
                 accept=".xlsx,.csv,text/csv"
                 required
-                className="mt-1 block w-full rounded-md border border-line-control bg-surface p-3 text-base file:mr-3 file:rounded file:border-0 file:bg-accent file:px-4 file:py-2 file:text-accent-ink"
+                className="mt-1 block w-full rounded-control border border-line-control bg-surface p-3 text-base file:mr-3 file:rounded file:border-0 file:bg-accent file:px-4 file:py-2 file:text-accent-ink"
               />
             </label>
             <button
               type="submit"
               disabled={analyzing}
-              className="h-14 rounded-md bg-accent px-6 text-base font-medium text-accent-ink hover:brightness-110 disabled:opacity-60"
+              className="h-14 rounded-control bg-accent px-6 text-base font-medium text-accent-ink hover:brightness-110 disabled:opacity-60"
             >
               {analyzing ? 'Okunuyor…' : 'Dosyayı oku ve önizle'}
             </button>
@@ -100,7 +100,7 @@ function PreviewPanel({
       </div>
 
       {errorRows.length > 0 ? (
-        <div className="rounded-md border border-kritik bg-surface">
+        <div className="rounded-card border border-kritik bg-surface">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3">
             <h2 className="font-semibold text-kritik">Hatalı satırlar</h2>
             {/* Rapor indirme DÜZ FORM POST: 60 satırlık hatayı ekrandan tek
@@ -110,7 +110,7 @@ function PreviewPanel({
               <input type="hidden" name="dosyaJson" value={fileJson} />
               <button
                 type="submit"
-                className="rounded-md border border-line-control px-4 py-2 text-sm hover:bg-surface-2"
+                className="rounded-control border border-line-control px-4 py-2 text-sm hover:bg-surface-2"
               >
                 Hata raporunu indir
               </button>
@@ -131,7 +131,7 @@ function PreviewPanel({
         <button
           type="submit"
           disabled={committing || create + update === 0}
-          className="h-14 rounded-md bg-accent px-6 text-base font-medium text-accent-ink hover:brightness-110 disabled:opacity-60"
+          className="h-14 rounded-control bg-accent px-6 text-base font-medium text-accent-ink hover:brightness-110 disabled:opacity-60"
         >
           {committing ? 'Aktarılıyor…' : `${create + update} satırı aktar`}
         </button>
@@ -159,7 +159,7 @@ function ResultPanel({ result }: { result: NonNullable<AnalyzeState['result']> }
       </div>
 
       {result.errors.length > 0 ? (
-        <div className="rounded-md border border-kritik bg-surface">
+        <div className="rounded-card border border-kritik bg-surface">
           <h2 className="border-b border-line px-4 py-3 font-semibold text-kritik">
             Aktarılamayan satırlar
           </h2>
@@ -169,7 +169,7 @@ function ResultPanel({ result }: { result: NonNullable<AnalyzeState['result']> }
 
       <a
         href="/urunler/aktar"
-        className="inline-flex h-14 items-center rounded-md border border-line-control bg-surface px-5 text-base font-medium hover:bg-surface-2"
+        className="inline-flex h-14 items-center rounded-control border border-line-control bg-surface px-5 text-base font-medium hover:bg-surface-2"
       >
         Yeni dosya yükle
       </a>
@@ -224,7 +224,7 @@ function Count({
 }) {
   const color = tone === 'giris' ? 'text-giris' : tone === 'kritik' ? 'text-kritik' : ''
   return (
-    <div className="rounded-md border border-line bg-surface p-4">
+    <div className="rounded-card border border-line bg-surface shadow-card p-4">
       <p className="text-sm text-ink-2">{label}</p>
       <p className={`tabular mt-1 text-3xl font-semibold ${color}`}>{value}</p>
     </div>

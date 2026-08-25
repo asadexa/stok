@@ -64,7 +64,7 @@ export function KpiCard({
         <span className="text-[13.5px] font-medium text-ink-2">{label}</span>
         <span
           aria-hidden
-          className={`ml-auto grid size-[42px] shrink-0 place-items-center rounded-[11px] ${ICON_BG[tone]}`}
+          className={`ml-auto grid size-[42px] shrink-0 place-items-center rounded-control ${ICON_BG[tone]}`}
         >
           {icon}
         </span>
@@ -79,7 +79,7 @@ export function KpiCard({
     </>
   )
 
-  const shell = 'rounded-[14px] border border-line bg-surface p-4 shadow-card'
+  const shell = 'rounded-card border border-line bg-surface p-4 shadow-card'
 
   // Tıklanabilir kart gerçek bir `<a>`: JavaScript kapalıyken de çalışıyor,
   // orta tıkla yeni sekmede açılıyor ve klavyeyle sıraya giriyor.

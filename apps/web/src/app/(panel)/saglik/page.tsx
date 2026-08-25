@@ -45,7 +45,7 @@ export default async function HealthPage() {
       </div>
 
       <div
-        className={`mb-6 flex items-center gap-3 rounded-md border bg-surface p-4 ${overall.border}`}
+        className={`mb-6 flex items-center gap-3 rounded-card border bg-surface p-4 ${overall.border}`}
       >
         {/* Renk tek başına anlam taşımıyor: ikon ve metin de var. */}
         <span aria-hidden className={`text-2xl ${overall.text}`}>
@@ -76,7 +76,7 @@ export default async function HealthPage() {
 function CheckRow({ check }: { check: HealthCheck }) {
   const tone = TONE[check.level]
   return (
-    <li className={`rounded-md border bg-surface p-4 ${tone.border}`}>
+    <li className={`rounded-card border bg-surface p-4 ${tone.border}`}>
       <div className="flex items-start gap-3">
         <span aria-hidden className={`text-xl ${tone.text}`}>
           {tone.icon}

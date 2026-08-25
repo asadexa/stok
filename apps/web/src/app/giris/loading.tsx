@@ -13,10 +13,10 @@ export default function Loading() {
         <div className="w-full max-w-sm">
           <Sk w="150px" h={26} />
           <Sk w="60px" h={12} className="mt-6" />
-          <Sk w="100%" h={52} className="mt-1.5 rounded-[10px]" />
+          <Sk w="100%" h={52} className="mt-1.5 rounded-control" />
           <Sk w="60px" h={12} className="mt-4" />
-          <Sk w="100%" h={52} className="mt-1.5 rounded-[10px]" />
-          <Sk w="100%" h={52} className="mt-6 rounded-[10px]" />
+          <Sk w="100%" h={52} className="mt-1.5 rounded-control" />
+          <Sk w="100%" h={52} className="mt-6 rounded-control" />
         </div>
       </SkRegion>
     </main>

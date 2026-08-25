@@ -200,7 +200,7 @@ export function CommandPalette({ canCreate }: { canCreate: boolean }) {
         role="dialog"
         aria-modal="true"
         aria-label="Ara"
-        className="w-full max-w-xl overflow-hidden rounded-[14px] border border-line bg-surface shadow-card"
+        className="w-full max-w-xl overflow-hidden rounded-card border border-line bg-surface shadow-card"
       >
         <div className="flex items-center gap-2.5 border-b border-line px-4">
           <svg

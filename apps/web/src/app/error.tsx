@@ -21,7 +21,7 @@ export default function RootError({
     <main className="flex min-h-screen items-center justify-center p-6">
       <div
         role="alert"
-        className="w-full max-w-md rounded-[14px] border border-crit bg-crit-soft p-6 text-crit-soft-ink"
+        className="w-full max-w-md rounded-card border border-crit bg-crit-soft p-6 text-crit-soft-ink"
       >
         <h1 className="font-display text-lg font-semibold">Sayfa açılamadı</h1>
         <p className="mt-2 text-sm">
@@ -32,13 +32,13 @@ export default function RootError({
           <button
             type="button"
             onClick={reset}
-            className="h-13 rounded-[10px] bg-accent px-6 text-base font-semibold text-accent-ink hover:brightness-110"
+            className="h-13 rounded-control bg-accent px-6 text-base font-semibold text-accent-ink hover:brightness-110"
           >
             Tekrar dene
           </button>
           <a
             href="/giris"
-            className="h-13 rounded-[10px] border border-line-control bg-surface px-6 text-base font-semibold leading-[3.25rem] text-ink hover:bg-surface-2"
+            className="h-13 rounded-control border border-line-control bg-surface px-6 text-base font-semibold leading-[3.25rem] text-ink hover:bg-surface-2"
           >
             Giriş ekranı
           </a>

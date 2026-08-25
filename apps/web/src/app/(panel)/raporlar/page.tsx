@@ -104,7 +104,7 @@ export default async function ReportsPage({
       {message ? (
         <p
           role="alert"
-          className="mb-4 flex gap-2 rounded-[10px] border border-crit bg-crit-soft p-3 text-sm text-crit-soft-ink"
+          className="mb-4 flex gap-2 rounded-control border border-crit bg-crit-soft p-3 text-sm text-crit-soft-ink"
         >
           <span aria-hidden>⚠</span>
           <span>{message}</span>
@@ -112,7 +112,7 @@ export default async function ReportsPage({
       ) : null}
 
       {params.rapor === 'kuyrukta' && params.eposta ? (
-        <p className="mb-4 flex gap-2 rounded-[10px] border border-ok bg-ok-soft p-3 text-sm text-ok-soft-ink">
+        <p className="mb-4 flex gap-2 rounded-control border border-ok bg-ok-soft p-3 text-sm text-ok-soft-ink">
           <span aria-hidden>✓</span>
           <span>
             Rapor hazırlanıyor. Hazır olunca{' '}
@@ -174,7 +174,7 @@ export default async function ReportsPage({
           */}
           <a
             href="/api/rapor/sablon"
-            className="inline-flex h-13 items-center rounded-[10px] border border-line-control bg-surface px-5 text-base font-semibold hover:bg-surface-2"
+            className="inline-flex h-13 items-center rounded-control border border-line-control bg-surface px-5 text-base font-semibold hover:bg-surface-2"
           >
             Şablonu indir
           </a>
@@ -211,7 +211,7 @@ function ReportCard({
   return (
     <section
       aria-label={title}
-      className="rounded-[14px] border border-line bg-surface p-4 shadow-card sm:p-5"
+      className="rounded-card border border-line bg-surface p-4 shadow-card sm:p-5"
     >
       <h2 className="font-display text-base font-semibold">{title}</h2>
       <p className="mt-1 max-w-[62ch] text-[13.5px] text-ink-2">{description}</p>

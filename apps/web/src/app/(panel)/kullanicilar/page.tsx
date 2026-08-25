@@ -132,7 +132,7 @@ export default async function UsersPage({
         ) : null}
       </div>
 
-      <section aria-label="Kullanıcı listesi" className="mb-6 rounded-md border border-line bg-surface">
+      <section aria-label="Kullanıcı listesi" className="mb-6 rounded-card border border-line bg-surface shadow-card">
         <h2 className="border-b border-line px-4 py-3 font-semibold">
           {people.length} kullanıcı
         </h2>
@@ -163,7 +163,7 @@ export default async function UsersPage({
                     <select
                       name="rol"
                       defaultValue={person.role}
-                      className="mt-1 h-11 rounded-md border border-line-control bg-surface px-2"
+                      className="mt-1 h-11 rounded-control border border-line-control bg-surface px-2"
                     >
                       {ROLE_VALUES.map((r: Role) => (
                         <option key={r} value={r}>
@@ -174,7 +174,7 @@ export default async function UsersPage({
                   </label>
                   <button
                     type="submit"
-                    className="h-11 rounded-md border border-line-control px-4 text-sm hover:bg-surface-2"
+                    className="h-11 rounded-control border border-line-control px-4 text-sm hover:bg-surface-2"
                   >
                     Değiştir
                   </button>
@@ -192,7 +192,7 @@ export default async function UsersPage({
                         ? 'Kendinizi pasifleştiremezsiniz'
                         : undefined
                     }
-                    className={`h-11 rounded-md border px-4 text-sm disabled:opacity-40 ${
+                    className={`h-11 rounded-control border px-4 text-sm disabled:opacity-40 ${
                       person.active
                         ? 'border-kritik text-kritik hover:bg-kritik-bg'
                         : 'border-line-control hover:bg-surface-2'
@@ -216,12 +216,12 @@ export default async function UsersPage({
                       // `type="password"` DEĞİL: yönetici parolayı
                       // çalışana sözlü olarak verecek, yazdığını görmesi
                       // gerekiyor. Gizlemek burada güvenlik değil engel.
-                      className="mt-1 h-11 w-44 rounded-md border border-line-control px-2"
+                      className="mt-1 h-11 w-44 rounded-control border border-line-control px-2"
                     />
                   </label>
                   <button
                     type="submit"
-                    className="h-11 rounded-md border border-line-control px-4 text-sm hover:bg-surface-2"
+                    className="h-11 rounded-control border border-line-control px-4 text-sm hover:bg-surface-2"
                   >
                     Sıfırla
                   </button>
@@ -234,7 +234,7 @@ export default async function UsersPage({
 
       <form
         action={addUser}
-        className="max-w-2xl space-y-5 rounded-md border border-line bg-surface p-5"
+        className="max-w-2xl space-y-5 rounded-card border border-line bg-surface shadow-card p-5"
       >
         <h2 className="font-semibold">Yeni kullanıcı</h2>
 

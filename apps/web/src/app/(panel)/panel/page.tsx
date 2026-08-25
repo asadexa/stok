@@ -7,7 +7,7 @@ import { redirect } from 'next/navigation'
 import { ActivityChart } from '@/components/activity-chart'
 import { Badge, stockStatus } from '@/components/badge'
 import { CategoryDonut } from '@/components/category-donut'
-import { AllClear } from '@/components/empty-state'
+import { AllClear, EmptyState } from '@/components/empty-state'
 import { KpiCard } from '@/components/kpi-card'
 import { ProductThumb } from '@/components/product-cell'
 import { formatMoney } from '@/lib/format'
@@ -65,7 +65,7 @@ export default async function DashboardPage() {
         {summary.criticalCount > 0 ? (
           <Link
             href="/stok?kritik=1"
-            className="flex items-center gap-3 rounded-[14px] border border-crit bg-crit-soft p-4 text-crit-soft-ink hover:brightness-95"
+            className="flex items-center gap-3 rounded-card border border-crit bg-crit-soft p-4 text-crit-soft-ink hover:brightness-95"
           >
             <span aria-hidden className="grid size-9 shrink-0 place-items-center rounded-lg bg-crit text-surface">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -84,7 +84,7 @@ export default async function DashboardPage() {
           // KRİTİK AÇIK G4: rapor gönderilemediyse yönetici bunu panelde görür.
           <Link
             href="/saglik"
-            className="flex items-center gap-3 rounded-[14px] border border-crit bg-crit-soft p-4 text-crit-soft-ink hover:brightness-95"
+            className="flex items-center gap-3 rounded-card border border-crit bg-crit-soft p-4 text-crit-soft-ink hover:brightness-95"
           >
             <span aria-hidden className="grid size-9 shrink-0 place-items-center rounded-lg bg-crit text-surface">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -101,7 +101,7 @@ export default async function DashboardPage() {
           // panelde sadece kapı duruyor.
           <Link
             href="/saglik"
-            className="flex items-center gap-3 rounded-[14px] border border-line bg-surface p-4 text-ink-2 hover:bg-surface-2"
+            className="flex items-center gap-3 rounded-card border border-line bg-surface shadow-card p-4 text-ink-2 hover:bg-surface-2"
           >
             <span aria-hidden className="grid size-9 shrink-0 place-items-center rounded-lg bg-surface-2">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -202,7 +202,7 @@ export default async function DashboardPage() {
           {/* ── 3. GRAFİK ─────────────────────────────────────── */}
           <section
             aria-label="Hareket hacmi"
-            className="rounded-[14px] border border-line bg-surface shadow-card"
+            className="rounded-card border border-line bg-surface shadow-card"
           >
             <div className="flex items-center gap-3 border-b border-line px-4 py-3.5">
               <h2 className="font-display text-base font-semibold">Hareket hacmi</h2>
@@ -221,7 +221,7 @@ export default async function DashboardPage() {
           {/* ── 4. SON HAREKETLER ─────────────────────────────── */}
           <section
             aria-label="Son hareketler"
-            className="rounded-[14px] border border-line bg-surface shadow-card"
+            className="rounded-card border border-line bg-surface shadow-card"
           >
             <div className="flex items-center border-b border-line px-4 py-3.5">
               <h2 className="font-display text-base font-semibold">Son hareketler</h2>
@@ -231,7 +231,13 @@ export default async function DashboardPage() {
             </div>
 
             {recent.length === 0 ? (
-              <p className="px-4 py-8 text-center text-ink-2">Henüz hareket yok.</p>
+              // Boş liste de bir eylem sunuyor (Kural 09): panelde durup
+              // "hareket yok" demek, kullanıcıyı çıkmaz sokakta bırakmak.
+              <EmptyState
+                title="Henüz hareket yok"
+                description="İlk mal kabulünü veya satışı girdiğinizde son hareketler burada listelenir."
+                action={{ href: '/hareket', label: 'Giriş / Çıkış gir' }}
+              />
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[560px] text-[13.5px]">
@@ -278,7 +284,7 @@ export default async function DashboardPage() {
           {critical.rows.length > 0 ? (
             <section
               aria-label="Kritik ürünler"
-              className="rounded-[14px] border border-line bg-surface shadow-card"
+              className="rounded-card border border-line bg-surface shadow-card"
             >
               <div className="flex items-center border-b border-line px-4 py-3.5">
                 <h2 className="font-display text-base font-semibold">Kritik stok</h2>
@@ -323,7 +329,7 @@ export default async function DashboardPage() {
           {summary.categories.length > 0 ? (
             <section
               aria-label="Kategori dağılımı"
-              className="rounded-[14px] border border-line bg-surface shadow-card"
+              className="rounded-card border border-line bg-surface shadow-card"
             >
               <h2 className="border-b border-line px-4 py-3.5 font-display text-base font-semibold">
                 Kategori dağılımı

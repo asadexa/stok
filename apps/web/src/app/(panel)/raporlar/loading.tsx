@@ -11,7 +11,7 @@ export default function Loading() {
           <SkCard key={i} className="p-5">
             <Sk w="150px" h={16} />
             <Sk w="80%" h={13} className="mt-2" />
-            <Sk w="200px" h={52} className="mt-4 rounded-[10px]" />
+            <Sk w="200px" h={52} className="mt-4 rounded-control" />
           </SkCard>
         ))}
       </div>

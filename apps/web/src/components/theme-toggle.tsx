@@ -49,7 +49,7 @@ export function ThemeToggle({
         type="submit"
         aria-label={label}
         title={label}
-        className="grid size-11 place-items-center rounded-[10px] border border-line-control bg-surface text-ink-2 hover:bg-surface-2"
+        className="grid size-11 place-items-center rounded-control border border-line-control bg-surface text-ink-2 hover:bg-surface-2"
       >
         {key === 'system' ? (
           <svg

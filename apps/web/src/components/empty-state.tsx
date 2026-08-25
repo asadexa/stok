@@ -38,7 +38,7 @@ export function EmptyState({
     <div className="px-6 py-11 text-center">
       <span
         aria-hidden
-        className={`mx-auto mb-3.5 grid size-14 place-items-center rounded-[15px] ${
+        className={`mx-auto mb-3.5 grid size-14 place-items-center rounded-card ${
           tone === 'ok' ? 'bg-ok-soft text-ok-soft-ink' : 'bg-accent-soft text-accent-soft-ink'
         }`}
       >
@@ -64,14 +64,14 @@ export function EmptyState({
       <div className="mt-4 flex flex-wrap justify-center gap-2.5">
         <Link
           href={action.href}
-          className="inline-flex h-11 items-center rounded-[9px] bg-accent px-4 text-sm font-semibold text-accent-ink hover:brightness-110"
+          className="inline-flex h-11 items-center rounded-chip bg-accent px-4 text-sm font-semibold text-accent-ink hover:brightness-110"
         >
           {action.label}
         </Link>
         {secondary ? (
           <Link
             href={secondary.href}
-            className="inline-flex h-11 items-center rounded-[9px] border border-line-control bg-surface px-4 text-sm font-semibold hover:bg-surface-2"
+            className="inline-flex h-11 items-center rounded-chip border border-line-control bg-surface px-4 text-sm font-semibold hover:bg-surface-2"
           >
             {secondary.label}
           </Link>
@@ -88,7 +88,7 @@ export function EmptyState({
  */
 export function AllClear({ children }: { children: React.ReactNode }) {
   return (
-    <p className="flex items-center gap-3 rounded-[14px] border border-line bg-surface p-4 text-ink-2">
+    <p className="flex items-center gap-3 rounded-card border border-line bg-surface shadow-card p-4 text-ink-2">
       <span aria-hidden className="grid size-9 shrink-0 place-items-center rounded-lg bg-ok-soft text-ok-soft-ink">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
           <path d="M20 6 9 17l-5-5" />

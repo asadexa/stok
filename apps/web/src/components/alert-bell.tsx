@@ -34,7 +34,7 @@ export function AlertBell({ summary }: { summary: AlertSummary }) {
       <summary
         // `list-none` + `marker:hidden`: tarayıcının varsayılan üçgeni
         // ikonun yanında ikinci bir işaret olurdu.
-        className="grid size-11 cursor-pointer list-none place-items-center rounded-[10px] border border-line-control bg-surface text-ink-2 marker:hidden hover:bg-surface-2 [&::-webkit-details-marker]:hidden"
+        className="grid size-11 cursor-pointer list-none place-items-center rounded-control border border-line-control bg-surface text-ink-2 marker:hidden hover:bg-surface-2 [&::-webkit-details-marker]:hidden"
         aria-label={
           total > 0 ? `Bildirimler: ${total} uyarı` : 'Bildirimler: bekleyen uyarı yok'
         }
@@ -65,7 +65,7 @@ export function AlertBell({ summary }: { summary: AlertSummary }) {
         </span>
       </summary>
 
-      <div className="absolute right-0 z-40 mt-2 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-[14px] border border-line bg-surface shadow-card">
+      <div className="absolute right-0 z-40 mt-2 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-card border border-line bg-surface shadow-card">
         <p className="border-b border-line px-4 py-3 font-display text-sm font-semibold">
           Bildirimler
         </p>

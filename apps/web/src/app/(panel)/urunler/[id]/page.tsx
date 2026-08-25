@@ -193,7 +193,7 @@ export default async function ProductPage({
         {query.arsiv === 'geri' ? <Notice>Ürün arşivden çıkarıldı.</Notice> : null}
 
         {product.archivedAt ? (
-          <p className="flex gap-2 rounded-md border border-line-control bg-surface-2 p-3 text-sm text-ink-2">
+          <p className="flex gap-2 rounded-control border border-line-control bg-surface-2 p-3 text-sm text-ink-2">
             <span aria-hidden>📦</span>
             <span>
               Bu ürün {formatDate(product.archivedAt)} tarihinde arşive alındı. Hareket
@@ -207,7 +207,7 @@ export default async function ProductPage({
           ilk sorusu "bu üründen kaç tane var". */}
       <section
         aria-label="Mevcut durum"
-        className="mb-6 grid gap-3 rounded-md border border-line bg-surface p-4 sm:grid-cols-3"
+        className="mb-6 grid gap-3 rounded-card border border-line bg-surface shadow-card p-4 sm:grid-cols-3"
       >
         <Stat
           label="Eldeki stok"
@@ -225,7 +225,7 @@ export default async function ProductPage({
       {canEdit ? (
         <form
           action={saveDetails}
-          className="mb-6 max-w-2xl space-y-5 rounded-md border border-line bg-surface p-5"
+          className="mb-6 max-w-2xl space-y-5 rounded-card border border-line bg-surface shadow-card p-5"
         >
           <h2 className="font-semibold">Ürün bilgileri</h2>
 
@@ -291,7 +291,7 @@ export default async function ProductPage({
       {/* BARKODLAR */}
       <section
         aria-label="Barkodlar"
-        className="mb-6 max-w-2xl rounded-md border border-line bg-surface"
+        className="mb-6 max-w-2xl rounded-card border border-line bg-surface shadow-card"
       >
         <h2 className="border-b border-line px-4 py-3 font-semibold">Barkodlar</h2>
 
@@ -326,7 +326,7 @@ export default async function ProductPage({
                     // "Sil" demiyor: barkod arşivleniyor, geçmişteki
                     // hareketler hangi barkodun okutulduğunu göstermeye
                     // devam ediyor.
-                    className="rounded-md border border-line-control px-3 py-2 text-sm hover:bg-surface-2"
+                    className="rounded-control border border-line-control px-3 py-2 text-sm hover:bg-surface-2"
                     disabled={activeBarcodes.length <= 1}
                     title={
                       activeBarcodes.length <= 1

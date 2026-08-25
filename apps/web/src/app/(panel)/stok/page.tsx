@@ -139,7 +139,7 @@ export default async function StockPage({
       {message ? (
         <p
           role="alert"
-          className="mb-4 flex gap-2 rounded-md border border-kritik bg-kritik-bg p-3 text-sm text-kritik"
+          className="mb-4 flex gap-2 rounded-control border border-kritik bg-kritik-bg p-3 text-sm text-kritik"
         >
           <span aria-hidden>⚠</span>
           <span>{message}</span>
@@ -147,7 +147,7 @@ export default async function StockPage({
       ) : null}
 
       {params.rapor === 'kuyrukta' ? (
-        <p className="mb-4 flex gap-2 rounded-md border border-giris bg-surface p-3 text-sm text-ink-2">
+        <p className="mb-4 flex gap-2 rounded-control border border-giris bg-surface p-3 text-sm text-ink-2">
           <span aria-hidden className="text-giris">
             ✓
           </span>
@@ -168,13 +168,13 @@ export default async function StockPage({
           />
           <Link
             href="/urunler/aktar"
-            className="h-14 rounded-md border border-line-control bg-surface px-5 text-base font-medium leading-[3.5rem] hover:bg-surface-2"
+            className="h-14 rounded-control border border-line-control bg-surface px-5 text-base font-medium leading-[3.5rem] hover:bg-surface-2"
           >
             Toplu aktar
           </Link>
           <Link
             href="/urunler/yeni"
-            className="h-14 rounded-md bg-accent px-6 text-base font-medium leading-[3.5rem] text-accent-ink hover:brightness-110"
+            className="h-14 rounded-control bg-accent px-6 text-base font-medium leading-[3.5rem] text-accent-ink hover:brightness-110"
           >
             + Yeni ürün
           </Link>
@@ -190,7 +190,7 @@ export default async function StockPage({
             defaultValue={search ?? ''}
             placeholder="Ürün adı veya stok kodu"
             /* 56 px: eldivenli elle basılabilmeli (PLAN.md Bölüm 11). */
-            className="mt-1 h-14 w-full rounded-md border border-line-control bg-surface px-3 text-base"
+            className="mt-1 h-14 w-full rounded-control border border-line-control bg-surface px-3 text-base"
           />
         </label>
 
@@ -199,7 +199,7 @@ export default async function StockPage({
           <select
             name="kategori"
             defaultValue={category ?? ''}
-            className="mt-1 h-14 w-full rounded-md border border-line-control bg-surface px-3 text-base"
+            className="mt-1 h-14 w-full rounded-control border border-line-control bg-surface px-3 text-base"
           >
             <option value="">Tümü</option>
             {categories.map((c) => (
@@ -234,7 +234,7 @@ export default async function StockPage({
 
         <button
           type="submit"
-          className="h-14 rounded-md bg-accent px-6 text-base font-medium text-accent-ink hover:brightness-110"
+          className="h-14 rounded-control bg-accent px-6 text-base font-medium text-accent-ink hover:brightness-110"
         >
           Filtrele
         </button>
@@ -246,7 +246,7 @@ export default async function StockPage({
         ) : null}
       </form>
 
-      <section aria-label="Stok tablosu" className="rounded-md border border-line bg-surface">
+      <section aria-label="Stok tablosu" className="rounded-card border border-line bg-surface shadow-card">
         {page.rows.length === 0 ? (
           hasFilter ? (
             // FİLTRE BOŞ DÖNDÜ ile HİÇ ÜRÜN YOK farklı durumlar. Elinde 1.248

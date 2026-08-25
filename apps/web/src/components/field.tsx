@@ -25,7 +25,7 @@
  */
 
 const INPUT =
-  'mt-1.5 h-13 w-full rounded-[10px] border border-line-control bg-surface px-3.5 text-base text-ink placeholder:text-ink-3'
+  'mt-1.5 h-13 w-full rounded-control border border-line-control bg-surface px-3.5 text-base text-ink placeholder:text-ink-3'
 
 export function TextField({
   name,
@@ -124,7 +124,7 @@ export function Alert({ children }: { children: React.ReactNode }) {
   return (
     <p
       role="alert"
-      className="flex gap-2 rounded-[10px] border border-crit bg-crit-soft p-3 text-sm text-crit-soft-ink"
+      className="flex gap-2 rounded-control border border-crit bg-crit-soft p-3 text-sm text-crit-soft-ink"
     >
       <span aria-hidden>⚠</span>
       <span>{children}</span>
@@ -134,7 +134,7 @@ export function Alert({ children }: { children: React.ReactNode }) {
 
 export function Notice({ children }: { children: React.ReactNode }) {
   return (
-    <p className="flex gap-2 rounded-[10px] border border-ok bg-ok-soft p-3 text-sm text-ok-soft-ink">
+    <p className="flex gap-2 rounded-control border border-ok bg-ok-soft p-3 text-sm text-ok-soft-ink">
       <span aria-hidden>✓</span>
       <span>{children}</span>
     </p>
@@ -157,7 +157,7 @@ export function SubmitButton({
   return (
     <button
       type="submit"
-      className={`h-13 rounded-[10px] px-6 text-base font-semibold ${styles}`}
+      className={`h-13 rounded-control px-6 text-base font-semibold ${styles}`}
     >
       {children}
     </button>

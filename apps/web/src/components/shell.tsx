@@ -93,7 +93,7 @@ export async function Shell({
         <Link href="/panel" className="flex items-center gap-3 px-2 py-1">
           <span
             aria-hidden
-            className="grid size-9 shrink-0 place-items-center rounded-[9px] bg-accent text-accent-ink"
+            className="grid size-9 shrink-0 place-items-center rounded-chip bg-accent text-accent-ink"
           >
             <svg
               width="19"
@@ -125,7 +125,7 @@ export async function Shell({
           kişiselleştirme olurdu ("YÖ"), o yüzden jenerik ikon duruyor.
           İsim gerçekten isteniyorsa `Actor`'a eklenip token'da taşınmalı.
         */}
-        <div className="mt-auto flex items-center gap-3 rounded-[10px] border border-line p-2.5">
+        <div className="mt-auto flex items-center gap-3 rounded-control border border-line p-2.5">
           <span
             aria-hidden
             className="grid size-9 shrink-0 place-items-center rounded-lg bg-accent-soft text-accent-soft-ink"
@@ -180,7 +180,7 @@ export async function Shell({
             action="/stok"
             method="get"
             role="search"
-            className="order-3 flex h-11 w-full items-center gap-2 rounded-[10px] border border-line-control bg-surface px-3 focus-within:outline-3 focus-within:outline-focus lg:order-none lg:ml-auto lg:w-80"
+            className="order-3 flex h-11 w-full items-center gap-2 rounded-control border border-line-control bg-surface px-3 focus-within:outline-3 focus-within:outline-focus lg:order-none lg:ml-auto lg:w-80"
           >
             <label htmlFor="genel-ara" className="sr-only">
               Ürün, stok kodu veya barkod ara

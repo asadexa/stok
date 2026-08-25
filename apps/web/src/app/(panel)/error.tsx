@@ -32,7 +32,7 @@ export default function PanelError({
   return (
     <div
       role="alert"
-      className="mx-auto max-w-xl rounded-[14px] border border-crit bg-crit-soft p-6 text-crit-soft-ink"
+      className="mx-auto max-w-xl rounded-card border border-crit bg-crit-soft p-6 text-crit-soft-ink"
     >
       <h2 className="font-display text-lg font-semibold">Bu ekran yüklenemedi</h2>
       <p className="mt-2 text-sm">
@@ -44,13 +44,13 @@ export default function PanelError({
         <button
           type="button"
           onClick={reset}
-          className="h-13 rounded-[10px] bg-accent px-6 text-base font-semibold text-accent-ink hover:brightness-110"
+          className="h-13 rounded-control bg-accent px-6 text-base font-semibold text-accent-ink hover:brightness-110"
         >
           Tekrar dene
         </button>
         <a
           href="/panel"
-          className="h-13 rounded-[10px] border border-line-control bg-surface px-6 text-base font-semibold leading-[3.25rem] text-ink hover:bg-surface-2"
+          className="h-13 rounded-control border border-line-control bg-surface px-6 text-base font-semibold leading-[3.25rem] text-ink hover:bg-surface-2"
         >
           Panele dön
         </a>

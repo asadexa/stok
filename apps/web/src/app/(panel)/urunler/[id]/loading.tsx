@@ -16,7 +16,7 @@ export default function Loading() {
           {[0, 1, 2, 3, 4, 5].map((i) => (
             <div key={i}>
               <Sk w="80px" h={12} />
-              <Sk w="100%" h={52} className="mt-1.5 rounded-[10px]" />
+              <Sk w="100%" h={52} className="mt-1.5 rounded-control" />
             </div>
           ))}
         </div>

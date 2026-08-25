@@ -149,7 +149,7 @@ export default async function MovementEntryPage({
       {params.yeni !== undefined && params.urun ? (
         <p
           role="status"
-          className="mb-4 flex flex-wrap items-center gap-3 rounded-[10px] border border-ok bg-ok-soft p-4 text-ok-soft-ink"
+          className="mb-4 flex flex-wrap items-center gap-3 rounded-control border border-ok bg-ok-soft p-4 text-ok-soft-ink"
         >
           <span aria-hidden className="flex flex-wrap items-center gap-3">
             <span className="text-2xl">✓</span>
@@ -189,14 +189,14 @@ export default async function MovementEntryPage({
             autoFocus={!found}
             defaultValue=""
             placeholder="Okutun veya elle yazın"
-            className="mt-1 h-16 w-full rounded-md border-2 border-line-control bg-surface px-4 text-xl"
+            className="mt-1 h-16 w-full rounded-control border-2 border-line-control bg-surface px-4 text-xl"
           />
         </label>
       </form>
 
       {/* 2. ADIM — ÜRÜN GÖRÜNÜR, MİKTAR VE YÖN SEÇİLİR. */}
       {barcode && !found ? (
-        <div className="max-w-xl rounded-md border border-kritik bg-kritik-bg p-4">
+        <div className="max-w-xl rounded-card border border-kritik bg-kritik-bg p-4">
           <p className="flex gap-2 text-kritik">
             <span aria-hidden>⚠</span>
             <span>
@@ -214,7 +214,7 @@ export default async function MovementEntryPage({
       ) : null}
 
       {found ? (
-        <form action={save} className="max-w-xl space-y-5 rounded-md border border-line bg-surface p-5">
+        <form action={save} className="max-w-xl space-y-5 rounded-card border border-line bg-surface shadow-card p-5">
           <input type="hidden" name="barkod" value={found.barcode} />
           <input type="hidden" name="anahtar" value={idempotencyKey} />
 
@@ -231,7 +231,7 @@ export default async function MovementEntryPage({
               // Koli barkodu okutulduğunda girilen miktar çarpanla
               // çarpılacak. Söylenmezse kullanıcı 5 yazıp 60 girmiş olur
               // ve farkı ancak sayımda görür (D7).
-              <p className="mt-2 rounded-md bg-surface-2 px-3 py-2 text-sm">
+              <p className="mt-2 rounded-control bg-surface-2 px-3 py-2 text-sm">
                 Koli barkodu: girdiğiniz miktar{' '}
                 <span className="tabular font-semibold">×{found.qtyMultiplier}</span> ile çarpılacak.
               </p>
@@ -255,7 +255,7 @@ export default async function MovementEntryPage({
                   required
                   autoFocus
                   defaultValue="1"
-                  className="mt-1 h-16 w-full rounded-md border-2 border-line-control bg-surface px-4 text-xl"
+                  className="mt-1 h-16 w-full rounded-control border-2 border-line-control bg-surface px-4 text-xl"
                 />
               </label>
 
@@ -277,7 +277,7 @@ export default async function MovementEntryPage({
                   name="not"
                   type="text"
                   maxLength={500}
-                  className="mt-1 h-14 w-full rounded-md border border-line-control bg-surface px-3 text-base"
+                  className="mt-1 h-14 w-full rounded-control border border-line-control bg-surface px-3 text-base"
                 />
               </label>
 
@@ -301,7 +301,7 @@ function ReasonGroup({
 }) {
   const color = tone === 'giris' ? 'text-giris' : 'text-cikis'
   return (
-    <div className="rounded-md border border-line p-3">
+    <div className="rounded-card border border-line p-3">
       <p className={`text-sm font-medium ${color}`}>
         <span aria-hidden>{tone === 'giris' ? '↑ ' : '↓ '}</span>
         {title}
