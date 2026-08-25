@@ -4,11 +4,13 @@ import {
   isUniqueViolation,
   pgConstraint,
   users,
+  verifySecret,
   withTenant,
 } from '@stok/db'
 import {
   AppError,
   type Role,
+  changePasswordSchema,
   createUserSchema,
   setPasswordSchema,
   updateUserSchema,
@@ -297,6 +299,83 @@ export async function setUserPassword(
   }
 
   await revokeSessions(actor, targetUserId, options)
+}
+
+/**
+ * Oturum sahibinin KENDİ kaydı.
+ *
+ * `getTenantUser` yerine ayrı bir fonksiyon çünkü o `movement:read:all`
+ * istiyor — yani çalışan onunla kendi adını bile okuyamıyor. Buradaki
+ * yetki kontrolü kimlik: sorgu `actor.userId` ile sabitlenmiş, başkasının
+ * kaydına genişletilemiyor. Ayrı yetki tanımlamak gereksiz olurdu; oturumu
+ * olan herkes kendi adını görebilmeli.
+ */
+export async function currentProfile(
+  actor: Actor,
+  options: UserOptions = {},
+): Promise<{ id: string; name: string; email: string; role: Role } | null> {
+  const rows = await withTenant(
+    actor.tenantId,
+    (tx) =>
+      tx
+        .select({
+          id: users.id,
+          name: users.name,
+          email: users.email,
+          role: users.role,
+        })
+        .from(users)
+        // `actor.userId`: parametre YOK, yani çağıran yer hedefi değiştiremiyor.
+        .where(and(eq(users.tenantId, actor.tenantId), eq(users.id, actor.userId)))
+        .limit(1),
+    options.db,
+  )
+
+  const row = rows[0]
+  return row ? { ...row, role: row.role as Role } : null
+}
+
+/**
+ * Kendi parolasını değiştirir. MEVCUT PAROLAYI DOĞRULAR.
+ *
+ * `setUserPassword` da kendi parolanı değiştirmene izin veriyor ama
+ * doğrulama yapmıyor: o yol yöneticinin unutan kullanıcıya sıfırlaması
+ * için. Kendi hesabında doğrulama şart, çünkü depoda ekran açık bırakılıyor
+ * ve başında kimse olmayan bir oturum parolanın değiştirilmesine yetmemeli.
+ *
+ * Yanlış mevcut parola `INVALID_CREDENTIALS` döndürüyor — giriş ekranıyla
+ * aynı kod, çünkü kullanıcı için aynı olay: "parolayı bilmiyorsun".
+ *
+ * Başarılı değişiklik TÜM oturumları kapatıyor (`setUserPassword` içindeki
+ * `revokeSessions`). Parola değiştirmenin asıl sebebi çoğu zaman "birinin
+ * eline geçti" şüphesi; o an açık kalan diğer oturumları yaşatmak,
+ * değişikliği anlamsız kılardı.
+ */
+export async function changeOwnPassword(
+  actor: Actor,
+  raw: unknown,
+  options: UserOptions = {},
+): Promise<void> {
+  const input = parseOrThrow(changePasswordSchema, raw)
+
+  const rows = await withTenant(
+    actor.tenantId,
+    (tx) =>
+      tx
+        .select({ passwordHash: users.passwordHash })
+        .from(users)
+        .where(and(eq(users.tenantId, actor.tenantId), eq(users.id, actor.userId)))
+        .limit(1),
+    options.db,
+  )
+
+  const stored = rows[0]?.passwordHash
+  if (!stored) throw new AppError('INVALID_CREDENTIALS', 'no password set')
+
+  const ok = await verifySecret(input.currentPassword, stored)
+  if (!ok) throw new AppError('INVALID_CREDENTIALS', 'current password mismatch')
+
+  await setUserPassword(actor, actor.userId, { password: input.password }, options)
 }
 
 /** Hedef dışında AKTİF bir yönetici daha var mı. */

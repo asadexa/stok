@@ -209,6 +209,83 @@ export async function listCategories(
 }
 
 // ---------------------------------------------------------------------------
+// KATEGORİ ÖZETİ (T73)
+// ---------------------------------------------------------------------------
+
+export interface CategoryRow {
+  /** Kategorisiz ürünler 'Kategorisiz' altında toplanıyor. */
+  name: string
+  /** Filtre bağlantısında kullanılan ham değer. Kategorisiz için null. */
+  value: string | null
+  productCount: number
+  criticalCount: number
+  totalQty: number
+  /** `price:read` yoksa alan HİÇ KONULMUYOR (dashboardSummary ile aynı kalıp). */
+  stockValue?: number
+}
+
+/**
+ * Kategori kırılımı: ürün sayısı, kritik sayısı, toplam adet ve değer.
+ *
+ * KATEGORİ AYRI BİR TABLO DEĞİL, `products.category` serbest metin. Bu bir
+ * eksiklik değil bilinçli: kategori bu üründe bir varlık değil bir etiket;
+ * ayrı tablo kurmak her ürün eklemede ikinci bir kayıt ve yabancı anahtar
+ * yönetimi getirirdi. Karşılığı şu: "Kalem" ile "kalem" iki ayrı kategori
+ * görünür. Normalizasyon burada YAPILMIYOR çünkü kullanıcının yazdığı şeyi
+ * sessizce değiştirmek, veriyi düzeltiyor gibi görünüp gizli bir eşleme
+ * kuralı yaratır. Bunun yerine liste olduğu gibi gösteriliyor ve fark
+ * gözle görülüyor.
+ */
+export async function categorySummary(
+  actor: Actor,
+  options: StockOptions = {},
+): Promise<CategoryRow[]> {
+  requirePermission(actor, 'stock:read')
+  const seesPrices = actorCan(actor, 'price:read')
+
+  return withTenant(
+    actor.tenantId,
+    async (tx) => {
+      const rows = await tx.execute<{
+        value: string | null
+        products: string
+        critical: string
+        qty: string
+        value_sum: string | null
+      }>(sql`
+        SELECT NULLIF(btrim(p.category), '')                          AS value,
+               count(*)::text                                          AS products,
+               count(*) FILTER (
+                 WHERE COALESCE(cs.qty, 0) <= p.min_stock
+               )::text                                                 AS critical,
+               COALESCE(SUM(COALESCE(cs.qty, 0)), 0)::text             AS qty,
+               COALESCE(SUM(COALESCE(cs.qty, 0) * COALESCE(p.purchase_price, 0)), 0)::text
+                                                                       AS value_sum
+          FROM products p
+          LEFT JOIN current_stock cs
+                 ON cs.tenant_id = p.tenant_id AND cs.product_id = p.id
+         WHERE p.archived_at IS NULL
+         GROUP BY 1
+         ORDER BY count(*) DESC, 1 NULLS LAST
+      `)
+
+      return [...rows].map((r) => {
+        const row: CategoryRow = {
+          name: r.value ?? 'Kategorisiz',
+          value: r.value,
+          productCount: Number(r.products),
+          criticalCount: Number(r.critical),
+          totalQty: Number(r.qty),
+        }
+        if (seesPrices) row.stockValue = Number(r.value_sum ?? 0)
+        return row
+      })
+    },
+    options.db,
+  )
+}
+
+// ---------------------------------------------------------------------------
 // DASHBOARD ÖZETİ (T18)
 // ---------------------------------------------------------------------------
 
@@ -236,6 +313,45 @@ export interface DashboardSummary {
    * olurdu ve bu yanlış: doğrusu "bu kullanıcı bilmiyor".
    */
   failedJobCount?: number
+
+  /** Arşivlenmemiş ürün sayısı. */
+  productCount: number
+
+  /** Stoğu sıfırdan büyük olan ürün sayısı. */
+  inStockCount: number
+
+  /**
+   * Stoktaki toplam değer (adet × alış fiyatı).
+   *
+   * `price:read` yetkisi yoksa alan HİÇ KONULMUYOR — `failedJobCount` ve
+   * `redactPrices` ile aynı kalıp. `0` döndürmek "stok değersiz" demek
+   * olurdu ve bu yanlış: doğrusu "bu kullanıcı bilmiyor".
+   *
+   * BUGÜNÜN değeri, geçmişin değil. Geçmişe dönük stok değeri bir maliyet
+   * yöntemi kararı gerektiriyor (PLAN.md ÇÖZÜLMEMİŞ KARAR U2: ağırlıklı
+   * ortalama mı FIFO mu) ve o karar verilmeden hesaplanan her sayı yanlış
+   * olur. Bu yüzden panelde değerin ZAMAN SERİSİ yok.
+   */
+  stockValue?: number
+
+  /**
+   * Kategori dağılımı, çoktan aza. Beşten fazlası "Diğer"de toplanıyor:
+   * halkada altı dilimden sonrası okunmuyor ve lejant ekranı yiyor.
+   */
+  categories: { name: string; count: number }[]
+
+  /**
+   * Son 14 günün günlük hareket hacmi. Grafiğin veri kaynağı.
+   *
+   * NEDEN HACİM, NEDEN DEĞER DEĞİL: referans görselde aylık stok değeri
+   * grafiği var ama o seri U2 kararına bağlı (yukarı bkz.). Hareket hacmi
+   * bugün hesaplanabiliyor, `stock_movements.created_at` üstünde index
+   * var ve pencere 14 günle sınırlı. Ayrıca gerçek bir soruya cevap
+   * veriyor: "bugün olağandışı bir şey oldu mu?"
+   *
+   * Çalışan için SADECE KENDİ hareketleri — `today` ile aynı kapsam.
+   */
+  activity: { day: string; inQty: number; outQty: number }[]
 }
 
 /**
@@ -307,6 +423,72 @@ export async function dashboardSummary(
           )
         : undefined
 
+      // Ürün sayacı ve stoktaki değer TEK sorguda: ikisi de aynı iki tabloyu
+      // aynı şekilde birleştiriyor, ayırmak planı iki kez kurdururdu.
+      //
+      // Tenant süzmesi RLS'ten geliyor (withTenant `app.tenant_id` ayarını
+      // kuruyor); movements sorgusundaki kalıbın aynısı.
+      const [counts] = await tx.execute<{
+        products: string
+        in_stock: string
+        value: string | null
+      }>(sql`
+        SELECT count(*)::text                                        AS products,
+               count(*) FILTER (WHERE COALESCE(cs.qty, 0) > 0)::text AS in_stock,
+               SUM(COALESCE(cs.qty, 0) * COALESCE(p.purchase_price, 0))::text AS value
+          FROM products p
+          LEFT JOIN current_stock cs
+                 ON cs.tenant_id = p.tenant_id AND cs.product_id = p.id
+         WHERE p.archived_at IS NULL
+      `)
+
+      const categoryRows = await tx.execute<{ name: string; n: string }>(sql`
+        SELECT COALESCE(NULLIF(btrim(category), ''), 'Kategorisiz') AS name,
+               count(*)::text                                       AS n
+          FROM products
+         WHERE archived_at IS NULL
+         GROUP BY 1
+         ORDER BY count(*) DESC, 1
+      `)
+
+      // İlk beş kategori ayrı, kalanı tek "Diğer" diliminde. Bölme
+      // VERİTABANINDA değil burada: `LIMIT 5` kalanların toplamını
+      // kaybettirirdi ve yüzdeler %100'e tamamlanmazdı.
+      const allCategories = [...categoryRows].map((r) => ({
+        name: r.name,
+        count: Number(r.n),
+      }))
+      const categories = allCategories.slice(0, 5)
+      const restTotal = allCategories.slice(5).reduce((sum, c) => sum + c.count, 0)
+      if (restTotal > 0) categories.push({ name: 'Diğer', count: restTotal })
+
+      // Son 14 gün. `generate_series` ile HAREKETSİZ GÜNLER DE geliyor:
+      // eksik günü grafikte atlamak, iki gün arasındaki boşluğu düz bir
+      // çizgi gibi gösterip "o gün de iş vardı" yalanını söylerdi.
+      const activityRows = await tx.execute<{
+        day: string
+        in_qty: string
+        out_qty: string
+      }>(sql`
+        WITH gunler AS (
+          SELECT generate_series(
+                   date_trunc('day', now()) - interval '13 days',
+                   date_trunc('day', now()),
+                   interval '1 day'
+                 ) AS day
+        )
+        SELECT to_char(g.day, 'YYYY-MM-DD') AS day,
+               COALESCE(SUM(m.delta) FILTER (WHERE m.delta > 0), 0)::text  AS in_qty,
+               COALESCE(-SUM(m.delta) FILTER (WHERE m.delta < 0), 0)::text AS out_qty
+          FROM gunler g
+          LEFT JOIN stock_movements m
+                 ON m.created_at >= g.day
+                AND m.created_at <  g.day + interval '1 day'
+                ${scopedUserId ? sql`AND m.user_id = ${scopedUserId}` : sql``}
+         GROUP BY g.day
+         ORDER BY g.day
+      `)
+
       const summary: DashboardSummary = {
         criticalCount: Number(critical?.n ?? 0),
         today: {
@@ -315,8 +497,18 @@ export async function dashboardSummary(
           outCount: byDirection.get('OUT')?.n ?? 0,
           outQty: byDirection.get('OUT')?.total ?? 0,
         },
+        productCount: Number(counts?.products ?? 0),
+        inStockCount: Number(counts?.in_stock ?? 0),
+        categories,
+        activity: [...activityRows].map((r) => ({
+          day: r.day,
+          inQty: Number(r.in_qty),
+          outQty: Number(r.out_qty),
+        })),
       }
       if (failedJobCount !== undefined) summary.failedJobCount = failedJobCount
+      // Fiyat yetkisi yoksa alan hiç konulmuyor (bkz. tip yorumu).
+      if (actorCan(actor, 'price:read')) summary.stockValue = Number(counts?.value ?? 0)
       return summary
     },
     options.db,

@@ -210,6 +210,22 @@ export const passwordSchema = z
   .min(8, 'Parola en az 8 karakter olmalı')
   .max(200)
 
+/**
+ * Kendi parolasını değiştirme.
+ *
+ * MEVCUT PAROLA ZORUNLU ve bu yönetici sıfırlamasından ayıran şey.
+ * `setUserPassword` kendi parolanı doğrulama olmadan değiştirmene izin
+ * veriyor; o yol yönetici için doğru (unutan kullanıcıya sıfırlama), ama
+ * kendi hesabı için yanlış: açık kalmış bir oturumun başına geçen biri
+ * parolayı değiştirip sahibini kendi hesabından kilitleyebilirdi.
+ */
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, 'Mevcut parolanızı girin').max(200),
+  password: passwordSchema,
+})
+
+export type ChangePasswordInput = z.infer<typeof changePasswordSchema>
+
 export const createUserSchema = z.object({
   email: z.string().trim().toLowerCase().email('Geçerli bir e-posta girin').max(200),
   name: z.string().trim().min(1, 'Ad boş olamaz').max(120),

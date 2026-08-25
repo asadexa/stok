@@ -175,6 +175,10 @@ export interface TestProductSpec {
   archived?: boolean
   /** Koli barkodu çarpanı. Verilmezse koli barkodu oluşturulmaz. */
   caseMultiplier?: string
+  /** Kategori. Verilmezse NULL kalır — "kategorisiz" davranışını sınamak için. */
+  category?: string
+  /** Alış fiyatı. Stok değeri toplamlarını sınamak için. */
+  purchasePrice?: string
 }
 
 export interface TestProduct {
@@ -269,6 +273,10 @@ export async function seedTestTenant(
       unit: spec.unit ?? 'ADET',
       minStock: spec.minStock ?? '0',
       locationId,
+      // `?? null`: verilmezse NULL kalıyor, boş string DEĞİL. Kategori
+      // özeti ikisini farklı sayıyor ve fixture o ayrımı korumalı.
+      category: spec.category ?? null,
+      purchasePrice: spec.purchasePrice ?? null,
       archivedAt: spec.archived ? new Date() : null,
     })
 
