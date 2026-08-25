@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
+import { fileURLToPath } from 'node:url'
 import { sql } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/postgres-js'
 import { migrate } from 'drizzle-orm/postgres-js/migrator'
@@ -129,7 +130,17 @@ export async function resetTestDatabase(name: string): Promise<void> {
 
   const { client, db } = connect(migrationUrl, 1)
   try {
-    await migrate(db, { migrationsFolder: new URL('../migrations', import.meta.url).pathname })
+    // `fileURLToPath`, `.pathname` DEĞİL.
+    //
+    // Windows'ta `import.meta.url` = `file:///C:/stok/packages/db/src/testing.ts`
+    // ve `.pathname` bunun `/C:/stok/packages/db/migrations` halini veriyor:
+    // sürücü harfinin ÖNÜNDE bir eğik çizgi var. O yol Windows'ta açılmıyor,
+    // drizzle `meta/_journal.json` dosyasını bulamıyor ve bütün db/core test
+    // paketi daha ilk kurulumda düşüyor. `fileURLToPath` her platformda
+    // doğru yerel yolu üretiyor (POSIX'te davranış değişmiyor).
+    await migrate(db, {
+      migrationsFolder: fileURLToPath(new URL('../migrations', import.meta.url)),
+    })
   } finally {
     await client.end()
   }
