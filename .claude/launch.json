@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "stok-web",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@stok/web", "run", "dev"],
+      "port": 3000
+    }
+  ]
+}
