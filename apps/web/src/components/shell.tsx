@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { AlertBell } from '@/components/alert-bell'
+import { CommandPalette } from '@/components/command-palette'
 import { BottomNav, PageHeading, SidebarNav } from '@/components/panel-nav'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { endSession } from '@/server/session'
@@ -212,6 +213,14 @@ export async function Shell({
               placeholder="Ürün, stok kodu veya barkod"
               className="w-full bg-transparent text-sm outline-none placeholder:text-ink-3"
             />
+            {/* Kısayol ipucu. `aria-hidden`: ekran okuyucu için gürültü,
+                klavye kullanıcısı zaten kısayolu deniyor. */}
+            <kbd
+              aria-hidden
+              className="hidden shrink-0 rounded-md border border-line px-1.5 py-0.5 font-mono text-[11px] text-ink-3 lg:block"
+            >
+              Ctrl K
+            </kbd>
           </form>
 
           <div className="ml-auto flex items-center gap-2 lg:ml-0">
@@ -228,6 +237,10 @@ export async function Shell({
       </div>
 
       <BottomNav role={role} />
+
+      {/* Ctrl+K paleti (T86). Kabuğun içinde çünkü her ekrandan açılmalı;
+          görünmez, yalnızca kısayolu dinliyor. */}
+      <CommandPalette canCreate={role === 'ADMIN'} />
     </div>
   )
 }

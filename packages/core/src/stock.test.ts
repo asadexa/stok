@@ -11,6 +11,7 @@ import {
   getProduct,
   listCategories,
   listStock,
+  searchAll,
 } from './stock.js'
 import { TEST_DB_NAME } from './test/db-name.js'
 
@@ -579,5 +580,68 @@ describe('T80 - uyarı özeti', () => {
     // fark etmez.
     const staffBell = await alertSummary(staff, opts)
     expect(staffBell.criticalCount).toBeGreaterThan(0)
+  })
+})
+
+/**
+ * ============================================================================
+ * T85 — BİRLEŞİK ARAMA
+ *
+ * Komut paletinin (T86) veri kaynağı. En kritik davranış barkodun TAM
+ * eşleşmesi: okuyucu bütün kodu tek seferde yazıyor ve o alan doluysa
+ * kullanıcının gideceği yer bellidir.
+ * ============================================================================
+ */
+describe('T85 - birleşik arama', () => {
+  it('barkod tam eşleşmesi ürünü ve mevcut stoğu döndürüyor', async () => {
+    const barcode = tenant.products['KAL-001']!.barcode
+    const result = await searchAll(boss, barcode, opts)
+
+    expect(result.barcode).toMatchObject({
+      barcode,
+      sku: 'KAL-001',
+      name: 'Kırmızı Tükenmez Kalem',
+    })
+    // Aynı ürün listede TEKRAR ETMEMELİ; palet iki satır göstermemeli.
+    expect(result.products.every((p) => p.productId !== result.barcode?.productId)).toBe(
+      true,
+    )
+  })
+
+  it('kısmi barkod eşleşmiyor', async () => {
+    // Okuyucu ya hepsini yazar ya hiç. Kısmi eşleşme kabul etmek, yanlış
+    // ürüne hareket yazma yolunu açardı.
+    const barcode = tenant.products['KAL-001']!.barcode
+    const result = await searchAll(boss, barcode.slice(0, -2), opts)
+    expect(result.barcode).toBeNull()
+  })
+
+  it('ürün araması Türkçe normalizasyondan geçiyor', async () => {
+    // "ısıtıcı" yazan "Isıtıcı Şerit"i bulmalı (D-4.1). Bulamasaydı
+    // kullanıcı ürünün sistemde olmadığını sanıp kopyasını eklerdi.
+    const kucuk = await searchAll(boss, 'ısıtıcı', opts)
+    const buyuk = await searchAll(boss, 'ISITICI', opts)
+
+    expect(kucuk.products.map((p) => p.sku)).toContain('ISI-001')
+    expect(buyuk.products.map((p) => p.sku)).toContain('ISI-001')
+  })
+
+  it('stok koduyla da bulunuyor', async () => {
+    const result = await searchAll(boss, 'KAL-001', opts)
+    expect(result.products.map((p) => p.sku)).toContain('KAL-001')
+  })
+
+  it('boş sorgu sorgu AÇMIYOR', async () => {
+    const result = await searchAll(boss, '   ', opts)
+    expect(result).toEqual({ barcode: null, products: [] })
+  })
+
+  it('başka tenantın barkodu eşleşmiyor (RLS)', async () => {
+    const yabanci = await seedTestTenant(admin.db, 'arama-yabanci', [
+      { sku: 'Y-9', name: 'Yabancı Kalem' },
+    ])
+    const result = await searchAll(boss, yabanci.products['Y-9']!.barcode, opts)
+    expect(result.barcode).toBeNull()
+    expect(result.products.map((p) => p.sku)).not.toContain('Y-9')
   })
 })

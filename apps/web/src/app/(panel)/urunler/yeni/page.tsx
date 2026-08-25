@@ -33,7 +33,7 @@ import { currentActor } from '@/server/session'
 export default async function NewProductPage({
   searchParams,
 }: {
-  searchParams: Promise<FormParams>
+  searchParams: Promise<FormParams & { ad?: string }>
 }) {
   const actor = await currentActor()
   if (!actor) redirect('/giris')
@@ -102,7 +102,12 @@ export default async function NewProductPage({
 
         <div className="grid gap-5 sm:grid-cols-2">
           <TextField name="sku" label="Stok kodu" required hint="İşletme içinde tekil." />
-          <TextField name="ad" label="Ürün adı" required />
+          {/*
+            Ad adres çubuğundan ÖN DOLDURULABİLİYOR (T86). Komut paletinde
+            aranan bulunamayınca "yeni ürün ekle" satırı çıkıyor ve aranan
+            metni buraya taşıyor — kullanıcı aynı şeyi iki kez yazmasın.
+          */}
+          <TextField name="ad" label="Ürün adı" required defaultValue={params.ad} />
         </div>
 
         <div className="grid gap-5 sm:grid-cols-2">

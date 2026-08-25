@@ -8,6 +8,7 @@ import {
   movementUserScope,
   requirePermission,
 } from './authz.js'
+import { lookupBarcode } from './movements.js'
 import { parseScaled, scaledToNumber } from './numeric.js'
 import { parseOrThrow } from './validate.js'
 
@@ -206,6 +207,105 @@ export async function listCategories(
     .map((r) => r.category)
     .filter((c): c is string => c !== null)
     .sort((a, b) => collator.compare(a, b))
+}
+
+// ---------------------------------------------------------------------------
+// BİRLEŞİK ARAMA (T85)
+// ---------------------------------------------------------------------------
+
+export interface SearchHit {
+  productId: string
+  sku: string
+  name: string
+  category: string | null
+  unit: Unit
+  qty: number
+  critical: boolean
+}
+
+export interface SearchResult {
+  /**
+   * Sorgu bir barkodun TAMAMIYLA eşleştiyse. Barkod okuyucu bütün kodu tek
+   * seferde yazıyor, yani bu alan doluysa kullanıcı okutma yapmış demektir
+   * ve gideceği yer bellidir: Giriş/Çıkış ekranı.
+   */
+  barcode: {
+    barcode: string
+    productId: string
+    name: string
+    sku: string
+    unit: Unit
+    qty: number
+    archived: boolean
+  } | null
+  /** Ad veya stok kodu eşleşmeleri. Türkçe normalizasyondan geçiyor. */
+  products: SearchHit[]
+}
+
+/**
+ * Her ekrandan çağrılabilen arama. Ctrl+K paletinin (T86) veri kaynağı.
+ *
+ * ÜÇ SONUÇ, ÜÇ FARKLI EYLEM:
+ *   barkod tam eşleşme  →  Giriş/Çıkış (okutma yapılmış, iş yazılacak)
+ *   ad / stok kodu      →  ürün kartı
+ *   sonuç yok           →  yeni ürün ekle   (PLAN.md boş durum tablosu)
+ *
+ * HAREKETLER ARANMIYOR ve bu bilinçli. Hareket satırının metni yok: ürün
+ * adı, kullanıcı adı ve sebep kodu hep BAŞKA tablolardan geliyor. "Hareket
+ * ara" demek pratikte "ürünü bul, sonra hareketlerine bak" demek — palet
+ * ürünü bulduğunda o yola zaten bir bağlantı veriyor. Metinsiz bir tabloda
+ * tam metin araması kurmak, kullanıcının yazdığı hiçbir şeyle eşleşmeyen
+ * bir sorgu daha eklemek olurdu.
+ *
+ * Barkod ve ürün araması AYRI yollar: barkod TAM eşleşme (kısmi barkod
+ * anlamsız, okuyucu ya hepsini yazar ya hiç), ürün araması ise parça
+ * eşleşmesi + Türkçe normalizasyon (`tr_norm`, D-4.1).
+ */
+export async function searchAll(
+  actor: Actor,
+  query: string,
+  options: StockOptions = {},
+): Promise<SearchResult> {
+  requirePermission(actor, 'stock:read')
+
+  const q = query.trim()
+  if (q === '') return { barcode: null, products: [] }
+
+  // Barkod araması yalnızca RAKAM/HARF dizisi için denenıyor; boşluk içeren
+  // bir sorgu barkod olamaz ve gereksiz bir sorgu açardı.
+  const looksLikeBarcode = /^[A-Za-z0-9._-]{4,}$/.test(q)
+
+  const [hit, page] = await Promise.all([
+    looksLikeBarcode
+      ? lookupBarcode(actor, q, options).catch(() => null)
+      : Promise.resolve(null),
+    // 8 sonuç: palet ekranı kaplamasın, kullanıcı listede kaybolmasın.
+    // Aradığını bulamayan zaten daha çok harf yazıyor.
+    listStock(actor, { search: q, limit: 8 }, options),
+  ])
+
+  return {
+    barcode: hit
+      ? {
+          barcode: hit.barcode,
+          productId: hit.productId,
+          name: hit.productName,
+          sku: hit.sku,
+          unit: hit.unit,
+          qty: hit.qty,
+          archived: hit.archivedAt !== null,
+        }
+      : null,
+    products: page.rows.map((r) => ({
+      productId: r.productId,
+      sku: r.sku,
+      name: r.name,
+      category: r.category,
+      unit: r.unit,
+      qty: r.qty,
+      critical: r.critical,
+    })),
+  }
 }
 
 // ---------------------------------------------------------------------------
