@@ -3,6 +3,7 @@ import { AppError } from '@stok/shared'
 import { type Actor, TOKEN_TTL, actorFromAccessToken, login, refreshSession } from '@stok/core'
 import { appDb } from '@stok/db'
 import { cookies } from 'next/headers'
+import { cache } from 'react'
 
 /**
  * ============================================================================
@@ -59,7 +60,7 @@ interface CookieOptions {
  * kalıyor. Yanlış tarafa düşmek, oturum çerezini düz metin göndermek
  * demek olurdu.
  */
-function secureCookies(): boolean {
+export function secureCookies(): boolean {
   const url = process.env.APP_URL
   if (!url) return true
   try {
@@ -102,8 +103,14 @@ export async function endSession(): Promise<void> {
  *
  * `null` dönüyor, fırlatmıyor: çağıran yer "giriş ekranına yönlendir" ile
  * "403 döndür" arasında kendisi karar versin.
+ *
+ * `cache()` İLE SARMALI VE BU ZORUNLU. Kabuk artık düzende (layout), sayfa
+ * ise kendi sorgusu için aktörü yine istiyor: tek istekte iki çağrı oluyor.
+ * Sarmalanmasaydı access token'ın süresi dolduğu istekte yenileme İKİ KEZ
+ * çalışır, refresh token iki kez döndürülürdü. `cache()` istek başına tek
+ * çalıştırma garantisi veriyor; yan etkisi (çerez yazma) de bir kez oluyor.
  */
-export async function currentActor(): Promise<Actor | null> {
+export const currentActor = cache(async function currentActor(): Promise<Actor | null> {
   const jar = await cookies()
   const access = jar.get(ACCESS_COOKIE)?.value
 
@@ -125,15 +132,40 @@ export async function currentActor(): Promise<Actor | null> {
   )
   if (!renewed) return null
 
-  jar.set(ACCESS_COOKIE, renewed.tokens.accessToken, cookieOptions(TOKEN_TTL.accessSeconds))
-  jar.set(REFRESH_COOKIE, renewed.tokens.refreshToken, cookieOptions(TOKEN_TTL.refreshSeconds))
+  // ÇEREZ YAZMA RENDER SIRASINDA BAŞARISIZ OLABİLİR VE BU NORMALDİR.
+  //
+  // Next.js 15 çerez değiştirmeye yalnızca Server Action ve Route Handler
+  // içinde izin veriyor; bir sayfa render edilirken çerez deposu SALT
+  // OKUNUR ve `set` fırlatıyor.
+  //
+  // Sarmalanmasaydı ne olurdu: access token'ın ömrü 15 dakika. Kullanıcı
+  // giriş yaptıktan 15 dakika sonra HERHANGİ bir sayfayı açtığında bu satır
+  // fırlatır ve ekranda 500 hatası görürdü. Yani kodun tam olarak önlemek
+  // istediği şey ("kullanıcıyı 15 dakikada bir dışarı atma") çok daha kötü
+  // bir biçimde gerçekleşirdi: dışarı atılmak yerine çökme.
+  //
+  // YUTMAK NEDEN GÜVENLİ: `refreshSession` yenileme token'ını DÖNDÜRMÜYOR
+  // (auth.ts) — imzayı ve `tokenVersion`'ı doğrulayıp yeni token üretiyor,
+  // eldeki yenileme token'ı kendi süresi dolana (30 gün) veya oturum iptal
+  // edilene kadar geçerli kalıyor. Yani yazamamak bir şey kaybettirmiyor:
+  // istek kendi taze token'ıyla tamamlanıyor, çerez ise bir sonraki sunucu
+  // eyleminde (form gönderimi, çıkış) veya route handler'da tazeleniyor.
+  //
+  // BEDELİ: çerez tazelenene kadar her render bir yenileme sorgusu yapıyor.
+  // Kalıcı çözüm yenilemeyi render'dan çıkarmak (T87).
+  try {
+    jar.set(ACCESS_COOKIE, renewed.tokens.accessToken, cookieOptions(TOKEN_TTL.accessSeconds))
+    jar.set(REFRESH_COOKIE, renewed.tokens.refreshToken, cookieOptions(TOKEN_TTL.refreshSeconds))
+  } catch {
+    // Salt okunur çerez deposu. Aktör yine de dönüyor; bkz. yukarısı.
+  }
 
   return {
     tenantId: renewed.user.tenantId,
     userId: renewed.user.userId,
     role: renewed.user.role,
   }
-}
+})
 
 /** Oturum yoksa fırlatır. Korumalı sayfa ve route'ların ilk satırı. */
 export async function requireActor(): Promise<Actor> {
