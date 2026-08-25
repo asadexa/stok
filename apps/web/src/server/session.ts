@@ -30,6 +30,15 @@ import { cache } from 'react'
 const ACCESS_COOKIE = 'stok_at'
 const REFRESH_COOKIE = 'stok_rt'
 
+interface Session {
+  actor: Actor | null
+  /**
+   * Taze çerez yazılabildi mi. Render sırasında `false` olabilir:
+   * Next.js 15 sayfa render'ında çerez deposunu salt okunur tutuyor.
+   */
+  persisted: boolean
+}
+
 interface CookieOptions {
   httpOnly: true
   sameSite: 'lax'
@@ -110,7 +119,7 @@ export async function endSession(): Promise<void> {
  * çalışır, refresh token iki kez döndürülürdü. `cache()` istek başına tek
  * çalıştırma garantisi veriyor; yan etkisi (çerez yazma) de bir kez oluyor.
  */
-export const currentActor = cache(async function currentActor(): Promise<Actor | null> {
+const resolveSession = cache(async function resolveSession(): Promise<Session> {
   const jar = await cookies()
   const access = jar.get(ACCESS_COOKIE)?.value
 
@@ -121,16 +130,16 @@ export const currentActor = cache(async function currentActor(): Promise<Actor |
       if (err instanceof AppError && err.code === 'TOKEN_EXPIRED') return null
       return null
     })
-    if (actor) return actor
+    if (actor) return { actor, persisted: true }
   }
 
   const refresh = jar.get(REFRESH_COOKIE)?.value
-  if (!refresh) return null
+  if (!refresh) return { actor: null, persisted: true }
 
   const renewed = await refreshSession({ refreshToken: refresh }, { db: appDb() }).catch(
     () => null,
   )
-  if (!renewed) return null
+  if (!renewed) return { actor: null, persisted: true }
 
   // ÇEREZ YAZMA RENDER SIRASINDA BAŞARISIZ OLABİLİR VE BU NORMALDİR.
   //
@@ -153,19 +162,74 @@ export const currentActor = cache(async function currentActor(): Promise<Actor |
   //
   // BEDELİ: çerez tazelenene kadar her render bir yenileme sorgusu yapıyor.
   // Kalıcı çözüm yenilemeyi render'dan çıkarmak (T87).
+  let persisted = true
   try {
     jar.set(ACCESS_COOKIE, renewed.tokens.accessToken, cookieOptions(TOKEN_TTL.accessSeconds))
     jar.set(REFRESH_COOKIE, renewed.tokens.refreshToken, cookieOptions(TOKEN_TTL.refreshSeconds))
   } catch {
-    // Salt okunur çerez deposu. Aktör yine de dönüyor; bkz. yukarısı.
+    // Salt okunur çerez deposu (render). İstek yine de tamamlanıyor; taze
+    // çerezi istemci `/oturum/yenile` üzerinden yazdıracak (T87).
+    persisted = false
   }
 
   return {
-    tenantId: renewed.user.tenantId,
-    userId: renewed.user.userId,
-    role: renewed.user.role,
+    actor: {
+      tenantId: renewed.user.tenantId,
+      userId: renewed.user.userId,
+      role: renewed.user.role,
+    },
+    persisted,
   }
 })
+
+/**
+ * İsteğin sahibini çözer. `null` dönüyor, fırlatmıyor: çağıran yer
+ * "giriş ekranına yönlendir" ile "403 döndür" arasında kendisi karar versin.
+ */
+export async function currentActor(): Promise<Actor | null> {
+  return (await resolveSession()).actor
+}
+
+/**
+ * Bu istekte oturum yenilendi ama taze çerez YAZILAMADI mı?
+ *
+ * `true` ise sayfa render sırasında yenileme yaptı ve çerez salt okunurdu.
+ * Kabuk bunu görünce istemciye küçük bir işaret basıyor; istemci de
+ * `POST /oturum/yenile` ile çerezi kalıcılaştırıyor (T87).
+ *
+ * Yapılmasaydı ne olurdu: access çerezi süresi dolmuş hâlde kalır ve SALT
+ * GEZİNEN bir kullanıcı (form göndermeyen) her sayfa açılışında bir yenileme
+ * sorgusu tetiklerdi — kalıcı olarak, çünkü render hiçbir zaman çerezi
+ * yazamıyor. Sunucu eylemi çalıştıran kullanıcıda sorun kendiliğinden
+ * kapanıyordu; salt gezinende kapanmıyordu.
+ */
+export async function sessionNeedsPersist(): Promise<boolean> {
+  const { actor, persisted } = await resolveSession()
+  return actor !== null && !persisted
+}
+
+/**
+ * Taze token'ları çereze yazar. YALNIZCA route handler'dan çağrılır —
+ * çerez yazma orada serbest.
+ *
+ * `currentActor()` zaten yenilemeyi yapıyor; buradaki iş sadece sonucu
+ * kalıcılaştırmak. Ayrı bir yenileme daha yapmıyoruz çünkü `resolveSession`
+ * `cache()` ile sarmalı ve aynı istekte ikinci kez çalışmıyor.
+ */
+export async function persistSession(): Promise<boolean> {
+  const jar = await cookies()
+  const refresh = jar.get(REFRESH_COOKIE)?.value
+  if (!refresh) return false
+
+  const renewed = await refreshSession({ refreshToken: refresh }, { db: appDb() }).catch(
+    () => null,
+  )
+  if (!renewed) return false
+
+  jar.set(ACCESS_COOKIE, renewed.tokens.accessToken, cookieOptions(TOKEN_TTL.accessSeconds))
+  jar.set(REFRESH_COOKIE, renewed.tokens.refreshToken, cookieOptions(TOKEN_TTL.refreshSeconds))
+  return true
+}
 
 /** Oturum yoksa fırlatır. Korumalı sayfa ve route'ların ilk satırı. */
 export async function requireActor(): Promise<Actor> {
