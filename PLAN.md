@@ -1344,6 +1344,141 @@ Ayrıca karar gerektirmeyen 9 düzeltme plana işlendi: `current_stock` tanımı
 sözleşmesi, sebep kodları tek kaynak, İngilizce enum değerleri, PIN kilitleme,
 Türkçe arama normalizasyonu, büyük Excel raporu arka plan işi.
 
+### Faz 9: Arayüz yeniden tasarımı (tasarım incelemesi 2026-08-25)
+
+> **Numaralandırma notu:** Tasarım kararları **TD** öneki taşıyor (TD1-TD6).
+> Bu, "MÜHENDİSLİK İNCELEMESİ KARARLARI (D4-D9)" bölümündeki D-kararlarından
+> ayrıdır ve onlarla karıştırılmamalıdır.
+
+`/plan-design-review` bulgularından türetildi. Karar TD1 = referans görselin tam
+adaptasyonu; TD2 = Kategoriler + Raporlar + Ayarlar eklenir; TD3 = her rota için
+yükleme iskeleti; TTD2 = mobilde alt gezinme çubuğu; TTD3 = `design/` tuvali yeniden yazılır.
+
+Ölçülmüş tasarım sistemi ve tüm mockup'lar:
+https://claude.ai/code/artifact/5579f41a-2794-4146-862b-114c9469c7a8
+
+- [x] **T65 (P1, human: ~4sa / CC: ~30dk)** - arayüz - globals.css: 28 token × 2 tema (açık/koyu) + Outfit/IBM Plex yazı tipleri + tabular-nums yardımcıları
+  - Neden: Bugün 4 token ve tek tema var; color-scheme:light sabit. Tipografi kararı hiç verilmemiş, sistem yazı tipi kullanılıyor.
+- [x] **T66 (P1, human: ~6sa / CC: ~45dk)** - arayüz - shell.tsx: 244px kenar çubuğu + üst şerit (arama, bildirim, tema, avatar, kiracı)
+  - Neden: Bugün üst şerit gezinme + max-w-6xl. Tasarım tuvali bu değişikliği onaylamıştı ama koda hiç uygulanmadı.
+- [x] **T67 (P1, human: ~3sa / CC: ~25dk)** - arayüz - bottom-nav.tsx: 1024px altında 64px alt gezinme çubuğu, 4 sekme + Daha fazla (karar TD4)
+  - Neden: Kod tabanında toplam 2 kırılma noktası var; 244px çubuk 375px telefonda ekranın üçte ikisini yer.
+- [x] **T68 (P1, human: ~2sa / CC: ~15dk)** - erişilebilirlik - field.tsx: 3px odak halkası (7,25:1) + kontrol kenarlığı --line-control (3,40:1)
+  - Neden: outline-none focus:border-slate-900 klavye kullanıcısının tek işaretini 1px ton farkına indiriyor. border-slate-300 beyaza karşı 1,48:1, WCAG 1.4.11 üç kat fazlasını istiyor.
+- [x] **T69 (P1, human: ~1g / CC: ~40dk)** - arayüz - 11 rotaya loading.tsx (içerik şeklinde iskelet) + error.tsx + global-error.tsx (karar TD3)
+  - Neden: apps/web/src altında tek bir loading.tsx veya error.tsx yok. Her sayfa async server component; geçişte eski sayfa donmuş halde bekliyor ve kullanıcı tekrar basıyor.
+- [x] **T70 (P2, human: ~5sa / CC: ~35dk)** - arayüz - Yeni bileşenler: badge.tsx, kpi-card.tsx, product-cell.tsx, empty-state.tsx
+  - Neden: Durum rozeti ve KPI kartı bugün sayfaların içine gömülü; boş durumlar her sayfada elle yazılmış, Kural 09 yapısal olarak zorlanmıyor.
+- [x] **T71 (P2, human: ~6sa / CC: ~45dk)** - arayüz - panel/page.tsx: 4 KPI + alan grafiği + kritik ray + kategori halkası
+  - Neden: Bugün 2 özet kartı var, grafik yok. Referans görselin panel düzeni bu turda uygulanıyor.
+- [x] **T72 (P2, human: ~4sa / CC: ~30dk)** - arayüz - stok/page.tsx: SKU sütunu, ürün jetonu, durum rozeti, 44px satır
+  - Neden: products.sku zaten var ama arayüzde hiç gösterilmiyor. Durum bugün sadece renkle kodlanıyor.
+- [x] **T73 (P2, human: ~4sa / CC: ~30dk)** - özellik - kategoriler/page.tsx: GROUP BY category + ürün sayısı + toplam değer (karar TD2)
+  - Neden: Görselde Kategoriler menüsü var; products.category bugün sadece filtre olarak kullanılıyor, kendi ekranı yok.
+- [x] **T74 (P2, human: ~5sa / CC: ~35dk)** - özellik - raporlar/page.tsx: var olan export API üstüne arayüz (rapor tipi, filtre, kuyruk durumu) (karar TD2)
+  - Neden: /api/rapor/* dört endpoint ile çalışıyor ama ekranı yok; kullanıcı raporun var olduğunu bilmiyor.
+- [x] **T75 (P2, human: ~5sa / CC: ~35dk)** - özellik - ayarlar/page.tsx: profil, parola, toplu kritik eşik, tema tercihi (karar TD2)
+  - Neden: Kritik eşik bugün ürün ürün giriliyor. Tema tercihinin saklanacağı bir yer yok.
+- [ ] **T76 (P2, human: ~1g / CC: ~50dk)** - arayüz - Kalan 8 ekranı yeni bileşenlere geçir (giris, hareket, hareketler, kullanicilar, saglik, urunler/*, not-found)
+  - Neden: Yeni tasarım sistemi tüm ekranlarda tutarlı olmazsa iki dil aynı üründe çarpışır.
+- [ ] **T77 (P2, human: ~1g / CC: ~45dk)** - belgeleme - design/*.dc.html tuvalini yeni sisteme göre yeniden yaz (karar TD5)
+  - Neden: Tuvalin dokuz kuralının üçü artık geçersiz. İki çelişen tasarım sistemi aynı depoda duruyor; üç ay sonra bakan biri yanlış kurala uyar.
+- [ ] **T78 (P3, human: ~1g / CC: ~40dk)** - performans - Aylık stok değeri özet tablosu veya materialized view (panel grafiğinin veri kaynağı)
+  - Neden: Grafik stock_movements.unit_cost üstünden türetilebilir ama her panel açılışında 5000+ satır taramak pahalı.
+- [ ] **T79 (P3, human: ~2sa / CC: ~15dk)** - erişilebilirlik - Atlama bağlantısı (skip link) + hareket onay şeridine aria-live
+  - Neden: Klavye kullanıcısı her sayfada 9 menü satırını geçmek zorunda. Kayıt onayı ("446 → 496") ekran okuyucuya hiç duyurulmuyor.
+
+**T87 (P1, human: ~1g / CC: ~1sa)** - auth - Oturum yenilemeyi render'dan çıkar
+  - Neden: `currentActor()` süresi dolmuş access token'ı render sırasında yeniliyor ve
+    çerez yazmaya çalışıyor. Next.js 15 bunu Server Component render'ında yasaklıyor;
+    sonuç, giriş yaptıktan 15 dakika sonra HER sayfada 500 hatasıydı. Çökme try/catch
+    ile kapatıldı (yenileme token'ı döndürülmediği için yutmak güvenli), ama çerez
+    tazelenene kadar her render bir yenileme sorgusu yapıyor. Kalıcı çözüm: yenilemeyi
+    bir route handler'a veya Node çalışma zamanlı middleware'e taşımak.
+
+**Faz 9 temel katmanı + TD2 ekranları tamamlandı (T65-T75).**
+
+TD2 ile menü 6 → 9 satıra çıktı. Üç yeni ekranın hiçbiri YENİ VERİ MODELİ
+gerektirmedi; üçü de var olanı görünür kıldı:
+
+- **Kategoriler** — `products.category` bugüne kadar yalnızca stok tablosunda bir
+  filtreydi. Ekran kategori bazında ürün sayısı, kritik sayısı, toplam adet ve
+  stok değeri veriyor. Kategori ayrı tablo DEĞİL, serbest metin: "Kalem" ile
+  "kalem" ayrı görünüyor ve bu bilinçli — normalizasyon, kullanıcının yazdığını
+  sessizce değiştirip gizli bir eşleme kuralı yaratırdı.
+- **Raporlar** — `/api/rapor/*` dört uçla zaten çalışıyordu ama ekranı yoktu;
+  raporun var olduğunu yalnızca ilgili tablonun köşesine bakan biliyordu.
+  Buradakiler filtresiz (tüm stok, tüm hareketler); filtre gerekiyorsa her kart
+  ilgili tabloya yönlendiriyor.
+- **Ayarlar** — kapsam üç şey: hesap bilgisi, tema, parola. İşletme ayarı ve
+  bildirim tercihi GİRMEDİ çünkü arkalarında veri modeli yok; koymak, açılınca
+  hiçbir şey yapmayan anahtarlar dizmek olurdu.
+
+Yolda kapatılan bir güvenlik açığı: `setUserPassword` kendi parolanı mevcut
+parolayı SORMADAN değiştirmene izin veriyordu. Yönetici sıfırlaması için doğru,
+kendi hesabı için değil — depoda ekran açık bırakılıyor ve başında kimse olmayan
+bir oturum parolanın değiştirilmesine yetmemeli. `changeOwnPassword` mevcut
+parolayı doğruluyor; 6 test bunu kilitliyor. Doğrulama: 462 test geçiyor
+(shared 56, db 53, core 353), `next build` 17 rota, açık ve koyu tema tarayıcıda
+ölçüldü (`--focus` 7,25:1, `--line-control` 3,40:1), alt gezinme çubuğu 375 px'te
+94×63 px hedeflerle çalışıyor, iskelet ekran kalıcı kabuğun içinde render ediliyor.
+
+**Yol boyunca bulunan ve düzeltilen, plan dışı KUSURLAR:**
+
+0. `apps/web/src/server/session.ts` — **giriş sonrası 15. dakikada her sayfa 500
+   veriyordu.** Süresi dolmuş access token'ın sessiz yenilemesi render sırasında
+   çerez yazmaya çalışıyor; Next.js 15 buna izin vermiyor. Kodun önlemek istediği
+   şey ("kullanıcıyı 15 dakikada bir dışarı atma") çökmeye dönüşmüştü. Çökme
+   kapatıldı, kalıcı çözüm T87.
+
+1. `packages/db/src/testing.ts` — migration klasörü `new URL(...).pathname` ile
+   çözülüyordu. Windows'ta bu `/C:/stok/...` üretiyor (sürücü harfinden önce eğik
+   çizgi) ve drizzle `meta/_journal.json` dosyasını bulamıyor. Sonuç: **db ve core
+   test paketleri Windows'ta hiç çalışmamış.** `fileURLToPath` ile düzeltildi;
+   406 test ilk kez bu platformda koştu.
+2. `apps/web/src/server/session.ts` — `currentActor()` `cache()` ile sarmalandı.
+   Kabuk düzene taşınınca istek başına iki çağrı oluyor; sarmalanmasaydı süresi
+   dolmuş access token'da yenileme iki kez çalışır ve refresh token iki kez
+   döndürülürdü.
+
+**T68 ve T69 tasarımdan bağımsız hatalardır.** T68 ölçülmüş bir erişilebilirlik
+gerilemesi (`outline-none`, kenarlık 1,48:1), T69 ise bugün var olan ve kullanıcıya
+"tıkladım mı" sorusu sorduran bir eksiklik. Tasarım kararı ne olursa olsun kapanmalıydı.
+
+
+#### Faz 9b: Referans görselden gelen özellikler (karar TD6)
+
+Görseldeki özellikler tek tek değerlendirildi. Üçü girdi, biri kapsam dışı kaldı.
+
+| Karar | Özellik | Sonuç |
+|---|---|---|
+| **TD6.1** | Bildirim zili + sesli/titreşimli geri bildirim | **Dahil** — E4 ve E7 zaten v1 kapsamındaydı, yapılmamıştı (T80, T81) |
+| **TD6.2** | Ürün fotoğrafı | **Dahil** — şema + yükleme + toplu aktarma (T82-T84) |
+| **TD6.3** | Ctrl+K genel arama | **Dahil** — Kural 05'in işlevsel gereği (T85, T86) |
+| **TD6.4** | Tedarikçiler / Siparişler | **Çıkar** — "KAPSAM DIŞI → Faz 2" kararı teyit edildi |
+| — | Kiracı değiştirici | **Uygulanamaz** — `users.tenantId` notNull tek FK, bir kullanıcı tek işletmeye ait. Kontrol hesap menüsü olarak yorumlandı |
+
+- [ ] **T80 (P2, human: ~4sa / CC: ~30dk)** - özellik - Bildirim zili: kritik ürün + başarısız arka plan işi sayısı + açılır liste (E7 web karşılığı)
+  - Neden: PLAN.md E7 v1 kapsamında ama yapılmadı. Referans görselde zil var; sayı bağlanmazsa boş süs kalır.
+- [ ] **T81 (P2, human: ~4sa / CC: ~25dk)** - arayüz - Barkod kaydında sesli + titreşimli geri bildirim + sessiz mod tercihi (E4 web karşılığı)
+  - Neden: PLAN.md E4 v1 kapsamında: "çalışan ekrana bakmaz, dinler, hız 2 katına çıkar". Web hareket ekranında hiç yok.
+- [ ] **T82 (P2, human: ~2sa / CC: ~20dk)** - şema - products.image_url sütunu + migration + depolama yapılandırması
+  - Neden: Referans görselde her ürünün fotoğrafı var; products tablosunda görsel sütunu yok. T83 ve T84 buna bağlı.
+- [ ] **T83 (P2, human: ~2g / CC: ~1,5sa)** - özellik - Ürün görseli yükleme + boyutlandırma + baş harf karesi ZORUNLU geri düşüş
+  - Neden: Fotoğrafsız ürün bozuk görünmemeli: 800 kalemlik katalogda çoğu satır uzun süre fotoğrafsız kalacak.
+- [ ] **T84 (P2, human: ~4sa / CC: ~30dk)** - özellik - Toplu aktarmada görsel URL sütunu + önizlemede görsel doğrulama
+  - Neden: Elle fotoğraf çekmeden tedarikçi kataloğundan eşleştirme yolu; fotoğrafın gerçekten dolmasının tek pratik yolu.
+- [ ] **T85 (P2, human: ~1g / CC: ~50dk)** - özellik - Birleşik arama endpoint: ürün + barkod + hareket, Türkçe normalizasyonla
+  - Neden: Bugün arama sadece /stok içinde. Tasarım Kural 05 "arama hep görünür, hep odaklı" diyor; barkod okuyucu odak bulamazsa okutma sessizce kayboluyor.
+- [ ] **T86 (P2, human: ~1g / CC: ~45dk)** - arayüz - Ctrl+K komut paleti: barkod tam eşleşme → Giriş/Çıkış, SKU/ad → ürün, sonuç yok → yeni ürün ekle
+  - Neden: PLAN.md boş durum tablosu zaten "arama sonuç yok → Yeni ürün olarak ekle" diyor; palet bunu her ekrandan erişilebilir kılıyor.
+
+**T83'de baş harf karesi zorunlu geri düşüş.** Fotoğraf isteğe bağlı bir alan;
+fotoğrafsız ürün bozuk değil, sade görünmeli. **T84 bu kararın diğer yarısı:**
+800 kalemlik katalogda fotoğrafın elle çekilerek dolması gerçekçi değil, toplu
+aktarmadaki URL sütunu doldurmanın tek pratik yolu.
+
+
 ---
 
 ## GSTACK REVIEW REPORT
@@ -1353,7 +1488,7 @@ Türkçe arama normalizasyonu, büyük Excel raporu arka plan işi.
 | CEO Review | `/plan-ceo-review` | Kapsam ve strateji | 1 | ISSUES_OPEN | Mod SELECTIVE EXPANSION, 10 fırsat sunuldu, 6 kabul, 4 ertelendi, 4 kritik açık |
 | Eng Review | `/plan-eng-review` | Mimari ve testler (zorunlu) | 1 | ISSUES_OPEN (PLAN) | 16 bulgu, 6 karar (D4-D9), 9 düzeltme, 8 yeni görev, 4 kritik açık taşındı |
 | Codex Review | `/codex review` | Bağımsız 2. görüş | 0 | - | Codex kurulu değil |
-| Design Review | `/plan-design-review` | UI/UX açıkları | 0 | - | Çalıştırılmadı |
+| Design Review | `/plan-design-review` | UI/UX açıkları | 1 | ISSUES_OPEN | puan: 3/10 → 6/10, 9 karar (TD1-TD6), 22 görev (T65-T86), 2 kalem kapsam dışı |
 | DX Review | `/plan-devex-review` | Geliştirici deneyimi | 0 | - | Çalıştırılmadı |
 
 **ENG REVIEW BULGULARI:** Mimari 5 (2 P1), Kod kalitesi 6 (2 P1), Test 30 kapsam boşluğu
@@ -1363,7 +1498,8 @@ Türkçe arama normalizasyonu, büyük Excel raporu arka plan işi.
 hatası). Dördü de T14-T17'de kapatılıyor. Eng review yeni kritik açık eklemedi ama
 G1'in çözümünü değiştirdi (stream yerine eşik üstü arka plan işi).
 
-**UNRESOLVED:** 4. Bunlar hiçbir zaman açıkça cevaplanmadı, varsayılanlarla ilerleniyor:
+**UNRESOLVED:** 4 (ürün stratejisi) + 8 (tasarım kapsamı, yukarıda).
+Ürün stratejisi açıkları: Bunlar hiçbir zaman açıkça cevaplanmadı, varsayılanlarla ilerleniyor:
 U1 negatif stok politikası (varsayılan: çalışan engellenir, admin geçebilir),
 U2 maliyet yöntemi (varsayılan: ağırlıklı ortalama, **muhasebeciye sorulmalı**),
 U3 hosting (varsayılan: Supabase),
@@ -1372,6 +1508,23 @@ U4 ürünün asıl çözdüğü acı (ilk demoda hangi ekranın açılacağını
 **OUTSIDE VOICE:** Çalıştırılmadı. Codex kurulu değil; Claude alt ajanı ile bağımsız
 ikinci görüş alınabilir, kullanıcı onayı bekliyor.
 
-**VERDICT:** CEO + ENG İNCELEMELERİ TAMAMLANDI. Uygulamaya başlanabilir.
+**DESIGN REVIEW BULGULARI (2026-08-25):** Yedi geçiş çalıştırıldı. Bilgi mimarisi 3→7,
+etkileşim durumları 2→5, kullanıcı yolculuğu 6→8, AI slop 7, tasarım sistemi uyumu 7→4
+(iki çelişen sistem; T77 kapatıyor), duyarlılık ve erişilebilirlik 3→6. Genel 3/10 → 6/10.
+
+Kodda iki ölçülebilir açık bulundu, ikisi de tasarımdan bağımsız:
+`loading.tsx`/`error.tsx` hiçbir rotada yok (T69) ve `outline-none` +
+`border-slate-300` (1,48:1) erişilebilirlik gerilemesi (T68).
+
+Referans görselin 19 öğesi incelendi: 7'si bugünkü veriyle hazırdı, 4'ü bu tura girdi
+(Kategoriler, Raporlar, Ayarlar, koyu tema). Kalanlar TTTD2'da tek tek karara bağlandı:
+ürün fotoğrafı, bildirim zili ve Ctrl+K arama kapsama ALINDI (T80-T86); Tedarikçiler ve
+Siparişler için "KAPSAM DIŞI → Faz 2" kararı TEYİT EDİLDİ.
+
+TTTD2'da ortaya çıkan bir veri modeli gerçeği: görselin kiracı değiştirici kontrolü bu üründe
+uygulanamaz. `users.tenantId` notNull ve tek FK, yani bir kullanıcı tam olarak bir
+işletmeye ait; değiştirilecek bir şey yok. Kontrol hesap menüsü olarak yorumlandı.
+
+**VERDICT:** CEO + ENG + DESIGN İNCELEMELERİ TAMAMLANDI. Uygulamaya başlanabilir.
 U2 (maliyet yöntemi) tek yönlü kapı olduğu için Faz 2'den önce cevaplanmalı;
 diğer üç açık soru uygulama sırasında geri alınabilir.
