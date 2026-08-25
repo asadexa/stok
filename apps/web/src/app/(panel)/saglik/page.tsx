@@ -3,7 +3,6 @@ import type { HealthCheck, HealthLevel } from '@stok/core'
 import { appDb } from '@stok/db'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { Shell } from '@/components/shell'
 import { formatDateTime } from '@/lib/format'
 import { currentActor } from '@/server/session'
 
@@ -24,7 +23,7 @@ import { currentActor } from '@/server/session'
 
 const TONE: Record<HealthLevel, { border: string; text: string; icon: string; label: string }> = {
   ok: { border: 'border-giris', text: 'text-giris', icon: '✓', label: 'Sorun yok' },
-  warn: { border: 'border-slate-400', text: 'text-slate-700', icon: '!', label: 'Dikkat' },
+  warn: { border: 'border-line-control', text: 'text-ink-2', icon: '!', label: 'Dikkat' },
   error: { border: 'border-kritik', text: 'text-kritik', icon: '⚠', label: 'Sorun var' },
 }
 
@@ -37,16 +36,16 @@ export default async function HealthPage() {
   const overall = TONE[health.level]
 
   return (
-    <Shell role={actor.role} active="/saglik">
+    <>
       <div className="mb-4 flex flex-wrap items-baseline gap-3">
         <h1 className="text-xl font-semibold">Sistem sağlığı</h1>
-        <Link href="/panel" className="text-sm text-slate-600 underline">
+        <Link href="/panel" className="text-sm text-ink-2 underline">
           Panele dön
         </Link>
       </div>
 
       <div
-        className={`mb-6 flex items-center gap-3 rounded-md border bg-white p-4 ${overall.border}`}
+        className={`mb-6 flex items-center gap-3 rounded-md border bg-surface p-4 ${overall.border}`}
       >
         {/* Renk tek başına anlam taşımıyor: ikon ve metin de var. */}
         <span aria-hidden className={`text-2xl ${overall.text}`}>
@@ -54,7 +53,7 @@ export default async function HealthPage() {
         </span>
         <div>
           <p className={`font-semibold ${overall.text}`}>{overall.label}</p>
-          <p className="text-sm text-slate-600">
+          <p className="text-sm text-ink-2">
             Kontrol zamanı: {formatDateTime(health.checkedAt)}
           </p>
         </div>
@@ -66,25 +65,25 @@ export default async function HealthPage() {
         ))}
       </ul>
 
-      <p className="mt-6 text-sm text-slate-600">
+      <p className="mt-6 text-sm text-ink-2">
         Bu sayfa her açılışta yeniden hesaplanıyor. Defter kontrolü bütün hareketleri tarar;
         büyük depolarda birkaç saniye sürebilir.
       </p>
-    </Shell>
+    </>
   )
 }
 
 function CheckRow({ check }: { check: HealthCheck }) {
   const tone = TONE[check.level]
   return (
-    <li className={`rounded-md border bg-white p-4 ${tone.border}`}>
+    <li className={`rounded-md border bg-surface p-4 ${tone.border}`}>
       <div className="flex items-start gap-3">
         <span aria-hidden className={`text-xl ${tone.text}`}>
           {tone.icon}
         </span>
         <div>
           <p className={check.level === 'ok' ? '' : `font-medium ${tone.text}`}>{check.summary}</p>
-          {check.hint ? <p className="mt-1 text-sm text-slate-600">{check.hint}</p> : null}
+          {check.hint ? <p className="mt-1 text-sm text-ink-2">{check.hint}</p> : null}
         </div>
       </div>
     </li>

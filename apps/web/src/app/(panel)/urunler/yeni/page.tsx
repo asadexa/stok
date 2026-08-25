@@ -4,7 +4,6 @@ import { appDb } from '@stok/db'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { Alert, SelectField, SubmitButton, TextField } from '@/components/field'
-import { Shell } from '@/components/shell'
 import {
   errorQuery,
   messageFrom,
@@ -80,15 +79,16 @@ export default async function NewProductPage({
   }
 
   return (
-    <Shell role={actor.role} active="/stok">
+    <>
+      <h2 className="mb-4 font-display text-lg font-semibold">Yeni ürün</h2>
       <div className="mb-4 flex items-center gap-3">
         <h1 className="text-xl font-semibold">Yeni ürün</h1>
-        <Link href="/stok" className="text-sm text-slate-600 underline">
+        <Link href="/stok" className="text-sm text-ink-2 underline">
           Stok tablosuna dön
         </Link>
       </div>
 
-      <form action={submit} className="max-w-2xl space-y-5 rounded-md border border-slate-200 bg-white p-5">
+      <form action={submit} className="max-w-2xl space-y-5 rounded-md border border-line bg-surface p-5">
         {message ? <Alert>{message}</Alert> : null}
 
         <TextField
@@ -141,12 +141,12 @@ export default async function NewProductPage({
           <SubmitButton>Kaydet</SubmitButton>
           <Link
             href="/stok"
-            className="h-14 rounded-md border border-slate-300 px-6 text-base font-medium leading-[3.5rem]"
+            className="h-14 rounded-md border border-line-control px-6 text-base font-medium leading-[3.5rem]"
           >
             Vazgeç
           </Link>
         </div>
       </form>
-    </Shell>
+    </>
   )
 }

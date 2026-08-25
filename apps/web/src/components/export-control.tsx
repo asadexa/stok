@@ -24,7 +24,7 @@ import type { ExportPlan } from '@stok/core'
  */
 
 const BUTTON =
-  'inline-flex h-14 items-center rounded-md border border-slate-300 bg-white px-5 text-base font-medium hover:bg-slate-100'
+  'inline-flex h-14 items-center rounded-md border border-line-control bg-surface px-5 text-base font-medium hover:bg-surface-2'
 
 export function ExportControl({
   href,
@@ -56,7 +56,7 @@ export function ExportControl({
     return (
       <a href={href} className={BUTTON}>
         Excel&apos;e aktar
-        <span className="tabular ml-2 text-sm font-normal text-slate-500">{rows} satır</span>
+        <span className="tabular ml-2 text-sm font-normal text-ink-3">{rows} satır</span>
       </a>
     )
   }
@@ -65,9 +65,9 @@ export function ExportControl({
     <form action={queueAction} className="flex flex-wrap items-center gap-3">
       <button type="submit" className={BUTTON}>
         Raporu hazırla
-        <span className="tabular ml-2 text-sm font-normal text-slate-500">{rows} satır</span>
+        <span className="tabular ml-2 text-sm font-normal text-ink-3">{rows} satır</span>
       </button>
-      <span className="text-sm text-slate-600">
+      <span className="text-sm text-ink-2">
         Bu boyuttaki rapor arka planda hazırlanıp e-posta ile gönderilir.
       </span>
     </form>

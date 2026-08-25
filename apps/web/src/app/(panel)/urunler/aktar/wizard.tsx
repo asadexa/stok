@@ -40,7 +40,7 @@ export function ImportWizard({
         <ResultPanel result={result} />
       ) : (
         <>
-          <form action={analyzeAction} className="space-y-4 rounded-md border border-slate-200 bg-white p-5">
+          <form action={analyzeAction} className="space-y-4 rounded-md border border-line bg-surface p-5">
             <label className="block">
               <span className="text-sm font-medium">Dosya (.xlsx veya .csv)</span>
               <input
@@ -48,13 +48,13 @@ export function ImportWizard({
                 name="dosya"
                 accept=".xlsx,.csv,text/csv"
                 required
-                className="mt-1 block w-full rounded-md border border-slate-300 bg-white p-3 text-base file:mr-3 file:rounded file:border-0 file:bg-slate-900 file:px-4 file:py-2 file:text-white"
+                className="mt-1 block w-full rounded-md border border-line-control bg-surface p-3 text-base file:mr-3 file:rounded file:border-0 file:bg-accent file:px-4 file:py-2 file:text-accent-ink"
               />
             </label>
             <button
               type="submit"
               disabled={analyzing}
-              className="h-14 rounded-md bg-slate-900 px-6 text-base font-medium text-white hover:bg-slate-700 disabled:opacity-60"
+              className="h-14 rounded-md bg-accent px-6 text-base font-medium text-accent-ink hover:brightness-110 disabled:opacity-60"
             >
               {analyzing ? 'Okunuyor…' : 'Dosyayı oku ve önizle'}
             </button>
@@ -100,8 +100,8 @@ function PreviewPanel({
       </div>
 
       {errorRows.length > 0 ? (
-        <div className="rounded-md border border-kritik bg-white">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+        <div className="rounded-md border border-kritik bg-surface">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3">
             <h2 className="font-semibold text-kritik">Hatalı satırlar</h2>
             {/* Rapor indirme DÜZ FORM POST: 60 satırlık hatayı ekrandan tek
                 tek okuyup düzeltmek mümkün değil, kullanıcı iki dosyayı yan
@@ -110,7 +110,7 @@ function PreviewPanel({
               <input type="hidden" name="dosyaJson" value={fileJson} />
               <button
                 type="submit"
-                className="rounded-md border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100"
+                className="rounded-md border border-line-control px-4 py-2 text-sm hover:bg-surface-2"
               >
                 Hata raporunu indir
               </button>
@@ -118,7 +118,7 @@ function PreviewPanel({
           </div>
           <ErrorTable rows={errorRows.slice(0, 50)} />
           {errorRows.length > 50 ? (
-            <p className="border-t border-slate-100 px-4 py-2 text-sm text-slate-600">
+            <p className="border-t border-line px-4 py-2 text-sm text-ink-2">
               …ve {errorRows.length - 50} satır daha. Tamamı için raporu indirin.
             </p>
           ) : null}
@@ -131,12 +131,12 @@ function PreviewPanel({
         <button
           type="submit"
           disabled={committing || create + update === 0}
-          className="h-14 rounded-md bg-slate-900 px-6 text-base font-medium text-white hover:bg-slate-700 disabled:opacity-60"
+          className="h-14 rounded-md bg-accent px-6 text-base font-medium text-accent-ink hover:brightness-110 disabled:opacity-60"
         >
           {committing ? 'Aktarılıyor…' : `${create + update} satırı aktar`}
         </button>
         {error > 0 ? (
-          <span className="text-sm text-slate-600">
+          <span className="text-sm text-ink-2">
             {error} hatalı satır atlanacak. Önce düzeltmek isterseniz raporu indirin.
           </span>
         ) : null}
@@ -159,8 +159,8 @@ function ResultPanel({ result }: { result: NonNullable<AnalyzeState['result']> }
       </div>
 
       {result.errors.length > 0 ? (
-        <div className="rounded-md border border-kritik bg-white">
-          <h2 className="border-b border-slate-200 px-4 py-3 font-semibold text-kritik">
+        <div className="rounded-md border border-kritik bg-surface">
+          <h2 className="border-b border-line px-4 py-3 font-semibold text-kritik">
             Aktarılamayan satırlar
           </h2>
           <ErrorTable rows={result.errors.slice(0, 50)} />
@@ -169,7 +169,7 @@ function ResultPanel({ result }: { result: NonNullable<AnalyzeState['result']> }
 
       <a
         href="/urunler/aktar"
-        className="inline-flex h-14 items-center rounded-md border border-slate-300 bg-white px-5 text-base font-medium hover:bg-slate-100"
+        className="inline-flex h-14 items-center rounded-md border border-line-control bg-surface px-5 text-base font-medium hover:bg-surface-2"
       >
         Yeni dosya yükle
       </a>
@@ -181,7 +181,7 @@ function ErrorTable({ rows }: { rows: PreviewRow[] }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
-        <thead className="text-left text-slate-500">
+        <thead className="text-left text-ink-3">
           <tr>
             <th className="px-4 py-2 font-medium">Satır</th>
             <th className="px-4 py-2 font-medium">Stok Kodu</th>
@@ -191,11 +191,11 @@ function ErrorTable({ rows }: { rows: PreviewRow[] }) {
         </thead>
         <tbody>
           {rows.map((row) => (
-            <tr key={row.rowNumber} className="border-t border-slate-100 align-top">
+            <tr key={row.rowNumber} className="border-t border-line align-top">
               <td className="tabular px-4 py-2">{row.rowNumber}</td>
               <td className="tabular px-4 py-2">{row.sku || '—'}</td>
               <td className="px-4 py-2">{row.name || '—'}</td>
-              <td className="px-4 py-2 text-slate-700">
+              <td className="px-4 py-2 text-ink-2">
                 {row.issues.map((issue, i) => (
                   <div key={i}>
                     {issue.column ? (
@@ -224,8 +224,8 @@ function Count({
 }) {
   const color = tone === 'giris' ? 'text-giris' : tone === 'kritik' ? 'text-kritik' : ''
   return (
-    <div className="rounded-md border border-slate-200 bg-white p-4">
-      <p className="text-sm text-slate-600">{label}</p>
+    <div className="rounded-md border border-line bg-surface p-4">
+      <p className="text-sm text-ink-2">{label}</p>
       <p className={`tabular mt-1 text-3xl font-semibold ${color}`}>{value}</p>
     </div>
   )

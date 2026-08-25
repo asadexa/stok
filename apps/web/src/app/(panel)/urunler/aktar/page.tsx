@@ -1,7 +1,6 @@
 import { IMPORT_ROW_LIMIT, actorCan } from '@stok/core'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { Shell } from '@/components/shell'
 import { currentActor } from '@/server/session'
 import { analyzeAction, commitAction } from './actions'
 import { ImportWizard } from './wizard'
@@ -26,15 +25,16 @@ export default async function ImportPage() {
   if (!actorCan(actor, 'product:create')) redirect('/stok')
 
   return (
-    <Shell role={actor.role} active="/stok">
+    <>
+      <h2 className="mb-4 font-display text-lg font-semibold">Toplu aktarma</h2>
       <div className="mb-4 flex flex-wrap items-baseline gap-3">
         <h1 className="text-xl font-semibold">Toplu ürün aktarma</h1>
-        <Link href="/stok" className="text-sm text-slate-600 underline">
+        <Link href="/stok" className="text-sm text-ink-2 underline">
           Stok tablosuna dön
         </Link>
       </div>
 
-      <section className="mb-6 rounded-md border border-slate-200 bg-white p-5 text-sm text-slate-700">
+      <section className="mb-6 rounded-md border border-line bg-surface p-5 text-sm text-ink-2">
         <p className="mb-3">
           Elinizdeki listeyi Excel (.xlsx) veya CSV olarak yükleyin. Dosya{' '}
           <span className="font-medium">önce okunur ve size gösterilir</span>; hiçbir şey siz
@@ -59,6 +59,6 @@ export default async function ImportPage() {
       </section>
 
       <ImportWizard analyze={analyzeAction} commit={commitAction} />
-    </Shell>
+    </>
   )
 }

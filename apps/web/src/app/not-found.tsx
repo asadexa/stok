@@ -15,12 +15,12 @@ export default function NotFound() {
     <main className="flex min-h-screen items-center justify-center p-6">
       <div className="max-w-sm text-center">
         <h1 className="text-2xl font-semibold">Sayfa bulunamadı</h1>
-        <p className="mt-2 text-slate-600">
+        <p className="mt-2 text-ink-2">
           Aradığınız sayfa taşınmış veya bağlantı eskimiş olabilir.
         </p>
         <Link
           href="/panel"
-          className="mt-6 inline-block h-14 rounded-md bg-slate-900 px-6 text-base font-medium leading-[3.5rem] text-white hover:bg-slate-700"
+          className="mt-6 inline-block h-14 rounded-md bg-accent px-6 text-base font-medium leading-[3.5rem] text-accent-ink hover:brightness-110"
         >
           Panele dön
         </Link>

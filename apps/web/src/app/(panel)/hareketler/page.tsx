@@ -8,7 +8,6 @@ import { actorCan, exportMovements, getProduct, listMovements, listTenantUsers }
 import { appDb } from '@stok/db'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { Shell } from '@/components/shell'
 import { ExportControl } from '@/components/export-control'
 import { Pagination } from '@/components/pagination'
 import { dayEndIso, dayStartIso, formatDateTime, formatMoney } from '@/lib/format'
@@ -148,7 +147,7 @@ export default async function MovementsPage({
   const message = messageFrom(params)
 
   return (
-    <Shell role={actor.role} active="/hareketler">
+    <>
       {message ? (
         <p
           role="alert"
@@ -160,7 +159,7 @@ export default async function MovementsPage({
       ) : null}
 
       {params.rapor === 'kuyrukta' ? (
-        <p className="mb-4 flex gap-2 rounded-md border border-giris bg-white p-3 text-sm text-slate-700">
+        <p className="mb-4 flex gap-2 rounded-md border border-giris bg-surface p-3 text-sm text-ink-2">
           <span aria-hidden className="text-giris">
             ✓
           </span>
@@ -183,7 +182,7 @@ export default async function MovementsPage({
       ) : null}
 
       {actor.role !== 'ADMIN' ? (
-        <p className="mb-4 rounded-md border border-slate-200 bg-white p-3 text-sm text-slate-600">
+        <p className="mb-4 rounded-md border border-line bg-surface p-3 text-sm text-ink-2">
           Bu listede yalnızca sizin yaptığınız hareketler görünür.
         </p>
       ) : null}
@@ -200,7 +199,7 @@ export default async function MovementsPage({
             <select
               name="kullanici"
               defaultValue={userId ?? ''}
-              className="mt-1 h-14 w-full rounded-md border border-slate-300 bg-white px-3 text-base outline-none focus:border-slate-900"
+              className="mt-1 h-14 w-full rounded-md border border-line-control bg-surface px-3 text-base"
             >
               <option value="">Tümü</option>
               {people.map((p) => (
@@ -220,7 +219,7 @@ export default async function MovementsPage({
           <select
             name="sebep"
             defaultValue={reason ?? ''}
-            className="mt-1 h-14 w-full rounded-md border border-slate-300 bg-white px-3 text-base outline-none focus:border-slate-900"
+            className="mt-1 h-14 w-full rounded-md border border-line-control bg-surface px-3 text-base"
           >
             <option value="">Tümü</option>
             {/* Sayım düzeltmeleri de listede: giriş ekranında seçilemezler
@@ -252,7 +251,7 @@ export default async function MovementsPage({
             name="baslangic"
             type="date"
             defaultValue={params.baslangic ?? ''}
-            className="mt-1 h-14 w-full rounded-md border border-slate-300 bg-white px-3 text-base outline-none focus:border-slate-900"
+            className="mt-1 h-14 w-full rounded-md border border-line-control bg-surface px-3 text-base"
           />
         </label>
 
@@ -262,13 +261,13 @@ export default async function MovementsPage({
             name="bitis"
             type="date"
             defaultValue={params.bitis ?? ''}
-            className="mt-1 h-14 w-full rounded-md border border-slate-300 bg-white px-3 text-base outline-none focus:border-slate-900"
+            className="mt-1 h-14 w-full rounded-md border border-line-control bg-surface px-3 text-base"
           />
         </label>
 
         <button
           type="submit"
-          className="h-14 rounded-md bg-slate-900 px-6 text-base font-medium text-white hover:bg-slate-700"
+          className="h-14 rounded-md bg-accent px-6 text-base font-medium text-accent-ink hover:brightness-110"
         >
           Filtrele
         </button>
@@ -276,7 +275,7 @@ export default async function MovementsPage({
         {hasFilter ? (
           <Link
             href="/hareketler"
-            className="h-14 leading-[3.5rem] text-sm text-slate-600 underline"
+            className="h-14 leading-[3.5rem] text-sm text-ink-2 underline"
           >
             Temizle
           </Link>
@@ -284,21 +283,21 @@ export default async function MovementsPage({
       </form>
 
       {product ? (
-        <p className="mb-4 text-sm text-slate-600">
-          <span className="font-medium text-slate-900">{product.name}</span>{' '}
+        <p className="mb-4 text-sm text-ink-2">
+          <span className="font-medium text-ink">{product.name}</span>{' '}
           <span className="tabular">({product.sku})</span> ürününün hareketleri
         </p>
       ) : null}
 
-      <section aria-label="Hareket logu" className="rounded-md border border-slate-200 bg-white">
+      <section aria-label="Hareket logu" className="rounded-md border border-line bg-surface">
         {visible.length === 0 ? (
-          <p className="p-6 text-slate-600">
+          <p className="p-6 text-ink-2">
             {hasFilter ? 'Bu filtrelere uyan hareket yok.' : 'Henüz hareket yok.'}
           </p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="text-left text-slate-500">
+              <thead className="text-left text-ink-3">
                 <tr>
                   <th className="px-4 py-2 font-medium">Tarih</th>
                   <th className="px-4 py-2 font-medium">Kullanıcı</th>
@@ -311,8 +310,8 @@ export default async function MovementsPage({
               </thead>
               <tbody>
                 {visible.map((m) => (
-                  <tr key={m.id} className="border-t border-slate-100 align-top">
-                    <td className="tabular whitespace-nowrap px-4 py-2 text-slate-600">
+                  <tr key={m.id} className="border-t border-line align-top">
+                    <td className="tabular whitespace-nowrap px-4 py-2 text-ink-2">
                       {formatDateTime(m.createdAt)}
                     </td>
                     <td className="px-4 py-2">{m.userName}</td>
@@ -323,7 +322,7 @@ export default async function MovementsPage({
                       >
                         {m.productName}
                       </Link>
-                      <div className="tabular text-xs text-slate-500">{m.productSku}</div>
+                      <div className="tabular text-xs text-ink-3">{m.productSku}</div>
                     </td>
                     <td
                       className={`tabular whitespace-nowrap px-4 py-2 text-right font-medium ${
@@ -334,15 +333,15 @@ export default async function MovementsPage({
                       {m.delta > 0 ? '↑ +' : '↓ −'}
                       {Math.abs(m.delta).toLocaleString('tr-TR')}
                     </td>
-                    <td className="px-4 py-2 text-slate-600">
+                    <td className="px-4 py-2 text-ink-2">
                       {reasonLabel(m.reason as MovementReason)}
                     </td>
                     {showCost ? (
-                      <td className="tabular px-4 py-2 text-right text-slate-600">
+                      <td className="tabular px-4 py-2 text-right text-ink-2">
                         {m.unitCost == null ? '—' : `${formatMoney(m.unitCost)} ₺`}
                       </td>
                     ) : null}
-                    <td className="px-4 py-2 text-slate-600">{m.note ?? ''}</td>
+                    <td className="px-4 py-2 text-ink-2">{m.note ?? ''}</td>
                   </tr>
                 ))}
               </tbody>
@@ -359,6 +358,6 @@ export default async function MovementsPage({
           hasNext={hasNext}
         />
       </section>
-    </Shell>
+    </>
   )
 }

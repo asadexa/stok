@@ -4,7 +4,6 @@ import { appDb } from '@stok/db'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { Alert, Notice, SelectField, SubmitButton, TextField } from '@/components/field'
-import { Shell } from '@/components/shell'
 import { type FormParams, errorQuery, messageFrom, optionalText, text } from '@/server/form'
 import { currentActor } from '@/server/session'
 
@@ -116,10 +115,10 @@ export default async function UsersPage({
   }
 
   return (
-    <Shell role={actor.role} active="/kullanicilar">
+    <>
       <div className="mb-4 flex flex-wrap items-baseline gap-3">
         <h1 className="text-xl font-semibold">Kullanıcılar</h1>
-        <Link href="/panel" className="text-sm text-slate-600 underline">
+        <Link href="/panel" className="text-sm text-ink-2 underline">
           Panele dön
         </Link>
       </div>
@@ -133,25 +132,25 @@ export default async function UsersPage({
         ) : null}
       </div>
 
-      <section aria-label="Kullanıcı listesi" className="mb-6 rounded-md border border-slate-200 bg-white">
-        <h2 className="border-b border-slate-200 px-4 py-3 font-semibold">
+      <section aria-label="Kullanıcı listesi" className="mb-6 rounded-md border border-line bg-surface">
+        <h2 className="border-b border-line px-4 py-3 font-semibold">
           {people.length} kullanıcı
         </h2>
         <ul>
           {people.map((person) => (
-            <li key={person.id} className="border-t border-slate-100 px-4 py-3 first:border-t-0">
+            <li key={person.id} className="border-t border-line px-4 py-3 first:border-t-0">
               <div className="flex flex-wrap items-center gap-3">
-                <span className={`font-medium ${person.active ? '' : 'text-slate-400'}`}>
+                <span className={`font-medium ${person.active ? '' : 'text-ink-3'}`}>
                   {person.name}
                 </span>
-                <span className="rounded-md bg-slate-100 px-2 py-1 text-xs">
+                <span className="rounded-md bg-surface-2 px-2 py-1 text-xs">
                   {roleLabel(person.role)}
                 </span>
                 {person.active ? null : (
-                  <span className="rounded-md bg-slate-200 px-2 py-1 text-xs">Pasif</span>
+                  <span className="rounded-md bg-line px-2 py-1 text-xs">Pasif</span>
                 )}
                 {person.id === actor.userId ? (
-                  <span className="text-xs text-slate-500">(siz)</span>
+                  <span className="text-xs text-ink-3">(siz)</span>
                 ) : null}
               </div>
 
@@ -160,11 +159,11 @@ export default async function UsersPage({
                 <form action={changeUser} className="flex items-end gap-2">
                   <input type="hidden" name="userId" value={person.id} />
                   <label className="text-sm">
-                    <span className="block text-slate-600">Rol</span>
+                    <span className="block text-ink-2">Rol</span>
                     <select
                       name="rol"
                       defaultValue={person.role}
-                      className="mt-1 h-11 rounded-md border border-slate-300 bg-white px-2"
+                      className="mt-1 h-11 rounded-md border border-line-control bg-surface px-2"
                     >
                       {ROLE_VALUES.map((r: Role) => (
                         <option key={r} value={r}>
@@ -175,7 +174,7 @@ export default async function UsersPage({
                   </label>
                   <button
                     type="submit"
-                    className="h-11 rounded-md border border-slate-300 px-4 text-sm hover:bg-slate-100"
+                    className="h-11 rounded-md border border-line-control px-4 text-sm hover:bg-surface-2"
                   >
                     Değiştir
                   </button>
@@ -196,7 +195,7 @@ export default async function UsersPage({
                     className={`h-11 rounded-md border px-4 text-sm disabled:opacity-40 ${
                       person.active
                         ? 'border-kritik text-kritik hover:bg-kritik-bg'
-                        : 'border-slate-300 hover:bg-slate-100'
+                        : 'border-line-control hover:bg-surface-2'
                     }`}
                   >
                     {person.active ? 'Pasifleştir' : 'Aktifleştir'}
@@ -207,7 +206,7 @@ export default async function UsersPage({
                 <form action={resetPassword} className="flex items-end gap-2">
                   <input type="hidden" name="userId" value={person.id} />
                   <label className="text-sm">
-                    <span className="block text-slate-600">Yeni parola</span>
+                    <span className="block text-ink-2">Yeni parola</span>
                     <input
                       name="yeniParola"
                       type="text"
@@ -217,12 +216,12 @@ export default async function UsersPage({
                       // `type="password"` DEĞİL: yönetici parolayı
                       // çalışana sözlü olarak verecek, yazdığını görmesi
                       // gerekiyor. Gizlemek burada güvenlik değil engel.
-                      className="mt-1 h-11 w-44 rounded-md border border-slate-300 px-2"
+                      className="mt-1 h-11 w-44 rounded-md border border-line-control px-2"
                     />
                   </label>
                   <button
                     type="submit"
-                    className="h-11 rounded-md border border-slate-300 px-4 text-sm hover:bg-slate-100"
+                    className="h-11 rounded-md border border-line-control px-4 text-sm hover:bg-surface-2"
                   >
                     Sıfırla
                   </button>
@@ -235,7 +234,7 @@ export default async function UsersPage({
 
       <form
         action={addUser}
-        className="max-w-2xl space-y-5 rounded-md border border-slate-200 bg-white p-5"
+        className="max-w-2xl space-y-5 rounded-md border border-line bg-surface p-5"
       >
         <h2 className="font-semibold">Yeni kullanıcı</h2>
 
@@ -263,6 +262,6 @@ export default async function UsersPage({
 
         <SubmitButton>Kullanıcıyı ekle</SubmitButton>
       </form>
-    </Shell>
+    </>
   )
 }

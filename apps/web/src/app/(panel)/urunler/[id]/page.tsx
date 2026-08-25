@@ -19,7 +19,6 @@ import { appDb } from '@stok/db'
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { Alert, Notice, SelectField, SubmitButton, TextField } from '@/components/field'
-import { Shell } from '@/components/shell'
 import { formatDate, formatMoney } from '@/lib/format'
 import {
   errorQuery,
@@ -170,14 +169,15 @@ export default async function ProductPage({
   }
 
   return (
-    <Shell role={actor.role} active="/stok">
+    <>
+      <h2 className="mb-4 font-display text-lg font-semibold">Ürün</h2>
       <div className="mb-4 flex flex-wrap items-baseline gap-3">
         <h1 className="text-xl font-semibold">{product.name}</h1>
-        <span className="tabular text-sm text-slate-500">{product.sku}</span>
+        <span className="tabular text-sm text-ink-3">{product.sku}</span>
         <Link href={`/hareketler?urun=${product.productId}`} className="text-sm underline">
           Hareketleri
         </Link>
-        <Link href="/stok" className="text-sm text-slate-600 underline">
+        <Link href="/stok" className="text-sm text-ink-2 underline">
           Stok tablosuna dön
         </Link>
       </div>
@@ -192,7 +192,7 @@ export default async function ProductPage({
         {query.arsiv === 'geri' ? <Notice>Ürün arşivden çıkarıldı.</Notice> : null}
 
         {product.archivedAt ? (
-          <p className="flex gap-2 rounded-md border border-slate-300 bg-slate-50 p-3 text-sm text-slate-700">
+          <p className="flex gap-2 rounded-md border border-line-control bg-surface-2 p-3 text-sm text-ink-2">
             <span aria-hidden>📦</span>
             <span>
               Bu ürün {formatDate(product.archivedAt)} tarihinde arşive alındı. Hareket
@@ -206,7 +206,7 @@ export default async function ProductPage({
           ilk sorusu "bu üründen kaç tane var". */}
       <section
         aria-label="Mevcut durum"
-        className="mb-6 grid gap-3 rounded-md border border-slate-200 bg-white p-4 sm:grid-cols-3"
+        className="mb-6 grid gap-3 rounded-md border border-line bg-surface p-4 sm:grid-cols-3"
       >
         <Stat
           label="Eldeki stok"
@@ -224,7 +224,7 @@ export default async function ProductPage({
       {canEdit ? (
         <form
           action={saveDetails}
-          className="mb-6 max-w-2xl space-y-5 rounded-md border border-slate-200 bg-white p-5"
+          className="mb-6 max-w-2xl space-y-5 rounded-md border border-line bg-surface p-5"
         >
           <h2 className="font-semibold">Ürün bilgileri</h2>
 
@@ -283,29 +283,29 @@ export default async function ProductPage({
       {/* BARKODLAR */}
       <section
         aria-label="Barkodlar"
-        className="mb-6 max-w-2xl rounded-md border border-slate-200 bg-white"
+        className="mb-6 max-w-2xl rounded-md border border-line bg-surface"
       >
-        <h2 className="border-b border-slate-200 px-4 py-3 font-semibold">Barkodlar</h2>
+        <h2 className="border-b border-line px-4 py-3 font-semibold">Barkodlar</h2>
 
         <ul>
           {product.barcodes.map((b) => (
             <li
               key={b.id}
-              className="flex flex-wrap items-center gap-3 border-b border-slate-100 px-4 py-3 text-sm"
+              className="flex flex-wrap items-center gap-3 border-b border-line px-4 py-3 text-sm"
             >
               <span
-                className={`tabular font-medium ${b.archivedAt ? 'text-slate-400 line-through' : ''}`}
+                className={`tabular font-medium ${b.archivedAt ? 'text-ink-3 line-through' : ''}`}
               >
                 {b.barcode}
               </span>
-              <span className="text-slate-600">{BARCODE_KINDS[b.kind].tr}</span>
+              <span className="text-ink-2">{BARCODE_KINDS[b.kind].tr}</span>
               {b.qtyMultiplier !== 1 ? (
-                <span className="tabular rounded-md bg-slate-100 px-2 py-1 text-xs">
+                <span className="tabular rounded-md bg-surface-2 px-2 py-1 text-xs">
                   ×{b.qtyMultiplier}
                 </span>
               ) : null}
               {b.archivedAt ? (
-                <span className="text-xs text-slate-500">
+                <span className="text-xs text-ink-3">
                   {formatDate(b.archivedAt)} tarihinde kaldırıldı
                 </span>
               ) : null}
@@ -318,7 +318,7 @@ export default async function ProductPage({
                     // "Sil" demiyor: barkod arşivleniyor, geçmişteki
                     // hareketler hangi barkodun okutulduğunu göstermeye
                     // devam ediyor.
-                    className="rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-100"
+                    className="rounded-md border border-line-control px-3 py-2 text-sm hover:bg-surface-2"
                     disabled={activeBarcodes.length <= 1}
                     title={
                       activeBarcodes.length <= 1
@@ -365,14 +365,14 @@ export default async function ProductPage({
           <SubmitButton tone={product.archivedAt ? 'secondary' : 'danger'}>
             {product.archivedAt ? 'Arşivden çıkar' : 'Ürünü arşivle'}
           </SubmitButton>
-          <p className="mt-2 text-xs text-slate-500">
+          <p className="mt-2 text-xs text-ink-3">
             {product.archivedAt
               ? 'Ürün yeniden okutulabilir hale gelir.'
               : 'Arşivlenen ürüne hareket yazılamaz. Geçmişi ve stoğu silinmez, listede "arşiv dahil" filtresiyle görünür.'}
           </p>
         </form>
       ) : null}
-    </Shell>
+    </>
   )
 }
 
@@ -389,7 +389,7 @@ function Stat({
 }) {
   return (
     <div>
-      <p className="text-sm text-slate-600">{label}</p>
+      <p className="text-sm text-ink-2">{label}</p>
       <p className={`tabular mt-1 text-2xl font-semibold ${tone === 'kritik' ? 'text-kritik' : ''}`}>
         {value}
       </p>
