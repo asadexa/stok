@@ -449,7 +449,7 @@ describe('T84 - görsel URL sütunu', () => {
       `${sku};Görselli Ürün;${uniq('869')};https://ornek.com/a.jpg`,
     ])
     expect(result.rows[0]?.issues).toEqual([])
-    expect(result.rows[0]?.data.imageUrl).toBe('https://ornek.com/a.jpg')
+    expect(result.rows[0]?.data?.imageUrl).toBe('https://ornek.com/a.jpg')
   })
 
   it('javascript: şeması REDDEDİLİYOR', async () => {
@@ -471,6 +471,6 @@ describe('T84 - görsel URL sütunu', () => {
       `${uniq('GRS')};Görselsiz;${uniq('869')};`,
     ])
     expect(result.rows[0]?.issues).toEqual([])
-    expect(result.rows[0]?.data.imageUrl).toBeNull()
+    expect(result.rows[0]?.data?.imageUrl).toBeNull()
   })
 })
