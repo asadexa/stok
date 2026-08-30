@@ -857,7 +857,7 @@ apps/mobile       henüz yok (Faz 5)
 servis katmanı `apps/web` içinde düşünülmüştü. Ayrı pakete alındı: tek yazma kapısının
 Next.js olmadan test edilebilmesi gerekiyor ve cron işleri de aynı kapıyı çağıracak.
 
-**Test durumu:** 508 test yeşil (shared 56, db 53, core 385, web 14). Entegrasyon testleri gerçek
+**Test durumu:** 546 test yeşil (shared 56, db 53, core 385, web 52). Entegrasyon testleri gerçek
 PostgreSQL'e koşuyor; her paket kendi test veritabanını sıfırdan kuruyor.
 
 **CI:** `.github/workflows/ci.yml` — her push ve PR'da typecheck, migration
@@ -1750,7 +1750,7 @@ aynı), migration drift kontrolü, dört adım CLAUDE.md'deki bitmiş sayılma
     (typecheck ilk kapı olduğu için hepsi bloke duruyordu).
   - Kaynak: CI incelemesi 2026-08-30
 
-- [ ] **T94 (P1, human: ~1,5g / CC: ~2sa)** - web - **`apps/web` test yüzeyi: rota yetki kontrolleri ve oturum**
+- [x] **T94 (P1, human: ~1,5g / CC: ~2sa)** - web - **`apps/web` test yüzeyi: rota yetki kontrolleri ve oturum**
   - **7584 satır kod, sıfır test.** Projenin en büyük paketi bu ve `pnpm test`
     onu SESSİZCE atlıyor: `apps/web/package.json` içinde `test` scripti yok,
     `pnpm -r --if-present test` uyarı bile vermiyor.
@@ -1791,12 +1791,43 @@ aynı), migration drift kontrolü, dört adım CLAUDE.md'deki bitmiş sayılma
     herkese açılırdı ve bu testten başka hiçbir şey haber vermezdi.
     O rota özellikle savunmasız çünkü `requireActor()` sonucunu
     KULLANMIYOR; tip sistemi orada yardım edemiyor.
-  - **KALAN:** `server/session.ts` iç mantığı (token yenileme, çerez
-    kalıcılaştırma / `sessionNeedsPersist`, `secureCookies`),
-    `server/form.ts` (207 satır) ve `server/theme.ts`. Rota katmanı
-    kapandı, modül katmanı açık.
-  - **Yeşil:** typecheck (4 paket), test 508 (shared 56, db 53, core 385,
-    web 14).
+  - **YAPILDI (oturum katmanı), `src/server/session.test.ts` 17 test:**
+    `secureCookies()` dört durumu (https, düz http, `APP_URL` yok, adres
+    çözümlenemiyor); çerez seçenekleri (`httpOnly`, `sameSite: lax`, iki
+    farklı ömür); çıkışta İKİ çerezin de silinmesi (yenileme çerezi kalsaydı
+    bir sonraki istek oturumu sessizce geri getirirdi); sessiz yenileme yolu;
+    salt okunur çerez deposunda çökmeme (T87 / 4b008e2).
+  - **`secureCookies()` bu dosyanın en önemli testi.** Yanlış hesaplanınca
+    ortaya çıkan arıza SESSİZ: LAN'da düz HTTP ile servis edilen kurulumda
+    tarayıcı `Secure` çerezi saklamaz ve giriş ekranı hiçbir hata
+    göstermeden kendini tekrar eder.
+  - **YAPILDI (form katmanı), `src/server/form.test.ts` 21 test:**
+    `rethrowControlFlow` (Next yönlendirmesi yutulursa BÜTÜN form
+    gönderimleri sessizce hiçbir yere gitmez); `HIDDEN_DETAIL_KEYS` sızıntısı
+    (iç kimlikler adres çubuğuna düşmemeli); beklenmeyen hatanın mesajının
+    kullanıcıya gitmemesi; `logServerFault`'un yalnızca 5xx yazması (T61);
+    `optional` (girilmedi) ile `nullable` (temizlendi) ayrımı — karışsaydı
+    bir kez girilen alış fiyatı bir daha boşaltılamazdı; Türkçe ondalık
+    virgülü; sayıya çevrilemeyen metnin sessizce 0 OLMAMASI.
+  - **FALSİFİKASYONLA DOĞRULANDI (`dogrula`), üç ayrı koruma:**
+    - `rapor/sablon`'dan `requireActor()` VE import'u silindi: typecheck
+      temiz, build geçer, 494 diğer test yeşil — yalnızca rota testi
+      kırmızı. O rota özellikle savunmasız çünkü `requireActor()` sonucunu
+      kullanmıyor, tip sistemi yardım edemiyor.
+    - `secureCookies()` kodun yorumunun uyardığı yanlış implementasyona
+      (`NODE_ENV` tabanlı) çevrildi: `Secure` açık olması gereken üç durum
+      kırmızı. Düz http durumu tesadüfen doğru kaldı — dört durumun birden
+      sınanmasının sebebi bu.
+    - `rethrowControlFlow`'un `throw err` satırı kaldırıldı: iki test
+      kırmızı. `session.ts`'teki `try/catch` kaldırıldığında da iki test,
+      kullanıcının ekranında 500 üretecek tam o istisnayla düştü.
+    - Üç koruma da geri kondu, grep ile teyit edildi.
+  - **KAPSAM DIŞI BIRAKILAN:** `server/theme.ts` (108 satır). Tema çerezi
+    okuma/yazma; en kötü arızası yanlış tema gösterilmesi. Sessiz veri
+    kaybı veya yetki sızıntısı üretmiyor, o yüzden bu görevin kapsamına
+    alınmadı. Sayfa bileşenleri T92'nin Playwright işinde.
+  - **Yeşil:** typecheck (4 paket), test 546 (shared 56, db 53, core 385,
+    web 52), web derlemesi, migration drift yok.
   - Kaynak: CI incelemesi 2026-08-30
 
 - [ ] **T95 (P2, human: ~2sa / CC: ~20dk)** - altyapı - **Linter kur ya da sahte `pnpm lint` scriptini kaldır**
