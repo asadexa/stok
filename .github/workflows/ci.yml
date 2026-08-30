@@ -110,3 +110,68 @@ jobs:
       # derleme sırasında hiçbiri sorgu çalıştırmıyor.
       - name: Web derlemesi
         run: pnpm --filter @stok/web run build
+
+  # ==========================================================================
+  # T93 — DUMAN TESTİ: kurulumdan girişe giden yol
+  #
+  # Yukarıdaki `test` işi KODUN DOĞRU olduğunu sınıyor. Bu iş ÜRÜNÜN
+  # ÇALIŞTIĞINI sınıyor. İkisi farklı sorular ve dördü de P1 olan T57, T58,
+  # T59, T61 ikincisinde kaldı: dördü de kullanıcı testinde çıktı, dördü de
+  # CI yeşilken vardı.
+  #
+  # SERVİS KONTEYNERİ YOK, ve bu kasıtlı. `test` işi Postgres'i GitHub'a
+  # kurduruyor, yani hazır bir ortamda koşuyor. Burada sınanan şey tam
+  # olarak o hazırlığın kendisi: `pnpm demo` veritabanını kendi kaldırıyor,
+  # `stok_app` rolünü ve eklentiyi açıyor, migration'ları uyguluyor, örnek
+  # veriyi yüklüyor. Servis konteyneri 5433'ü önceden açsaydı demo o adımı
+  # atlar ve sınadığımızı sandığımız yol hiç koşmazdı.
+  #
+  # `.env` DE ELLE YAZILMIYOR. `pnpm demo` onu `.env.example`tan kendisi
+  # üretiyor. Burada ortam değişkeni tanımlamak, T58'i bugüne kadar gizleyen
+  # şeyin — kurulum scriptinin uygulamanın hatasını örtmesinin — aynısını
+  # iş akışı düzeyinde tekrarlamak olurdu.
+  # ==========================================================================
+  smoke:
+    name: demo yolu (kurulumdan girişe)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # README'nin ve CLAUDE.md'nin tek komut diye gösterdiği şey bu.
+      # Bağımlılık kurulumu, Docker, roller, migration ve seed dahil hepsi
+      # burada; ayrı bir `pnpm install` adımı bilerek yok, çünkü kullanıcı
+      # da onu ayrıca çalıştırmıyor.
+      - name: Demo kurulumu (kullanıcının çalıştırdığı komut)
+        run: pnpm demo --seed --no-server
+
+      - name: Web derlemesi
+        run: pnpm --filter @stok/web run build
+
+      - name: Playwright tarayıcısı
+        run: pnpm --filter @stok/web exec playwright install --with-deps chromium
+
+      # Sunucuyu Playwright açıp kapatıyor (playwright.config.ts → webServer).
+      # Arka plana atıp `curl` ile beklemek, "açık port hazır demek değil"
+      # hatasını (T59) iş akışında tekrarlamak olurdu.
+      - name: Duman testi
+        run: pnpm --filter @stok/web run test:e2e
+
+      # Kırmızı yandığında ekran görüntüsü ve iz dosyası olmadan uzaktan
+      # teşhis koymak, T61'deki "log yok" durumunun aynısı olur.
+      - name: Hata izleri
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: duman-testi-izleri
+          path: apps/web/test-results/
+          retention-days: 7
+          if-no-files-found: ignore

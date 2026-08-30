@@ -4,6 +4,7 @@
  *
  *   pnpm demo          örnek veri zaten varsa dokunmaz
  *   pnpm demo --seed   veritabanını sıfırlayıp örnek veriyi yeniden yükler
+ *   pnpm demo --no-server  kurulumu yapar, sunucuyu BAŞLATMAZ (CI, betikler)
  *
  * NEDEN NODE, BASH DEĞİL. Önceki sürüm bir `.sh` dosyasıydı ve Windows'ta
  * hiç çalışmıyordu: CMD `./scripts/demo.sh` satırını tanımıyor, Git Bash
@@ -104,7 +105,24 @@ function readEnvFile(path) {
 // ---------------------------------------------------------------------------
 
 async function main() {
-  const reseedRequested = process.argv.slice(2).includes('--seed')
+  const flags = process.argv.slice(2)
+  const reseedRequested = flags.includes('--seed')
+
+  // CI ve betikler için: kurulumu yap, sunucuyu başlatma. Sunucu ön planda
+  // kaldığı için bir iş akışı adımı olarak "pnpm demo" asla bitmezdi.
+  const noServer = flags.includes('--no-server')
+
+  // Yazım hatasını SESSİZ GEÇME. "--noserver" yazılsaydı bayrak yok sayılır,
+  // sunucu ön planda açılır ve CI zaman aşımına kadar beklerdi; logda da
+  // hiçbir ipucu olmazdı.
+  const knownFlags = ['--seed', '--no-server']
+  const unknownFlags = flags.filter((f) => !knownFlags.includes(f))
+  if (unknownFlags.length) {
+    die(
+      'Bilinmeyen seçenek: ' + unknownFlags.join(' ') + '\n' +
+        '  Kullanım: pnpm demo [--seed] [--no-server]',
+    )
+  }
 
   // -------------------------------------------------------------------------
   step('Gereksinimler')
@@ -252,6 +270,14 @@ async function main() {
 
   Neyi deneyebilirsiniz ve neyi DENEYEMEZSİNİZ: README.md → "Demo"
 `)
+  if (noServer) {
+    // Kurulum bitti; sunucuyu başlatmak çağıranın işi. CI duman testi (T93)
+    // sunucuyu Playwright üzerinden kendisi açıp kapatıyor. Burada ön planda
+    // bir süreç bırakmak iş akışını zaman aşımına kadar kilitlerdi.
+    console.log(paint('0;34', '▶ Kurulum tamam, sunucu başlatılmadı (--no-server)'))
+    return
+  }
+
   console.log(paint('0;34', '▶ Sunucu başlatılıyor (durdurmak için Ctrl+C)\n'))
 
   // Sunucu ön planda kalıyor ve çıkış kodunu devralıyoruz: `pnpm demo`

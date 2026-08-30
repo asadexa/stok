@@ -857,7 +857,7 @@ apps/mobile       henüz yok (Faz 5)
 servis katmanı `apps/web` içinde düşünülmüştü. Ayrı pakete alındı: tek yazma kapısının
 Next.js olmadan test edilebilmesi gerekiyor ve cron işleri de aynı kapıyı çağıracak.
 
-**Test durumu:** 316 test yeşil (shared 54, db 46, core 216). Entegrasyon testleri gerçek
+**Test durumu:** 494 test yeşil (shared 56, db 53, core 385). Entegrasyon testleri gerçek
 PostgreSQL'e koşuyor; her paket kendi test veritabanını sıfırdan kuruyor.
 
 **CI:** `.github/workflows/ci.yml` — her push ve PR'da typecheck, migration
@@ -1701,25 +1701,49 @@ CI'ın çekirdeği sağlam: gerçek PostgreSQL 17 (sürüm `docker-compose.yml` 
 aynı), migration drift kontrolü, dört adım CLAUDE.md'deki bitmiş sayılma
 ölçütüyle birebir. İnceleme bunları değil, **neyin hiç sınanmadığını** buldu.
 
-- [ ] **T93 (P1, human: ~4sa / CC: ~40dk)** - altyapı - **Duman testi: temiz checkout'tan girişe giden yol CI'da yürünsün**
+- [x] **T93 (P1, human: ~4sa / CC: ~40dk)** - altyapı - **Duman testi: temiz checkout'tan girişe giden yol CI'da yürünsün**
   - **CI bugüne kadar kullanıcıya görünen tek bir hata yakalamadı.** T57, T58,
     T59, T61 — dördü de P1, dördü de kullanıcı testinde çıktı, dördü de CI
     yeşilken vardı. Ortak noktaları tek cümlede toplanıyor: hepsi temiz
-    checkout'tan çalışan uygulamaya giden yolda. CI o yolu hiç yürümüyor;
-    `pnpm install` ile başlayıp `next build` ile bitiyor. `pnpm demo`
-    koşmuyor, sunucu hiç açılmıyor, hiç giriş yapılmıyor.
-  - **T58 bu boşluğun en keskin kanıtı:** `pnpm demo` çalışıyordu ama
-    README'nin belgelediği `pnpm dev` çalışmıyordu, çünkü script uygulamanın
-    hatasını gizliyordu. İkisi ayrıştığı anda CI ikisini de denemiyordu.
-  - **Kapsam:** ubuntu runner'da Docker zaten var. `pnpm demo --seed`
-    (sunucu başlatmadan), ardından `next start` + `/giris` POST + bir panel
-    sayfası 200 dönüyor mu. Playwright gerekmiyor, `curl` yeterli —
-    tarayıcı testi T92'de ayrıca geliyor.
-  - Alternatif: "kullanıcı testi zaten yapılıyor." Seçilmedi: üç tur kullanıcı
-    testi dört P1 buldu ve her turu bir insan koştu. Otomatikleşmeyen kontrol,
-    aceleyle atlanan kontroldür.
-  - Doğrula: T58'i geçici olarak geri al (`next.config.ts`'teki dotenv
-    yüklemesini kaldır), duman testinin KIRMIZI yandığını gör, geri koy.
+    checkout'tan çalışan uygulamaya giden yolda. CI o yolu hiç yürümüyordu;
+    `pnpm install` ile başlayıp `next build` ile bitiyordu.
+  - **DÜZELTME: ilk yazımdaki "curl yeterli" YANLIŞTI.** Giriş bir Server
+    Action (`giris/page.tsx` içinde `'use server'`); çağırmak için derlemeye
+    göre değişen bir `Next-Action` kimliği gerekiyor, `curl` ile
+    sürdürülebilir şekilde tetiklenemez. Asıl kanıt falsifikasyondan geldi:
+    T58 geri getirildiğinde `GET /giris` **200 dönmeye devam etti** ve
+    oturumsuz yönlendirme de çalıştı; yalnızca giriş denemesi düştü. Yani
+    curl ile GET probe'u yapan bir duman testi, var olma sebebi olan hatayı
+    kaçırırdı.
+  - **Yapılan:**
+    - `scripts/demo.mjs` → `--no-server`. Bilinmeyen bayrak artık exit 1:
+      `--noserver` yazım hatası sessiz geçseydi sunucu ön planda açılır ve
+      iş akışı zaman aşımına kadar beklerdi, logda da ipucu olmazdı.
+    - `apps/web/playwright.config.ts` + `e2e/demo-yolu.spec.ts` (4 senaryo).
+      Sunucuyu Playwright açıp kapatıyor; arka plana atıp `curl` ile beklemek
+      "açık port hazır demek değil" hatasını (T59) iş akışında tekrarlardı.
+    - `.github/workflows/ci.yml` → `smoke` işi. **Servis konteyneri YOK ve
+      `.env` elle yazılmıyor:** ikisi de olsaydı `pnpm demo`'nun kurduğu şey
+      atlanır ve sınadığımızı sandığımız yol hiç koşmazdı.
+    - `apps/web/tsconfig.json` → `e2e` ve `playwright.config.ts` kapsama
+      alındı. Kapsam dışıyken bozuk bir spec ancak CI'da çalışırken patlardı.
+  - **Falsifikasyonla doğrulandı (`dogrula` yordamı):**
+    - **T58 geri getirildi** (kök `.env` yüklemesi kaldırıldı, açılış
+      kontrolü etkisizleştirildi ki sunucu T58'deki gibi AÇILSIN): testler 3
+      ve 4 kırmızı, 1 ve 2 yeşil kaldı, `Exit status 1`.
+    - **Çalışana `price:read` verildi:** yalnızca 4. test kırmızı,
+      `Expected: 0, Received: 1` — "Stoktaki değer" kartı göründü. Test,
+      matrisin kendisini değil **rotanın matrisi çağırdığını** ölçüyor
+      (tehdit S7).
+    - **Panel oturum koruması kaldırılamadı:** `next build` tip kontrolünde
+      reddediyor, çünkü `actor` null olabiliyor. O koruma testten önce TİP
+      SİSTEMİ tarafından tutuluyor; bu yolla falsifiye edilemedi ve
+      edilmesine gerek de yok.
+    - Üç koruma da geri kondu; `git status` ve grep ile teyit edildi.
+  - **Yeşil:** `pnpm typecheck` (4 paket), `pnpm test` (494 test),
+    `next build`, duman testi 4/4.
+  - **Açık kalan:** duman testi henüz gerçek bir GitHub koşusunda
+    çalışmadı; yerelde Docker ile doğrulandı. İlk PR'da izlenmeli.
   - Kaynak: CI incelemesi 2026-08-30
 
 - [ ] **T94 (P1, human: ~1,5g / CC: ~2sa)** - web - **`apps/web` test yüzeyi: rota yetki kontrolleri ve oturum**
