@@ -857,7 +857,7 @@ apps/mobile       henüz yok (Faz 5)
 servis katmanı `apps/web` içinde düşünülmüştü. Ayrı pakete alındı: tek yazma kapısının
 Next.js olmadan test edilebilmesi gerekiyor ve cron işleri de aynı kapıyı çağıracak.
 
-**Test durumu:** 494 test yeşil (shared 56, db 53, core 385). Entegrasyon testleri gerçek
+**Test durumu:** 508 test yeşil (shared 56, db 53, core 385, web 14). Entegrasyon testleri gerçek
 PostgreSQL'e koşuyor; her paket kendi test veritabanını sıfırdan kuruyor.
 
 **CI:** `.github/workflows/ci.yml` — her push ve PR'da typecheck, migration
@@ -1763,6 +1763,36 @@ aynı), migration drift kontrolü, dört adım CLAUDE.md'deki bitmiş sayılma
     yine bir test istiyor. Bu yüzden rota testi yazılıyor.
   - Doğrula: bir rotadan yetki kontrolünü geçici olarak kaldır, testin kırmızı
     yandığını gör, geri koy.
+  - **KAPSAM DÜZELTMESİ.** "7584 satır" rakamı sayfa bileşenlerini de
+    içeriyordu ve onlar T92'nin Playwright işine ait. Gerçekten test
+    edilebilir sunucu mantığı ~830 satır: `server/` (648) ve beş rota (184).
+    Rotalar ince; yetki kontrolü core'da, rota `requireActor()` çağırıp
+    aktörü core'a geçiriyor.
+  - **YAPILDI (rota katmanı):** `apps/web` artık `pnpm test`'e dahil.
+    vitest koşumu kuruldu; sahtelenen TEK sınır `next/headers` (çerez
+    kavanozu) ve `server-only`. Veritabanı, core'un yetki mantığı ve rota
+    kodu gerçek koşuyor — core sahtelenseydi test "sahtenin sahteyi
+    çağırdığını" doğrulamış olurdu.
+    `src/app/api/route-authz.test.ts`, 14 test, üç arıza sınıfı:
+    oturumsuz erişim, hata sözleşmesi yerine ham 500, çalışanın yetkisiz
+    uca ulaşması.
+  - **YOL BOYUNCA ÖĞRENİLEN:** `rapor/sablon` bilerek her oturumlu
+    kullanıcıya açık (rotanın kendi gerekçesi: içerik kişiye özel değil,
+    ama sütun adları iç yapıyı anlattığı için oturum isteniyor). Test bu
+    kararı değiştirmiyor, sessizce değişirse haber veriyor.
+  - **FALSİFİKASYONLA DOĞRULANDI (`dogrula`):** `rapor/sablon`'dan
+    `await requireActor()` **ve** import'u silindi. Sonuç: `tsc --noEmit`
+    TEMİZ, `next build` geçiyor, 494 core/db/shared testi yeşil — yalnızca
+    bu test kırmızı (`rapor/sablon oturumsuz 200 döndü`). Yani uç oturumsuz
+    herkese açılırdı ve bu testten başka hiçbir şey haber vermezdi.
+    O rota özellikle savunmasız çünkü `requireActor()` sonucunu
+    KULLANMIYOR; tip sistemi orada yardım edemiyor.
+  - **KALAN:** `server/session.ts` iç mantığı (token yenileme, çerez
+    kalıcılaştırma / `sessionNeedsPersist`, `secureCookies`),
+    `server/form.ts` (207 satır) ve `server/theme.ts`. Rota katmanı
+    kapandı, modül katmanı açık.
+  - **Yeşil:** typecheck (4 paket), test 508 (shared 56, db 53, core 385,
+    web 14).
   - Kaynak: CI incelemesi 2026-08-30
 
 - [ ] **T95 (P2, human: ~2sa / CC: ~20dk)** - altyapı - **Linter kur ya da sahte `pnpm lint` scriptini kaldır**
