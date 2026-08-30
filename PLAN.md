@@ -863,6 +863,9 @@ PostgreSQL'e koşuyor; her paket kendi test veritabanını sıfırdan kuruyor.
 **CI:** `.github/workflows/ci.yml` — her push ve PR'da typecheck, migration
 drift kontrolü ve tüm test paketi, `postgres:17` servis konteyneriyle koşuyor.
 T42 (deploy pipeline) hâlâ açık; bu sadece doğrulama tarafı.
+CI incelemesi (2026-08-30) iki P1 boşluk buldu: kurulumdan girişe giden yol
+hiç yürünmüyor (T93) ve `apps/web` sıfır testle sessizce atlanıyor (T94).
+Tamamı Faz 11 altında, T93-T102.
 
 **Açık uçlar (ikisi de T34'e bağlı):**
 - `auth_prune_attempts()` yazıldı ama çağıran yok; `auth_attempts` yavaşça büyür.
@@ -1690,6 +1693,151 @@ veriyle test edilebilir hale gelir.
 mi; `DAMAGE`/`USAGE` çıkışlarında fiyat ne olmalı (öneri: NULL, para el
 değiştirmedi); "yeterince yeni alış" eşiği 90 gün mü; `unit_cost` yeniden
 adlandırması onaylanıyor mu.
+
+
+### Faz 11: CI incelemesi (2026-08-30)
+
+CI'ın çekirdeği sağlam: gerçek PostgreSQL 17 (sürüm `docker-compose.yml` ile
+aynı), migration drift kontrolü, dört adım CLAUDE.md'deki bitmiş sayılma
+ölçütüyle birebir. İnceleme bunları değil, **neyin hiç sınanmadığını** buldu.
+
+- [ ] **T93 (P1, human: ~4sa / CC: ~40dk)** - altyapı - **Duman testi: temiz checkout'tan girişe giden yol CI'da yürünsün**
+  - **CI bugüne kadar kullanıcıya görünen tek bir hata yakalamadı.** T57, T58,
+    T59, T61 — dördü de P1, dördü de kullanıcı testinde çıktı, dördü de CI
+    yeşilken vardı. Ortak noktaları tek cümlede toplanıyor: hepsi temiz
+    checkout'tan çalışan uygulamaya giden yolda. CI o yolu hiç yürümüyor;
+    `pnpm install` ile başlayıp `next build` ile bitiyor. `pnpm demo`
+    koşmuyor, sunucu hiç açılmıyor, hiç giriş yapılmıyor.
+  - **T58 bu boşluğun en keskin kanıtı:** `pnpm demo` çalışıyordu ama
+    README'nin belgelediği `pnpm dev` çalışmıyordu, çünkü script uygulamanın
+    hatasını gizliyordu. İkisi ayrıştığı anda CI ikisini de denemiyordu.
+  - **Kapsam:** ubuntu runner'da Docker zaten var. `pnpm demo --seed`
+    (sunucu başlatmadan), ardından `next start` + `/giris` POST + bir panel
+    sayfası 200 dönüyor mu. Playwright gerekmiyor, `curl` yeterli —
+    tarayıcı testi T92'de ayrıca geliyor.
+  - Alternatif: "kullanıcı testi zaten yapılıyor." Seçilmedi: üç tur kullanıcı
+    testi dört P1 buldu ve her turu bir insan koştu. Otomatikleşmeyen kontrol,
+    aceleyle atlanan kontroldür.
+  - Doğrula: T58'i geçici olarak geri al (`next.config.ts`'teki dotenv
+    yüklemesini kaldır), duman testinin KIRMIZI yandığını gör, geri koy.
+  - Kaynak: CI incelemesi 2026-08-30
+
+- [ ] **T94 (P1, human: ~1,5g / CC: ~2sa)** - web - **`apps/web` test yüzeyi: rota yetki kontrolleri ve oturum**
+  - **7584 satır kod, sıfır test.** Projenin en büyük paketi bu ve `pnpm test`
+    onu SESSİZCE atlıyor: `apps/web/package.json` içinde `test` scripti yok,
+    `pnpm -r --if-present test` uyarı bile vermiyor.
+  - **Somut arıza:** `packages/core/role-matrix.test.ts` yetki matrisini test
+    ediyor, ama bir rotanın o matrisi ÇAĞIRDIĞINI kimse test etmiyor. Yetki
+    kontrolü unutulmuş bir rota typecheck'ten geçer, testten geçer, CI yeşil
+    yanar, çalışan Excel indirir. Tehdit S6/S7'nin gerçekten zorlandığı katman
+    burası ve tamamen kapsamsız.
+  - **Öncelik sırası:** beş API rotası (`arama`, `rapor/hareket`, `rapor/stok`,
+    `rapor/sablon`, `rapor/aktarim-hatalari`) ve `server/session.ts`. Ekran
+    testleri T92'deki Playwright işine bağlı, burada tekrarlanmıyor.
+  - Alternatif: rotaları `packages/core`'a ince kabuk yapıp orada test etmek.
+    Kabuk inceldikçe test değeri düşer, ama "kabuk gerçekten ince mi" sorusu
+    yine bir test istiyor. Bu yüzden rota testi yazılıyor.
+  - Doğrula: bir rotadan yetki kontrolünü geçici olarak kaldır, testin kırmızı
+    yandığını gör, geri koy.
+  - Kaynak: CI incelemesi 2026-08-30
+
+- [ ] **T95 (P2, human: ~2sa / CC: ~20dk)** - altyapı - **Linter kur ya da sahte `pnpm lint` scriptini kaldır**
+  - Kök `package.json` içinde `"lint": "pnpm -r --if-present lint"` duruyor.
+    Hiçbir pakette `lint` scripti yok, depoda hiç linter kurulu değil. Komut
+    çalışır, 0 döner, hiçbir şey yapmaz.
+  - **Neden önemli:** yeşil yanan boş komut, kırmızıdan kötüdür. Biri "lint
+    geçiyor" diye rapor eder ve kontrolün hiç var olmadığını kimse bilmez.
+  - Öneri: Biome (tek bağımlılık, formatter + linter, hızlı). ESLint yerine
+    seçilme sebebi eklenti zincirinin bakım yükü.
+  - Alternatif: scripti silmek. Kabul edilebilir, ama **T45** (route handler'da
+    doğrudan `db` kullanımını yasaklayan kural, D5'in makine zorlaması) bir
+    linter olmadan hiç yazılamaz.
+  - Doğrula: kasten kural ihlali içeren bir dosya ekle, `pnpm lint` kırmızı
+    yansın, sonra sil.
+  - Kaynak: CI incelemesi 2026-08-30
+
+- [ ] **T96 (P2, human: ~2sa / CC: ~30dk)** - altyapı - **Windows CI işi**
+  - Proje Windows'ta geliştiriliyor ve CLAUDE.md'de "Windows tuzakları
+    (yaşandı, tekrar etmesin)" başlıklı ayrı bir bölüm var. `scripts/demo.mjs`
+    tamamen Windows yüzünden yazıldı (T57). Ama CI yalnızca `ubuntu-latest`
+    üstünde koşuyor: o tuzakların tekrar etmediğini kimse doğrulamıyor.
+  - **Somut arıza:** `pnpm --filter X <script>` Windows'ta
+    `'migrate' is not recognized` veriyor. T57'de on iki çağrıya `run` eklendi.
+    On üçüncüsü eklendiğinde CI susacak ve hatayı yine kullanıcı bulacak.
+  - **Kapsam:** typecheck + web derlemesi + T93 duman testi. Tüm test paketini
+    Windows'ta koşturmak gerekmiyor; oradaki riskler platformdan bağımsız ve
+    koşu süresini iki katına çıkarır.
+  - Alternatif: ayrı bir job. Matrix seçiliyor çünkü adımlar aynı; ikinci bir
+    job ikinci bir kaynak olur ve zamanla ayrışır.
+  - Doğrula: bir `pnpm --filter X run <script>` çağrısından `run` kelimesini
+    kaldır, Windows işinin kırmızı yandığını gör.
+  - Kaynak: CI incelemesi 2026-08-30
+
+- [ ] **T97 (P2, human: ~10dk / CC: ~5dk)** - güvenlik - **CI `permissions:` bloğu**
+  - İş akışında `permissions:` yok. `GITHUB_TOKEN`'ın varsayılan izinleri
+    repo ve organizasyon ayarına bağlı; eski repolarda yazma yetkili geliyor.
+    Bir action ya da bir bağımlılığın postinstall'ı o tokenı kullanabilir.
+  - Düzeltme tek satır: `permissions:` altında `contents: read`. İş akışı
+    hiçbir şey yazmıyor, daha fazlasına ihtiyacı yok.
+  - Doğrula: koşu logundaki "GITHUB_TOKEN Permissions" bloğunda yalnızca
+    `contents: read` görünsün.
+  - Kaynak: CI incelemesi 2026-08-30
+
+- [ ] **T98 (P3, human: ~30dk / CC: ~10dk)** - güvenlik - **Action'ları commit SHA'sına sabitle**
+  - `actions/checkout@v4`, `pnpm/action-setup@v4`, `actions/setup-node@v4`
+    hareketli etiketler ve etiket sahibi tarafından taşınabilir. Ele geçirilen
+    bir action CI ortamındaki her değişkeni okuyabilir.
+  - **Bugün P3 çünkü** CI'daki `MIGRATION_DATABASE_URL` ve `AUTH_SECRET`
+    zaten sabit ve iş akışında açıkta duruyor; kaybedilecek sır yok.
+    **T42 (deploy) gerçek sırlarla geldiğinde bu P1 olur.**
+  - Doğrula: `@v4` yerine tam SHA, yanına yorumda sürüm; güncellemeyi
+    Dependabot açsın (T102).
+  - Kaynak: CI incelemesi 2026-08-30
+
+- [ ] **T99 (P3, human: ~20dk / CC: ~10dk)** - altyapı - **Node sürümünü sabitle**
+  - CI Node 22 kullanıyor, geliştirme makinesi Node 24, `engines` yalnızca
+    `>=22` diyor, `.nvmrc` yok. Üretimde hangi sürümün koşacağı hiçbir yerde
+    yazmıyor.
+  - Yön şu an tesadüfen iyi: CI daha eski sürümde koştuğu için Node 24'e özgü
+    bir API kullanımı CI'da yakalanır. Tesadüf, karar değil; ters çevrilse
+    (CI 24, geliştirme 22) hatayı üretimde öğrenirdik.
+  - Düzeltme: `.nvmrc` eklensin, CI `node-version-file` ile onu okusun,
+    `engines` daraltılsın.
+  - Doğrula: `.nvmrc` değiştir, CI logunda o sürümün kurulduğunu gör.
+  - Kaynak: CI incelemesi 2026-08-30
+
+- [ ] **T100 (P3, human: ~10dk / CC: ~5dk)** - altyapı - **`concurrency` master koşularını iptal etmesin**
+  - `concurrency.group` dal referansına bağlı ve `cancel-in-progress: true`.
+    Master'a arka arkaya iki push gelirse birincisi iptal ediliyor ve o
+    commit'in durumu hiç bilinmiyor.
+  - Bugün zararsız çünkü deploy yok. **T42 geldiğinde** deploy yeşil koşuya
+    bağlanacak ve iptal edilmiş bir commit "başarısız" gibi görünecek.
+  - Düzeltme: `cancel-in-progress` yalnızca master DIŞINDAKİ dallarda açık
+    olsun (ifade `github.ref` karşılaştırmasıyla yazılır).
+  - Kaynak: CI incelemesi 2026-08-30
+
+- [ ] **T101 (P3, human: ~3sa / CC: ~30dk)** - test - **Kapsam ölçümü**
+  - 316 test ve 5052 satır test kodu var, ama hangi satırların kapsandığı
+    ölçülmüyor. `apps/web`'in sıfır testi (T94) hiçbir sayıda görünmüyor; bu
+    incelemede ancak `package.json` elle okunarak fark edildi.
+  - Ölçülmeyen boşluk tartışılmıyor. Eşik koymak şart değil, rakamın PR'da
+    görünmesi yeterli.
+  - Alternatif: eşik koyup CI'ı kırmak. Seçilmedi — düşük kapsamlı ama doğru
+    bir değişikliği bloklamak, kapsamı test yazarak değil test silerek
+    yükseltmeye teşvik eder.
+  - Doğrula: `vitest --coverage` çıktısında `apps/web` yüzde sıfır görünsün.
+  - Kaynak: CI incelemesi 2026-08-30
+
+- [ ] **T102 (P3, human: ~30dk / CC: ~15dk)** - güvenlik - **Dependabot ve bağımlılık denetimi**
+  - `.github` altında yalnızca `ci.yml` var. Bağımlılık güncellemesi elle,
+    bilinen açık taraması hiç yok. `pnpm audit` çıktısına hiç bakılmamış
+    olması, açığın yokluğu anlamına gelmiyor.
+  - Kapsam: `.github/dependabot.yml` (npm + github-actions, haftalık) ve
+    CI'da **bloklamayan** bir `pnpm audit --audit-level=high` adımı.
+  - Alternatif: audit'i bloklayıcı yapmak. Seçilmedi — hemen düzeltilemeyen
+    bir transitive açık bütün geliştirmeyi durdurur ve ilk çare kontrolü
+    kapatmak olur.
+  - Kaynak: CI incelemesi 2026-08-30
 
 
 ---
