@@ -1494,6 +1494,136 @@ fotoğrafsız ürün bozuk değil, sade görünmeli. **T84 bu kararın diğer ya
 aktarmadaki URL sütunu doldurmanın tek pratik yolu.
 
 
+### Faz 10: Fiyat defteri (office-hours 2026-08-30)
+
+Tasarım belgesi: `docs/designs/fiyat-defteri.md` (ONAYLANDI).
+
+Kullanıcıdan gelen üç istek — eski ürünü değerleme, enflasyona karşı korunma,
+gerçek satış fiyatını kaydetme — tek eksikliğin üç yüzü çıktı: **defter "kaç
+tane"yi kaydediyor, "kaça"yı kaydetmiyor.**
+
+**Ölçülen bulgu:** `stock_movements.unit_cost` sütunu var, `createMovement`
+kabul ediyor (`packages/core/src/movements.ts:168`), Excel'e çıkıyor, rol
+bazlı gizleniyor — ama **arayüz bu alanı hiç sormuyor**
+(`apps/web/src/app/(panel)/hareket/page.tsx:92`). Uygulamadan girilen her
+hareketin `unit_cost` değeri `NULL`; yalnızca `seed.ts` dolduruyor. Şemadaki
+"maliyet takibi bu veriyi bugünden topluyor" yorumu bugün doğru değil.
+
+**U2 üzerindeki etkisi:** Bu üç görev U2'yi (maliyet yöntemi) çözmeyi
+GEREKTİRMİYOR. FIFO / ağırlıklı ortalama "sattığımda hangi geçmiş maliyeti
+düşeyim" sorusudur ve **kâr raporuna** (E8) aittir. Buradaki soru "bunu kaça
+satmalıyım" — ileriye bakan bir soru, geçmiş maliyet eşleştirmesi gerektirmez.
+U2 açık kalabilir; dahası T88 tarihli fiyat toplamaya başlayınca U2 gerçek
+veriyle test edilebilir hale gelir.
+
+- [ ] **T88 (P1, human: ~2g / CC: ~2sa)** - hareket - Kasa açığı kontrolü: liste fiyatı dondurulur, sapma zorunlu sebeple açıklanır
+  - **Neden (2026-08-30 düzeltmesi):** Bu bir kâr marjı özelliği DEĞİL, kasa
+    mutabakatı kontrolü. Senaryo: kırtasiyede çalışan A4 satıyor, fiş liste
+    fiyatından 110 ₺ yazıyor, müşteri tanıdık diye 100 ₺ alınıyor, kasada
+    10 ₺ açık kalıyor. Amaç açığı engellemek değil, GİZLENEMEZ yapmak.
+  - `unit_cost` → `unit_price` yeniden adlandırılıyor: sütun artık çıkışta
+    satış hasılatı tutacak, ona "maliyet" demek kalıcı bir yalan olur. Yöne
+    göre anlam türetmek bu depoda kurulu örüntü — `delta`'nın işareti de
+    `reason`'dan türetiliyor.
+  - **`list_price` harekete DONDURULUYOR.** Bu olmadan kontrol çürür:
+    `products.sale_price` sonradan 110 → 120 olursa, geçmişteki 10 ₺'lik açık
+    geriye dönük 20 ₺'ye dönüşür. Defter append-only olduğu için o günkü liste
+    fiyatı da hareketle birlikte donmalı.
+  - **Kural DB seviyesinde:** iki sütun aynı satırda olduğu için
+    `CHECK (unit_price IS NULL OR list_price IS NULL OR unit_price = list_price
+    OR price_override_reason IS NOT NULL)`. Deponun felsefesi bu —
+    `movements_delta_nonzero_ck` ve `movements_reason_ck` zaten böyle.
+  - **Sebep serbest metin DEĞİL, listeden.** Takip toplanabilirlik demek;
+    serbest metin "bu ay tanıdık indirimine kaç lira gitti" sorusunu
+    cevaplayamaz. `MOVEMENT_REASONS` örüntüsünün aynısı (kod tek kaynak,
+    Türkçe etiketler orada, DB CHECK listeden üretilir):
+    `TANIDIK`, `TOPTAN`, `KAMPANYA`, `HASARLI`, `ESKI_STOK`, `YUVARLAMA`,
+    `YONETICI_ONAYLI`, `DIGER` (Diğer'de serbest metin zorunlu).
+  - **`YUVARLAMA` bilerek listede.** 108,50 → 108 çok sık; her yuvarlama
+    zorunlu açıklama tetiklerse çalışan refleksle "Diğer" seçmeye başlar ve
+    veri çöpe döner. Tolerans eşiği aşağıda AÇIK SORU.
+  - **TOLERANS AYARLANABİLİR (karar D6, 2026-08-30).** İşletme kendi eşiğini
+    belirliyor, varsayılan **%1**. Saklama: `tenants` tablosuna tek sütun
+    (`price_override_tolerance_pct numeric(5,2) NOT NULL DEFAULT 1.00`) —
+    ayrı bir ayar tablosu AÇILMIYOR, D4 gerekçesi geçerli: "kullanılmayan şema
+    hazırlık değil bakım borcudur". İkinci işletme ayarı geldiğinde tablo
+    açılır.
+  - **Eşiği yalnızca `user:manage` yetkisi değiştirebilir.** Kendi toleransını
+    yükseltebilen çalışan kontrolü sıfırlar. Ekran: mevcut `/ayarlar`.
+  - **Tolerans neyin KAYDEDİLDİĞİNİ değil, kimin SORGULANDIĞINI belirliyor.**
+    `list_price` ve `unit_price` her harekette donduğu ve T88.1 raporu
+    toleranstan bağımsız topladığı için, eşik %100 yapılsa bile hiçbir fark
+    rapordan düşmüyor. Ayarın kötüye kullanımı bu yüzden veri kaybı üretmiyor.
+  - **`price_source` alanı** (`price_estimated` boolean'ın yerine):
+    `LIST` / `MANUAL` / `RECEIPT` / `INDEXED` / `ESTIMATED`. Kullanıcı ileride
+    muhasebe uygulaması entegre edip fiş okutacak ve fiyat oradan gelecek;
+    kaynak bugünden kayıtlı olmazsa o gün ikinci bir migration gerekir.
+  - **Yetki kuralı satır bazına iniyor:** `reason = 'SALE'` çıkışlarında
+    çalışan fiyatı görebilir — zaten kendisi giriyor. `PURCHASE` ve `OPENING`
+    gizli kalır (tehdit S7). `redactPrices`'ın `Omit<T, PriceField>` dönüş
+    tipi kırılıyor; `role-matrix.test.ts:315` testi güncellenmeli.
+
+- [ ] **T88.1 (P1, human: ~2sa / CC: ~20dk)** - rapor - Kasa açığı gün sonu raporuna binsin
+  - Neden: **Okunmayan kayıt kontrol değildir.** T88 açığı kaydediyor; onu
+    takibe çeviren şey görünürlük. T34 gün sonu raporu zaten planda.
+  - İçerik: "Bugün 7 harekette liste fiyatının altına inildi, toplam fark
+    84 ₺. En çok: Ahmet (5 hareket, 60 ₺)." Kullanıcı bazında toplanır —
+    hareket zaten `user_id` taşıyor.
+  - Tolerans içinde kalan farklar da toplama DAHİL: çalışan tek tek
+    sorgulanmıyor ama hiçbir kuruş rapordan düşmüyor.
+  - **T88'e bağlı.** T34 yazılmadıysa önce o.
+
+- [ ] **T89 (P2, human: ~2g / CC: ~yarım gün)** - hareket - Açılış değerlemesi: `OPENING` sebebine fiyat + ekonomik tarih + "tahmini" işareti
+  - Neden: Müşteri 5 yıldır elinde tuttuğu malı sisteme girerken fiyat
+    alanında tıkanıyor — eski fatura yok, bugünkü fiyat da doğru değil.
+  - **Kritik alan fiyat değil TARİH.** Tarihsiz fiyat enflasyona göre
+    düzeltilemez. `OPENING` hareketinin `created_at`'i bugün, malın ekonomik
+    tarihi 5 yıl önce; ikisi ayrı sütun olmak zorunda (`price_date`).
+    T90 bu sütun olmadan çalışamaz.
+  - İki yol da formda: fatura varsa tutar + fatura tarihi (sistem bugüne
+    taşır); fatura yoksa bugünkü yenileme bedeli + `price_estimated = true`.
+
+- [ ] **T90 (P2, human: ~1 hafta / CC: ~2-3g)** - fiyat - Yenileme maliyeti: satış anında "bugün yerine koymak kaça mal olur"
+  - Neden: Bugünkü maliyetten giren mal 6 ay sonra aynı rakamdan satılırsa
+    yerine yenisi konamıyor. **Enflasyon ürünü değil parayı değersizleştiriyor
+    — hesaplanacak sayı yenileme maliyetidir**, "eskimiş maliyeti düzeltmek"
+    değil.
+  - Kaynak sırası: (1) son `PURCHASE` hareketinin `unit_price`'ı, `price_date`
+    90 günden yeniyse — **en iyi kaynak budur, endeks değil**; (2) yoksa
+    bilinen son fiyat × (bugünkü Yİ-ÜFE ÷ o tarihteki Yİ-ÜFE);
+    (3) hiçbiri yoksa `products.purchase_price`.
+  - `price_index` tablosu tenant kapsamlı DEĞİL (ulusal veri). `stok_app` için
+    salt-okunur RLS politikası gerekiyor; yazma yalnızca migration/cron rolünde.
+  - **Uyarı, engel değil.** Eski stoğu elden çıkarmak için maliyetin altına
+    satmak meşru bir karardır.
+  - **Arayüzde açıkça yazmalı:** bu bir karar destek aracıdır, VUK mükerrer
+    298/A kapsamındaki resmî enflasyon düzeltmesinin yerine geçmez. Aksi halde
+    müşteri vergi uyumu sanar.
+  - **T88'e bağlı:** düzeltilecek fiyat verisi T88 toplamaya başlamadan yok.
+  - **Doğrulanmadan başlanmasın:** Yİ-ÜFE'nin resmî endeks olduğu bilgi
+    birikiminden söylendi, TÜİK'ten teyit EDİLMEDİ.
+
+- [ ] **T91 (P1, human: ~2sa / CC: —)** - araştırma - Üç senaryoyu gerçek kullanıcıda gözlemle
+  - Neden: Talep kanıtı zayıf. Üç senaryonun hangisinin gerçekten tıkanmaya
+    yol açtığı ayrıştırılmadı ve **bugünkü çözüm hiç sorulmadı** — kullanıcı o
+    10 ₺ farkı bugün ne yapıyor bilmiyoruz. Bugün yaptığı şey rakiptir; yeni
+    alan onu yenmek zorunda.
+  - **(1) CEVAPLANDI 2026-08-30:** bugünkü çözüm YOK. Fiş liste fiyatını
+    yazıyor, kasadan eksik para çıkıyor, fark hiçbir yere kaydedilmiyor.
+    Status quo "kasa açık veriyor ve kimse nedenini yazmıyor" — T88'in
+    yenmesi gereken şey bu. Kalan iki soru duruyor.
+  - Öğrenilecek iki şey: (2) 5 yıllık
+    ürünün eski faturası var mıydı — varsa T90'ın pahalı endeks yarısı hiç
+    gerekmeyebilir; (3) enflasyon zararını satarken mi sonradan mı fark etti —
+    satarken ise uyarı doğru yerde, sonradan ise asıl ihtiyaç rapor.
+  - **T90 başlamadan önce yapılmalı**, T88 buna bakmadan yazılabilir.
+
+**Açık kalan sorular (belgede tam listesi):** Yİ-ÜFE verisi elle mi otomatik
+mi; `DAMAGE`/`USAGE` çıkışlarında fiyat ne olmalı (öneri: NULL, para el
+değiştirmedi); "yeterince yeni alış" eşiği 90 gün mü; `unit_cost` yeniden
+adlandırması onaylanıyor mu.
+
+
 ---
 
 ## GSTACK REVIEW REPORT
