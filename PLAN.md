@@ -1742,8 +1742,12 @@ aynı), migration drift kontrolü, dört adım CLAUDE.md'deki bitmiş sayılma
     - Üç koruma da geri kondu; `git status` ve grep ile teyit edildi.
   - **Yeşil:** `pnpm typecheck` (4 paket), `pnpm test` (494 test),
     `next build`, duman testi 4/4.
-  - **Açık kalan:** duman testi henüz gerçek bir GitHub koşusunda
-    çalışmadı; yerelde Docker ile doğrulandı. İlk PR'da izlenmeli.
+  - **GERÇEK KOŞUDA DOĞRULANDI** (run 33318396877, PR #1): `smoke` işi
+    1m33s'te yeşil. Runner'da `docker compose` kalktı, Playwright
+    `--with-deps chromium` kuruldu, dört senaryo 5.8 sn'de geçti.
+    Aynı koşuda `typecheck + test` de yeşil: migration drift kontrolü,
+    testler ve web derlemesi 25 Ağustos'tan beri İLK KEZ çalıştı
+    (typecheck ilk kapı olduğu için hepsi bloke duruyordu).
   - Kaynak: CI incelemesi 2026-08-30
 
 - [ ] **T94 (P1, human: ~1,5g / CC: ~2sa)** - web - **`apps/web` test yüzeyi: rota yetki kontrolleri ve oturum**
@@ -1911,6 +1915,22 @@ aynı), migration drift kontrolü, dört adım CLAUDE.md'deki bitmiş sayılma
     bir transitive açık bütün geliştirmeyi durdurur ve ilk çare kontrolü
     kapatmak olur.
   - Kaynak: CI incelemesi 2026-08-30
+
+- [ ] **T103 (P3, human: ~30dk / CC: ~15dk)** - altyapı - **Action'ları v5 hattına taşı (Node 20 kullanımdan kalkıyor)**
+  - **İLK GERÇEK KOŞUDA ORTAYA ÇIKTI** (run 33318396877). Sabitlenen `v4`
+    hatları Node 20 hedefliyor; GitHub şu an zorla Node 24'te çalıştırıyor
+    ve her koşuda uyarı basıyor:
+    `actions/checkout`, `actions/setup-node`, `pnpm/action-setup`.
+  - **Neden şimdi P3, ne zaman P1 olur:** bugün yalnızca uyarı, koşu yeşil.
+    Zorlama kaldırıldığında action'lar hiç başlamayacak ve CI tamamen
+    durur — o an P1 olur ve aceleye gelir. Şimdi yapmak ucuz.
+  - **Kapsam:** `v5` hattının commit SHA'larına geç. T98'deki incelik
+    burada da geçerli: anotasyonlu etiketlerde `git ls-remote <repo>
+    'refs/tags/v5^{}'` ile ETİKET NESNESİNİN değil COMMIT'in SHA'sı
+    alınmalı; Actions commit SHA'sı bekliyor.
+  - Doğrula: push sonrası koşuda "Node.js 20 is deprecated" uyarısı
+    kalmamalı.
+  - Kaynak: CI incelemesi 2026-08-30, ilk gerçek koşu
 
 
 ---
