@@ -1531,7 +1531,7 @@ veriyle test edilebilir hale gelir.
     fiyatı da hareketle birlikte donmalı.
   - **Kural DB seviyesinde:** iki sütun aynı satırda olduğu için
     `CHECK (unit_price IS NULL OR list_price IS NULL OR unit_price = list_price
-    OR price_override_reason IS NOT NULL)`. Deponun felsefesi bu —
+    OR price_override_reason IS NOT NULL)`. Epsilon YOK — bkz. tolerans notu. Deponun felsefesi bu —
     `movements_delta_nonzero_ck` ve `movements_reason_ck` zaten böyle.
   - **Sebep serbest metin DEĞİL, listeden.** Takip toplanabilirlik demek;
     serbest metin "bu ay tanıdık indirimine kaç lira gitti" sorusunu
@@ -1539,29 +1539,43 @@ veriyle test edilebilir hale gelir.
     Türkçe etiketler orada, DB CHECK listeden üretilir):
     `TANIDIK`, `TOPTAN`, `KAMPANYA`, `HASARLI`, `ESKI_STOK`, `YUVARLAMA`,
     `YONETICI_ONAYLI`, `DIGER` (Diğer'de serbest metin zorunlu).
-  - **`YUVARLAMA` bilerek listede.** 108,50 → 108 çok sık; her yuvarlama
-    zorunlu açıklama tetiklerse çalışan refleksle "Diğer" seçmeye başlar ve
-    veri çöpe döner. Tolerans eşiği aşağıda AÇIK SORU.
-  - **TOLERANS AYARLANABİLİR (karar D6, 2026-08-30).** İşletme kendi eşiğini
-    belirliyor, varsayılan **%1**. Saklama: `tenants` tablosuna tek sütun
-    (`price_override_tolerance_pct numeric(5,2) NOT NULL DEFAULT 1.00`) —
-    ayrı bir ayar tablosu AÇILMIYOR, D4 gerekçesi geçerli: "kullanılmayan şema
-    hazırlık değil bakım borcudur". İkinci işletme ayarı geldiğinde tablo
-    açılır.
-  - **Eşiği yalnızca `user:manage` yetkisi değiştirebilir.** Kendi toleransını
-    yükseltebilen çalışan kontrolü sıfırlar. Ekran: mevcut `/ayarlar`.
-  - **Tolerans neyin KAYDEDİLDİĞİNİ değil, kimin SORGULANDIĞINI belirliyor.**
-    `list_price` ve `unit_price` her harekette donduğu ve T88.1 raporu
-    toleranstan bağımsız topladığı için, eşik %100 yapılsa bile hiçbir fark
-    rapordan düşmüyor. Ayarın kötüye kullanımı bu yüzden veri kaybı üretmiyor.
+  - **`YUVARLAMA` LİSTEDE ama otomatik DEĞİL.** Yuvarlamak da satıcının
+    kararıdır ve seçilerek işaretlenir.
+  - **TOLERANS YOK (D6 iptal, 2026-08-30).** Tolerans "çalışan fiyatı elle
+    yazarken kazara yuvarlar" varsayımına dayanıyordu. O varsayım yanlış:
+    fiyat elle yazılmıyor, barkoddan ya da fiş OCR'ından geliyor. Otorite
+    sistemde olduğu için KAZARA sapma diye bir şey yok; her sapma satıcının
+    bilinçli kararı ve bilinçli kararın toleransı olmaz.
+    Sonuç: CHECK'te epsilon yok, `tenants` tablosuna ayar sütunu eklenmiyor,
+    `/ayarlar` ekranına tolerans alanı girmiyor. Üç iş birden düştü.
+  - **`list_price` OTORİTESİ SUNUCUDA (karar D4, mühendislik incelemesi).**
+    `createMovement` bu alanı `products.sale_price`'tan KENDİ okuyor; istemci
+    gönderse bile yok sayılıyor. Aksi halde isteği kendi üreten biri
+    `list_price = unit_price` yazıp sebep zorunluluğunu tamamen atlar ve
+    kontrolün "gizlenemez" iddiası çöker.
+  - **`client_list_price` AYRI kaydediliyor.** İstemcinin barkod/OCR anında
+    GÖRDÜĞÜ fiyat. Sunucununkiyle farklıysa hareket işaretleniyor ve T88.1
+    raporunda görünüyor. Çevrimdışı gecikmeli senkronda (Faz 5 / T28) satış
+    günü ile senkron günü arasında fiyat değişmişse, fark sessiz kalmak
+    yerine görünür oluyor. Bugün web'de ikisi hep eşit; alan Faz 5 için
+    değil, UYUŞMAZLIĞI GÖRÜNÜR KILMAK için var.
   - **`price_source` alanı** (`price_estimated` boolean'ın yerine):
     `LIST` / `MANUAL` / `RECEIPT` / `INDEXED` / `ESTIMATED`. Kullanıcı ileride
     muhasebe uygulaması entegre edip fiş okutacak ve fiyat oradan gelecek;
     kaynak bugünden kayıtlı olmazsa o gün ikinci bir migration gerekir.
-  - **Yetki kuralı satır bazına iniyor:** `reason = 'SALE'` çıkışlarında
-    çalışan fiyatı görebilir — zaten kendisi giriyor. `PURCHASE` ve `OPENING`
-    gizli kalır (tehdit S7). `redactPrices`'ın `Omit<T, PriceField>` dönüş
-    tipi kırılıyor; `role-matrix.test.ts:315` testi güncellenmeli.
+  - **Yetki: AYRI ALAN ADI (karar D7, mühendislik incelemesi).** Çalışanın
+    görebildiği satış fiyatı `saleUnitPrice` diye AYRI bir alanda dönüyor;
+    `unitPrice` yetkisiz rolde HİÇ bulunmuyor.
+    Gerekçe: satır bazlı gizleme (`unitPrice` bazı satırlarda var bazılarında
+    yok) `authz.ts:88`'in önlemek için yazıldığı belirsizliği geri getirirdi —
+    `hareketler/page.tsx:355` `m.unitCost == null` eksik alanı da yakalar ve
+    `—` basar, çalışan "fiyat girilmemiş" ile "yetkim yok"u ayırt edemez.
+    Ayrı ad ile "alan yoksa yetki yok" invariantı bozulmuyor: `unitPrice`
+    yokluğu her zaman yetkisizlik, `saleUnitPrice` yokluğu her zaman
+    "girilmemiş".
+    `PURCHASE` ve `OPENING` fiyatları çalışana kapalı kalıyor (tehdit S7).
+    **T53 notu:** `/api/v1` iki alanı da yayınlayacak; adlandırma sözleşmesi
+    API belgesinde açıkça yazılmalı.
 
 - [ ] **T88.1 (P1, human: ~2sa / CC: ~20dk)** - rapor - Kasa açığı gün sonu raporuna binsin
   - Neden: **Okunmayan kayıt kontrol değildir.** T88 açığı kaydediyor; onu
@@ -1592,16 +1606,70 @@ veriyle test edilebilir hale gelir.
     90 günden yeniyse — **en iyi kaynak budur, endeks değil**; (2) yoksa
     bilinen son fiyat × (bugünkü Yİ-ÜFE ÷ o tarihteki Yİ-ÜFE);
     (3) hiçbiri yoksa `products.purchase_price`.
-  - `price_index` tablosu tenant kapsamlı DEĞİL (ulusal veri). `stok_app` için
-    salt-okunur RLS politikası gerekiyor; yazma yalnızca migration/cron rolünde.
+  - **HESAP SQL'DE (karar D5, mühendislik incelemesi).** `replacementCost` bir
+    sorgu; `numeric` çarpma/bölme PostgreSQL'de tam ondalık yapılıyor, TS'e
+    yalnızca 2 basamaklı sonuç dönüyor. Gerekçe: `numeric.ts` miktara özel
+    (`QTY_SCALE = 3`, `NUMERIC(14,3)` tavanı) ama para `numeric(12,2)` —
+    yardımcılar yeniden kullanılamıyor. Kayan nokta ise deponun miktarda
+    yasakladığı şeyin aynısı: endeks oranı 4 ondalıklı ve sonuç hem satış
+    uyarısı hem rapor toplamı besliyor. İkinci bir ölçekli-bigint seti
+    yazmak yerine zaten tam olan aracı kullanıyoruz.
+  - **`price_index` RLS deseni (karar D6, mühendislik incelemesi).** Tablo
+    tenant kapsamlı değil ama `rls.test.ts:247` public şemadaki HER tabloda
+    RLS+FORCE istiyor ve `:271` politikanın tanımlı olmasını istiyor —
+    politikasız FORCE RLS "her şeyi reddet" demek ve üretimde 500 olarak
+    görünür. Desen: `ENABLE` + `FORCE ROW LEVEL SECURITY` +
+    `CREATE POLICY ... FOR SELECT USING (true)` +
+    `REVOKE INSERT, UPDATE, DELETE ON price_index FROM stok_app`.
+    `rls.test.ts` politika listesine `price_index` eklenir.
+    `USING (true)`'nun neden güvenli olduğu (ulusal açık veri, her tenant
+    aynı satırları okur) migration yorumuna yazılır ki kimse bu deseni bir
+    tenant tablosuna kopyalamasın. `auth_attempts` deseni (REVOKE ALL +
+    SECURITY DEFINER) seçilmedi: o veri kimlik doğrulamadan ÖNCE yazıldığı
+    ve tenant'a bağlanamadığı için kapalıydı, endeks ise açık veri.
   - **Uyarı, engel değil.** Eski stoğu elden çıkarmak için maliyetin altına
     satmak meşru bir karardır.
   - **Arayüzde açıkça yazmalı:** bu bir karar destek aracıdır, VUK mükerrer
     298/A kapsamındaki resmî enflasyon düzeltmesinin yerine geçmez. Aksi halde
     müşteri vergi uyumu sanar.
+  - **KISMİ İNDEKS (karar D9, mühendislik incelemesi).** Mevcut dört indeksin
+    hiçbirinde `reason` yok; "son PURCHASE" araması en yeniden geriye tarayıp
+    alışı arıyor. Kırtasiyede bir kalem ayda bir alınıp günde onlarca kez
+    satıldığı için aradaki yüzlerce satış satırı taranır — her satış ekranı
+    açılışında. Migration ile birlikte:
+    `CREATE INDEX ... ON stock_movements (tenant_id, product_id, created_at DESC)
+    WHERE reason = 'PURCHASE'`.
+    Kısmi indeks yalnızca eşleşen satırda güncellendiği için SATIŞ YAZMA
+    YOLUNA SIFIR MALİYET getiriyor; "indeks yazmayı yavaşlatır" itirazı bu
+    durumda geçerli değil.
   - **T88'e bağlı:** düzeltilecek fiyat verisi T88 toplamaya başlamadan yok.
   - **Doğrulanmadan başlanmasın:** Yİ-ÜFE'nin resmî endeks olduğu bilgi
     birikiminden söylendi, TÜİK'ten teyit EDİLMEDİ.
+
+- [ ] **T92 (P1, human: ~2g / CC: ~1sa)** - test - Faz 10 test kapsamı: sunucu testleri + T38'in öne çekilmesi
+  - **Zorunlu regresyon testleri (kural gereği, tartışmasız).** `unit_cost` →
+    `unit_price` mevcut davranışı değiştiriyor; kırılacağı ölçülen yerler:
+    `role-matrix.test.ts:308,315,319,326`, `excel.test.ts:146`,
+    `exports.test.ts:59`, `movements.test.ts:121`, `stock.test.ts:61-69`,
+    `schema-sync.test.ts`, `rls.test.ts:247,271`.
+  - **Sunucu tarafı (22 yol, mevcut yüzeyle yazılabilir):** list_price sunucudan
+    okunuyor mu; fiyat yoksa CHECK geçiyor mu; eşitse sebep istemiyor mu;
+    farklı+sebepli kabul, farklı+sebepsiz RED (kontrolün kalbi); listede
+    olmayan sebep DB CHECK reddi; `client_list_price` uyuşmazlığı işaretleniyor
+    mu; giriş=maliyet / çıkış=hasılat anlamı; D7 yetki üçlüsü (çalışanda
+    `unitPrice` HİÇ yok / SALE'de `saleUnitPrice` var / PURCHASE+OPENING'de
+    ikisi de yok); OPENING'de fiyat zorunlu; gelecek tarihli `price_date` reddi;
+    `replacementCost` dört kolu (yeni alış / endeksli / endekste ay yok / hiç
+    fiyat yok) — **D5 gereği numeric tamlığı burada ispatlanır**; endeks bayat
+    uyarısı; `price_index` RLS'te SELECT var INSERT yok (D6).
+  - **T38 ÖNE ÇEKİLİYOR (karar D8).** Beş kullanıcı akışının test yüzeyi YOK:
+    liste fiyatı ön-dolu geliyor mu, fark rozeti çıkıyor mu, **sebep seçmeden
+    gönderim engelleniyor mu**, "Diğer"de serbest metin zorunlu oluyor mu,
+    yenileme maliyeti uyarısı görünüyor mu. Sunucu bunları kanıtlayamaz:
+    form sebebi zorunlu yapmayı unutsa bile sunucu testleri yeşil yanar ve
+    kasadaki kişi anlamadığı bir hata ekranıyla kalır. Bu depoda kullanıcıya
+    görünen dört hata yalnızca gerçek tarayıcıda bulundu.
+  - Playwright kurulumu bir kez; sonraki tüm arayüz işleri kazançlı çıkıyor.
 
 - [ ] **T91 (P1, human: ~2sa / CC: —)** - araştırma - Üç senaryoyu gerçek kullanıcıda gözlemle
   - Neden: Talep kanıtı zayıf. Üç senaryonun hangisinin gerçekten tıkanmaya
@@ -1670,6 +1738,53 @@ TTTD2'da ortaya çıkan bir veri modeli gerçeği: görselin kiracı değiştiri
 uygulanamaz. `users.tenantId` notNull ve tek FK, yani bir kullanıcı tam olarak bir
 işletmeye ait; değiştirilecek bir şey yok. Kontrol hesap menüsü olarak yorumlandı.
 
-**VERDICT:** CEO + ENG + DESIGN İNCELEMELERİ TAMAMLANDI. Uygulamaya başlanabilir.
-U2 (maliyet yöntemi) tek yönlü kapı olduğu için Faz 2'den önce cevaplanmalı;
-diğer üç açık soru uygulama sırasında geri alınabilir.
+**VERDICT (Faz 9):** CEO + ENG + DESIGN İNCELEMELERİ TAMAMLANDI.
+
+---
+
+### Faz 10 mühendislik incelemesi (2026-08-30)
+
+| Çalıştırma | Durum | Sonuç |
+|---|---|---|
+| Step 0 — kapsam | tamam | Karmaşıklık eşiği aştı (T88 tek başına 15 dosya). Kullanıcı dördünü birden kilitlemeyi seçti |
+| Section 1 — mimari | tamam | 4 bulgu (hepsi P1), 4 karar: D2/D3, D4, D5, D6 |
+| Section 2 — kod kalitesi | tamam | 2 bulgu → 1 karar (D7) + 1 önemsiz (Excel başlığı) |
+| Section 3 — test | tamam | 1 bulgu (D8) + zorunlu regresyon listesi → T92 |
+| Section 4 — performans | tamam | 1 bulgu, 1 karar (D9) |
+| **Dış ses (Codex)** | **ÇALIŞMADI** | `codex` kurulu değil; alt-ajan geri düşüşü bu oturumda kapalıydı. **Bu incelemeyi tek model yaptı — çapraz doğrulama yok.** |
+
+**En ciddi bulgu:** planın kendisi tutarsızdı. `PLAN.md:1533`'teki DB CHECK ile
+tolerans kararı birbirini kesiyordu; tolerans içindeki bir yuvarlama sebep
+taşımadığı için CHECK tarafından reddedilecekti, yani mutlu yol kasada
+veritabanı hatasıyla duracaktı. Kullanıcının "fiyat barkod/OCR'dan geliyor,
+kazara sapma yok" düzeltmesi tolerans kavramını tamamen düşürdü ve üç iş
+birden gitti (epsilon, `tenants` ayar sütunu, `/ayarlar` alanı).
+
+**Kod okunarak doğrulanan diğer üç bulgu:**
+- `numeric.ts` miktara özel (`QTY_SCALE = 3`), para `numeric(12,2)` — yardımcılar
+  kullanılamıyor ve kod tabanında hiç para aritmetiği yok → hesap SQL'de (D5)
+- `rls.test.ts:247` public şemadaki HER tabloyu tarıyor → `price_index`
+  politikasız eklenirse test kırmızı, üretimde 500 (D6)
+- `authz.ts:88`'in yazılı gerekçesi satır bazlı gizlemeyi dışlıyor → ayrı alan
+  adı `saleUnitPrice` (D7)
+
+**U2 üzerine düzeltme:** yukarıdaki Faz 9 verdict'i "U2 Faz 2'den önce
+cevaplanmalı" diyordu. Faz 10 için geçerli DEĞİL. FIFO/ağırlıklı ortalama
+"hangi geçmiş maliyeti düşeyim" sorusudur ve kâr raporuna (E8) aittir;
+yenileme maliyeti ileriye bakan bir sayıdır. T88-T92 U2 beklemeden yazılabilir.
+
+**TODOS.md:87 YANLIŞ:** "veri toplanmaya bugün başlıyor" diyor. Başlamıyor —
+arayüz `unit_cost` alanını hiç göndermiyor. E8'in 4 günlük tahmini "geçmiş veri
+hazır" varsayımına dayanıyor ve T88 girmezse E8 sıfır veriyle başlar. Düzeltilmeli.
+
+**VERDICT (Faz 10):** ENG İNCELEMESİ TAMAMLANDI, DIŞ SES EKSİK. Dokuz karar
+alındı, hepsi PLAN.md T88-T92'ye gerekçesiyle yazıldı. Uygulamaya başlanabilir.
+
+**UNRESOLVED DECISIONS:**
+- Sapma sebebi listesi onaylanmadı: `TANIDIK`, `TOPTAN`, `KAMPANYA`, `HASARLI`, `ESKI_STOK`, `YUVARLAMA`, `YONETICI_ONAYLI`, `DIGER` — kullanıcı eksik/fazla söylemedi, T88 bu listeyle başlıyor
+- `DAMAGE` / `USAGE` çıkışlarında fiyat ne olmalı (öneri: NULL, para el değiştirmedi)
+- "Son alış yeterince yeni" eşiği 90 gün mü — gerçek veri olmadan kalibre edilemez
+- `client_list_price` sunucununkinden farklı çıkınca raporda ne yazacak, sadece işaret mi ayrı satır mı
+- Yİ-ÜFE aylık güncellemesini kim yapacak ve bayatlama uyarısı hangi gecikmede çıkacak
+- U2 maliyet yöntemi — Faz 10'u bloke etmiyor ama E8 (kâr raporu) için hâlâ açık
+- Dış ses (Codex) çalışmadı; bu incelemenin bulguları çapraz doğrulanmadı

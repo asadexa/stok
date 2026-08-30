@@ -188,8 +188,18 @@ serbest metin "bu ay tanıdık indirimine kaç lira gitti" sorusunu cevaplayamaz
 `TANIDIK` · `TOPTAN` · `KAMPANYA` · `HASARLI` · `ESKI_STOK` · `YUVARLAMA` ·
 `YONETICI_ONAYLI` · `DIGER` (Diğer'de serbest metin zorunlu)
 
-`YUVARLAMA` bilerek listede: 108,50 → 108 çok sık olur ve her yuvarlama zorunlu
-açıklama tetiklerse çalışan refleksle "Diğer" seçmeye başlar, veri çöpe döner.
+`YUVARLAMA` listede ama uygulama tarafından OTOMATİK doldurulmuyor: yuvarlamak
+da satıcının kararıdır ve seçilerek işaretlenir.
+
+**Tolerans yok (D6 iptal, mühendislik incelemesi 2026-08-30).** İlk tasarımda
+ayarlanabilir bir tolerans vardı; gerekçesi "çalışan fiyatı elle yazarken kazara
+yuvarlar, her kuruş için sebep sorulursa bunalır" idi. **Varsayım yanlıştı:**
+fiyat elle yazılmıyor, barkoddan ya da fiş OCR'ından geliyor ve otorite sistemde.
+Kazara sapma diye bir şey yok; her sapma satıcının bilinçli kararı. Bilinçli
+kararın toleransı olmaz.
+
+Düşen işler: DB CHECK'te epsilon, `tenants` tablosunda ayar sütunu, `/ayarlar`
+ekranında tolerans alanı, uygulamada `min(liste × yüzde, tavan)` mantığı.
 
 **Ve: okunmayan kayıt kontrol değildir.** Kayıt tek başına takip değil.
 Gün sonu raporu (T34) kasa açığını taşımalı — "bugün 7 harekette liste
@@ -269,7 +279,7 @@ Ticari üründe bunlar açıkça söylenmeli, yoksa müşteri yanlış varsayar:
 | 1 | ~~Yİ-ÜFE nereden~~ **KARARLAŞTI:** bir kez toplu çekilir (~390 satır), sonra ayda bir elle. Bayatlama sessiz olmamalı — endeks eskiyse uyarı çıkmalı, yoksa yenileme maliyeti sessizce düşük görünür | Adım 3 |
 | 2 | ~~Yİ-ÜFE doğrulanmadı~~ **ÇÖZÜLDÜ 2026-08-30:** hakedis.org üzerinden teyit edildi — aylık, 1994 Ocak → 2026 Temmuz, baz 2003=100, kaynak TÜİK. 5 yıllık ürün rahat kapsanıyor | — |
 | 3 | `DAMAGE` / `USAGE` çıkışlarında fiyat ne olmalı? Öneri: NULL (para el değiştirmedi) | Fire raporlaması |
-| 7 | ~~Tolerans eşiği~~ **KARAR D6 (2026-08-30):** işletme belirliyor, varsayılan %1, `tenants` tablosunda tek sütun, yalnızca `user:manage` değiştirebilir. Tolerans neyin kaydedildiğini değil kimin sorgulandığını etkiliyor | — |
+| 7 | ~~Tolerans eşiği~~ **D6 İPTAL (mühendislik incelemesi 2026-08-30):** tolerans kavramı düştü. Fiyat barkod/OCR'dan geliyor, kazara sapma yok, her sapma bilinçli. Epsilon yok, ayar sütunu yok | — |
 | 8 | Sapma sebebi listesi doğru mu? Eksik/fazla var mı? | T88 veri kalitesi |
 | 4 | Son alış "yeterince yeni" eşiği 90 gün mü? | Yanlış yenileme maliyeti riski |
 | 5 | U2 (maliyet yöntemi) — hâlâ açık, artık bloke DEĞİL | Kâr raporu (E8) |

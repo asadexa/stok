@@ -85,8 +85,11 @@ kapsam hızla ERP'ye kayar. Sınır çizmek şart.
 
 **Bağlam:** PLAN.md ÇÖZÜLMEMİŞ KARAR U2. Varsayılan öneri: ağırlıklı ortalama (Türkiye'de
 KOBİ muhasebesinde yaygın, hesabı basit). FIFO'yu v3'e bırak. Karar öncesi muhasebeciye sor.
-`stock_movements.unit_cost` alanı v1'de zaten var, veri toplanmaya bugün başlıyor. Bu iyi:
-özellik açıldığında geçmiş veri hazır olur.
+`stock_movements.unit_cost` alanı v1'de var AMA **VERİ TOPLANMIYOR** (ölçüldü, 2026-08-30):
+arayüz bu alanı hiç göndermiyor, uygulamadan girilen her hareketin değeri NULL; yalnızca
+`seed.ts` dolduruyor. Bu maddenin "geçmiş veri hazır olur" varsayımı bugün geçersiz ve
+aşağıdaki efor tahmini ona dayanıyordu. **Faz 10 / T88 bu açığı kapatıyor**; E8 ancak T88
+canlıya çıktıktan SONRA anlamlı veriyle başlayabilir.
 
 **Efor:** M (human ~4 gün / CC ~4 saat)
 **Bağımlılık:** U2 kararı verilmiş olmalı.
