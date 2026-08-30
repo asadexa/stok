@@ -1797,7 +1797,7 @@ aynı), migration drift kontrolü, dört adım CLAUDE.md'deki bitmiş sayılma
     kaldır, Windows işinin kırmızı yandığını gör.
   - Kaynak: CI incelemesi 2026-08-30
 
-- [ ] **T97 (P2, human: ~10dk / CC: ~5dk)** - güvenlik - **CI `permissions:` bloğu**
+- [x] **T97 (P2, human: ~10dk / CC: ~5dk)** - güvenlik - **CI `permissions:` bloğu**
   - İş akışında `permissions:` yok. `GITHUB_TOKEN`'ın varsayılan izinleri
     repo ve organizasyon ayarına bağlı; eski repolarda yazma yetkili geliyor.
     Bir action ya da bir bağımlılığın postinstall'ı o tokenı kullanabilir.
@@ -1805,9 +1805,11 @@ aynı), migration drift kontrolü, dört adım CLAUDE.md'deki bitmiş sayılma
     hiçbir şey yazmıyor, daha fazlasına ihtiyacı yok.
   - Doğrula: koşu logundaki "GITHUB_TOKEN Permissions" bloğunda yalnızca
     `contents: read` görünsün.
+  - **Yapıldı:** iş akışının başına `permissions:` / `contents: read`.
+    Bu iş akışı hiçbir şey yazmıyor, daha fazlasına ihtiyacı yok.
   - Kaynak: CI incelemesi 2026-08-30
 
-- [ ] **T98 (P3, human: ~30dk / CC: ~10dk)** - güvenlik - **Action'ları commit SHA'sına sabitle**
+- [x] **T98 (P3, human: ~30dk / CC: ~10dk)** - güvenlik - **Action'ları commit SHA'sına sabitle**
   - `actions/checkout@v4`, `pnpm/action-setup@v4`, `actions/setup-node@v4`
     hareketli etiketler ve etiket sahibi tarafından taşınabilir. Ele geçirilen
     bir action CI ortamındaki her değişkeni okuyabilir.
@@ -1816,9 +1818,18 @@ aynı), migration drift kontrolü, dört adım CLAUDE.md'deki bitmiş sayılma
     **T42 (deploy) gerçek sırlarla geldiğinde bu P1 olur.**
   - Doğrula: `@v4` yerine tam SHA, yanına yorumda sürüm; güncellemeyi
     Dependabot açsın (T102).
+  - **Yapıldı:** yedi `uses:` referansının tamamı commit SHA'sına sabitlendi
+    (checkout v4.4.0, pnpm/action-setup v4.3.0, setup-node v4.4.0,
+    upload-artifact v4.6.2), sürüm yanlarında yorumda.
+  - **İncelik:** `pnpm/action-setup`'ın `v4`'ü ANOTASYONLU etiket.
+    `f40ffcd` etiket NESNESİNİN SHA'sı; Actions commit SHA'sı bekliyor,
+    o yüzden `v4^{}` ile çözülen `b906aff` yazıldı. Etiket nesnesi
+    yazılsaydı iş akışı action'ı çözemezdi.
+  - Doğrulandı: dördü de `git ls-remote` ile upstream'de aranıp
+    beklenen etiketlere denk geldiği görüldü.
   - Kaynak: CI incelemesi 2026-08-30
 
-- [ ] **T99 (P3, human: ~20dk / CC: ~10dk)** - altyapı - **Node sürümünü sabitle**
+- [x] **T99 (P3, human: ~20dk / CC: ~10dk)** - altyapı - **Node sürümünü sabitle**
   - CI Node 22 kullanıyor, geliştirme makinesi Node 24, `engines` yalnızca
     `>=22` diyor, `.nvmrc` yok. Üretimde hangi sürümün koşacağı hiçbir yerde
     yazmıyor.
@@ -1828,9 +1839,15 @@ aynı), migration drift kontrolü, dört adım CLAUDE.md'deki bitmiş sayılma
   - Düzeltme: `.nvmrc` eklensin, CI `node-version-file` ile onu okusun,
     `engines` daraltılsın.
   - Doğrula: `.nvmrc` değiştir, CI logunda o sürümün kurulduğunu gör.
+  - **Yapıldı:** `.nvmrc` (22) eklendi, iki iş de `node-version-file`
+    ile onu okuyor, `engines` `>=22 <25`e daraltıldı.
+  - **Sürüm DEĞİŞTİRİLMEDİ.** CI zaten 22 koşuyordu; tek değişen, sürümün
+    iş akışından tek bir kaynağa taşınması. Geliştirme makinesi 24'te;
+    nvm/fnm kullanan biri artık CI ile aynı sürüme hizalanıyor. 22 mi 24
+    mü sorusu ayrı bir karar ve burada verilmedi.
   - Kaynak: CI incelemesi 2026-08-30
 
-- [ ] **T100 (P3, human: ~10dk / CC: ~5dk)** - altyapı - **`concurrency` master koşularını iptal etmesin**
+- [x] **T100 (P3, human: ~10dk / CC: ~5dk)** - altyapı - **`concurrency` master koşularını iptal etmesin**
   - `concurrency.group` dal referansına bağlı ve `cancel-in-progress: true`.
     Master'a arka arkaya iki push gelirse birincisi iptal ediliyor ve o
     commit'in durumu hiç bilinmiyor.
@@ -1838,6 +1855,8 @@ aynı), migration drift kontrolü, dört adım CLAUDE.md'deki bitmiş sayılma
     bağlanacak ve iptal edilmiş bir commit "başarısız" gibi görünecek.
   - Düzeltme: `cancel-in-progress` yalnızca master DIŞINDAKİ dallarda açık
     olsun (ifade `github.ref` karşılaştırmasıyla yazılır).
+  - **Yapıldı:** `cancel-in-progress` master dışındaki dallara
+    sınırlandı; master koşuları artık iptal edilmiyor.
   - Kaynak: CI incelemesi 2026-08-30
 
 - [ ] **T101 (P3, human: ~3sa / CC: ~30dk)** - test - **Kapsam ölçümü**

@@ -25,11 +25,23 @@ on:
     branches: [master]
   pull_request:
 
+# GITHUB_TOKEN yalnızca okuyabilsin. Varsayılan izinler repo ve
+# organizasyon ayarına bağlı ve eski repolarda YAZMA yetkili geliyor;
+# bir action ya da bir bağımlılığın postinstall betiği o tokenı
+# kullanabilir. Bu iş akışı hiçbir şey yazmıyor, daha fazlasına
+# ihtiyacı yok.
+permissions:
+  contents: read
+
 # Aynı dal üstünde arka arkaya push yapılırsa eski koşuyu iptal et:
 # ikinci push'un sonucu zaten birincininkini geçersiz kılıyor.
+#
+# MASTER HARİÇ. Orada iptal edilen koşunun commit'i "durumu bilinmiyor"
+# olarak kalıyor. Bugün zararsız, ama T42 (deploy) yeşil koşuya
+# bağlanacak ve iptal edilmiş bir commit başarısız gibi görünecek.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
 
 jobs:
   test:
@@ -64,13 +76,18 @@ jobs:
       AUTH_SECRET: ci-icin-sabit-anahtar-en-az-32-karakter
 
     steps:
-      - uses: actions/checkout@v4
+      # v4.4.0 — SHA sabit, etiket taşınabilir (T98)
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
 
-      - uses: pnpm/action-setup@v4
+      # v4.3.0 — anotasyonlu etiketin altındaki COMMIT SHA (T98)
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
 
-      - uses: actions/setup-node@v4
+      # v4.4.0 (T98)
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
-          node-version: 22
+          # Sürüm .nvmrc'de, iş akışında değil: geliştirme makinesiyle
+          # CI aynı sürümde koşsun ve tek yerden değişsin.
+          node-version-file: .nvmrc
           cache: pnpm
 
       # --frozen-lockfile: pnpm-lock.yaml ile package.json ayrışmışsa
@@ -137,13 +154,18 @@ jobs:
     timeout-minutes: 20
 
     steps:
-      - uses: actions/checkout@v4
+      # v4.4.0 — SHA sabit, etiket taşınabilir (T98)
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
 
-      - uses: pnpm/action-setup@v4
+      # v4.3.0 — anotasyonlu etiketin altındaki COMMIT SHA (T98)
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
 
-      - uses: actions/setup-node@v4
+      # v4.4.0 (T98)
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
-          node-version: 22
+          # Sürüm .nvmrc'de, iş akışında değil: geliştirme makinesiyle
+          # CI aynı sürümde koşsun ve tek yerden değişsin.
+          node-version-file: .nvmrc
           cache: pnpm
 
       # README'nin ve CLAUDE.md'nin tek komut diye gösterdiği şey bu.
@@ -169,7 +191,8 @@ jobs:
       # teşhis koymak, T61'deki "log yok" durumunun aynısı olur.
       - name: Hata izleri
         if: failure()
-        uses: actions/upload-artifact@v4
+        # v4.6.2 (T98)
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: duman-testi-izleri
           path: apps/web/test-results/

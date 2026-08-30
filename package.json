@@ -5,7 +5,7 @@
   "type": "module",
   "packageManager": "pnpm@11.0.8",
   "engines": {
-    "node": ">=22"
+    "node": ">=22 <25"
   },
   "scripts": {
     "db:up": "docker compose up -d && node scripts/wait-for-db.mjs",
