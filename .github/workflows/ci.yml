@@ -102,6 +102,15 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      # `pnpm --filter X <script>` Windows'ta `'<script>' is not recognized`
+      # veriyor, Linux'ta çoğunlukla çalışıyor. Yani hata YALNIZCA Windows'ta
+      # görünüyor. Windows işi bu çağrıların hepsini koşmuyor: README'deki,
+      # hata mesajlarındaki ve dokümandaki komutlar hiç çalıştırılmıyor —
+      # T57'nin on üçüncü örneği zaten öyle bir yerdeydi. Statik tarama
+      # orayı görüyor, koşan bir test görmüyor.
+      - name: pnpm --filter kullanımı
+        run: node scripts/check-pnpm-filter.mjs
+
       - name: Typecheck
         run: pnpm typecheck
 
@@ -205,3 +214,58 @@ jobs:
           path: apps/web/test-results/
           retention-days: 7
           if-no-files-found: ignore
+
+  # ==========================================================================
+  # T96 — WINDOWS
+  #
+  # Proje Windows'ta geliştiriliyor ve CLAUDE.md'de "Windows tuzakları
+  # (yaşandı, tekrar etmesin)" başlıklı ayrı bir bölüm var. `scripts/demo.mjs`
+  # tamamen Windows yüzünden yazıldı (T57). Buna rağmen CI yalnızca ubuntu
+  # üstünde koşuyordu: o tuzakların tekrar etmediğini kimse doğrulamıyordu.
+  #
+  # NE KAPSIYOR: yol ayıracı, kabuk farkları, `next build`in Windows'ta
+  # çözümlemesi, pnpm workspace bağlantıları.
+  #
+  # NE KAPSAMIYOR VE NEDEN: veritabanına dokunan hiçbir şey. GitHub'ın
+  # Windows koşucusunda Linux konteyneri çalışmıyor, yani `postgres:17-alpine`
+  # servis konteyneri de `pnpm demo`nun kaldırdığı Docker da kullanılamıyor.
+  # Bunu Windows'ta yerel bir Postgres kurarak çözmek mümkün ama koşuyu
+  # dakikalarca uzatır; testlerin veritabanı tarafı platformdan bağımsız
+  # olduğu için kazancı düşük.
+  #
+  # `pnpm --filter X <script>` sınıfı bu işle DEĞİL, `test` işindeki statik
+  # taramayla korunuyor: o çağrıların çoğu README ve hata mesajlarının
+  # içinde ve hiçbir iş onları çalıştırmıyor.
+  # ==========================================================================
+  windows:
+    name: Windows (lint + typecheck + derleme)
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+      # v4.4.0 — SHA sabit, etiket taşınabilir (T98)
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      # v4.3.0 — anotasyonlu etiketin altındaki COMMIT SHA (T98)
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+
+      # v4.4.0 (T98)
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Bağımlılıklar
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      # Asıl sınav bu: `next build` monorepo paketlerini kaynak TypeScript
+      # olarak tüketiyor ve modül çözümlemesi `next.config.ts`te elle
+      # kuruluyor. Yol ayıracı farkı orada patlarsa yalnızca burada görünür.
+      - name: Web derlemesi
+        run: pnpm --filter @stok/web run build

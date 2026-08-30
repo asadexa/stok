@@ -1891,7 +1891,7 @@ aynı), migration drift kontrolü, dört adım CLAUDE.md'deki bitmiş sayılma
     web derlemesi, migration drift yok.
   - Kaynak: CI incelemesi 2026-08-30
 
-- [ ] **T96 (P2, human: ~2sa / CC: ~30dk)** - altyapı - **Windows CI işi**
+- [x] **T96 (P2, human: ~2sa / CC: ~30dk)** - altyapı - **Windows CI işi**
   - Proje Windows'ta geliştiriliyor ve CLAUDE.md'de "Windows tuzakları
     (yaşandı, tekrar etmesin)" başlıklı ayrı bir bölüm var. `scripts/demo.mjs`
     tamamen Windows yüzünden yazıldı (T57). Ama CI yalnızca `ubuntu-latest`
@@ -1906,6 +1906,39 @@ aynı), migration drift kontrolü, dört adım CLAUDE.md'deki bitmiş sayılma
     job ikinci bir kaynak olur ve zamanla ayrışır.
   - Doğrula: bir `pnpm --filter X run <script>` çağrısından `run` kelimesini
     kaldır, Windows işinin kırmızı yandığını gör.
+  - **YAPILDI, İKİ PARÇA:**
+    - **Statik tarama** (`scripts/check-pnpm-filter.mjs`, CI'da her
+      platformda koşuyor): `pnpm --filter X <script>` kullanımını
+      yasaklıyor. Dokümantasyon yer tutucuları (`<script>`) hariç
+      tutuluyor — yoksa koruma kendi varlık sebebini açıklayan metni
+      suçlar ve ilk çare onu kapatmak olurdu.
+    - **Windows işi** (`windows-latest`): lint + typecheck + web derlemesi.
+  - **KORUMA HEMEN BİR HATA BULDU.** `packages/db/src/testing.ts:62`,
+    kullanıcıya gösterilen hata mesajının içinde: "komutu paket dizininden
+    çalıştır" derken filtreden sonra doğrudan script adını yazıyordu, arada
+    `run` yok. Yani mesaj Windows kullanıcısına ÇALIŞMAYAN bir komut
+    öneriyordu. T57'nin on üçüncü
+    örneği, tam da öngörülen yerden çıktı. Düzeltildi.
+  - **NEDEN İKİ PARÇA.** Windows işi bu çağrıların çoğunu KOŞMUYOR:
+    README'deki, hata mesajlarındaki ve dokümandaki komutlar hiç
+    çalıştırılmıyor — bulunan hata da tam olarak öyle bir yerdeydi. Statik
+    tarama orayı görüyor, koşan bir test görmüyor.
+  - **WINDOWS İŞİ NE KAPSAMIYOR VE NEDEN:** veritabanına dokunan hiçbir şey.
+    GitHub'ın Windows koşucusunda Linux konteyneri çalışmıyor; ne
+    `postgres:17-alpine` servis konteyneri ne de `pnpm demo`nun kaldırdığı
+    Docker kullanılabiliyor. Windows'a yerel Postgres kurmak mümkün ama
+    koşuyu dakikalarca uzatır ve testlerin veritabanı tarafı platformdan
+    bağımsız olduğu için kazancı düşük.
+  - **FALSİFİKASYONLA DOĞRULANDI (`dogrula`):** `package.json`a geçici
+    olarak filtreden sonra doğrudan script adı yazan bir kayıt eklendi,
+    geri alındı. Temiz hâlde 180 dosya tarayıp 0 dönüyor.
+  - **Korumanın kendi kısıtı:** bozuk biçimi ANLATMAK için birebir
+    alıntılayan metin de yakalanıyor. Kaçış kapısı EKLENMEDİ; kaçış
+    kapısı zamanla istismar edilir ve koruma anlamını yitirir. Bunun
+    yerine belgeler biçimi üretmeden anlatıyor.
+  - Yan not: linter, yeni yazılan bu betikte kullanılmayan bir import
+    yakaladı. T95 daha ilk gününde işini yaptı.
+  - **Yeşil:** tarama temiz, lint (0 tanı), typecheck (4 paket).
   - Kaynak: CI incelemesi 2026-08-30
 
 - [x] **T97 (P2, human: ~10dk / CC: ~5dk)** - güvenlik - **CI `permissions:` bloğu**

@@ -59,7 +59,7 @@ function required(name: 'DATABASE_URL' | 'MIGRATION_DATABASE_URL'): string {
   if (!value) {
     throw new Error(
       `${name} tanımlı değil. Testler kök dizindeki .env dosyasını okur; ` +
-        'komutu paket dizininden çalıştır (pnpm --filter @stok/db test).',
+        'komutu paket dizininden çalıştır (pnpm --filter @stok/db run test).',
     )
   }
   return value
