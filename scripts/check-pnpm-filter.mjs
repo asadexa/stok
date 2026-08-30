@@ -65,7 +65,9 @@ for (const file of files) {
 }
 
 if (bulgular.length === 0) {
-  console.log(`pnpm --filter kullanımı temiz (${files.length} dosya tarandı).`)
+  // Mesaj, aranan biçimi ÜRETMEMELİ: betik `git ls-files` üzerinden kendini
+  // de tarıyor ve başarı satırı deseni içerirse her koşuda kendini suçlar.
+  console.log(`filtre kullanımı temiz (${files.length} dosya tarandı).`)
   process.exit(0)
 }
 

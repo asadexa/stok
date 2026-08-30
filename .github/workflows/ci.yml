@@ -76,14 +76,14 @@ jobs:
       AUTH_SECRET: ci-icin-sabit-anahtar-en-az-32-karakter
 
     steps:
-      # v4.4.0 — SHA sabit, etiket taşınabilir (T98)
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      # v5.1.0 — SHA sabit, etiket taşınabilir (T98, T103)
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
 
-      # v4.3.0 — anotasyonlu etiketin altındaki COMMIT SHA (T98)
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+      # v5.0.0 — anotasyonlu etiketin altındaki COMMIT SHA (T98, T103)
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320
 
-      # v4.4.0 (T98)
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      # v5.0.0 (T98, T103)
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
         with:
           # Sürüm .nvmrc'de, iş akışında değil: geliştirme makinesiyle
           # CI aynı sürümde koşsun ve tek yerden değişsin.
@@ -128,8 +128,12 @@ jobs:
             exit 1
           fi
 
-      - name: Testler
-        run: pnpm test
+      # Kapsamla koşuyor, testi İKİ KEZ koşturmamak için. Rakam PR
+      # logunda görünüyor ama EŞİK YOK ve CI'ı kırmıyor: eşik koymak,
+      # kapsamı test yazarak değil test silerek yükseltmeye teşvik eder.
+      # Ölçülmeyen boşluk tartışılmıyor; görünen boşluk tartışılıyor.
+      - name: Testler (kapsamla)
+        run: pnpm test:coverage
 
       # Typecheck web uygulamasının DERLENECEĞİNİ göstermiyor: tsc ile
       # webpack aynı modül çözümlemesini yapmıyor. Monorepo paketleri
@@ -143,6 +147,13 @@ jobs:
       # derleme sırasında hiçbiri sorgu çalıştırmıyor.
       - name: Web derlemesi
         run: pnpm --filter @stok/web run build
+
+      # BLOKLAMIYOR (continue-on-error). Hemen düzeltilemeyen bir
+      # transitive açık bütün geliştirmeyi durdurursa ilk çare adımı
+      # kapatmak olur. Görünür olması, bloklaması değil, işi görüyor.
+      - name: Bağımlılık denetimi
+        continue-on-error: true
+        run: pnpm audit --audit-level=high
 
   # ==========================================================================
   # T93 — DUMAN TESTİ: kurulumdan girişe giden yol
@@ -170,14 +181,14 @@ jobs:
     timeout-minutes: 20
 
     steps:
-      # v4.4.0 — SHA sabit, etiket taşınabilir (T98)
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      # v5.1.0 — SHA sabit, etiket taşınabilir (T98, T103)
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
 
-      # v4.3.0 — anotasyonlu etiketin altındaki COMMIT SHA (T98)
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+      # v5.0.0 — anotasyonlu etiketin altındaki COMMIT SHA (T98, T103)
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320
 
-      # v4.4.0 (T98)
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      # v5.0.0 (T98, T103)
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
         with:
           # Sürüm .nvmrc'de, iş akışında değil: geliştirme makinesiyle
           # CI aynı sürümde koşsun ve tek yerden değişsin.
@@ -207,8 +218,8 @@ jobs:
       # teşhis koymak, T61'deki "log yok" durumunun aynısı olur.
       - name: Hata izleri
         if: failure()
-        # v4.6.2 (T98)
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        # v5.0.0 (T98, T103)
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         with:
           name: duman-testi-izleri
           path: apps/web/test-results/
@@ -243,14 +254,14 @@ jobs:
     timeout-minutes: 20
 
     steps:
-      # v4.4.0 — SHA sabit, etiket taşınabilir (T98)
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      # v5.1.0 — SHA sabit, etiket taşınabilir (T98, T103)
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
 
-      # v4.3.0 — anotasyonlu etiketin altındaki COMMIT SHA (T98)
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+      # v5.0.0 — anotasyonlu etiketin altındaki COMMIT SHA (T98, T103)
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320
 
-      # v4.4.0 (T98)
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      # v5.0.0 (T98, T103)
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
         with:
           node-version-file: .nvmrc
           cache: pnpm

@@ -41,3 +41,6 @@ test-results/
 playwright-report/
 blob-report/
 .playwright/
+
+# Kapsam raporlari (T101)
+coverage/

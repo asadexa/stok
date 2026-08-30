@@ -2003,7 +2003,7 @@ aynı), migration drift kontrolü, dört adım CLAUDE.md'deki bitmiş sayılma
     sınırlandı; master koşuları artık iptal edilmiyor.
   - Kaynak: CI incelemesi 2026-08-30
 
-- [ ] **T101 (P3, human: ~3sa / CC: ~30dk)** - test - **Kapsam ölçümü**
+- [x] **T101 (P3, human: ~3sa / CC: ~30dk)** - test - **Kapsam ölçümü**
   - 316 test ve 5052 satır test kodu var, ama hangi satırların kapsandığı
     ölçülmüyor. `apps/web`'in sıfır testi (T94) hiçbir sayıda görünmüyor; bu
     incelemede ancak `package.json` elle okunarak fark edildi.
@@ -2013,9 +2013,23 @@ aynı), migration drift kontrolü, dört adım CLAUDE.md'deki bitmiş sayılma
     bir değişikliği bloklamak, kapsamı test yazarak değil test silerek
     yükseltmeye teşvik eder.
   - Doğrula: `vitest --coverage` çıktısında `apps/web` yüzde sıfır görünsün.
+  - **YAPILDI:** `@vitest/coverage-v8`, dört pakete `test:coverage`, CI'da
+    `Testler` adımı kapsamla koşuyor (testi iki kez koşturmamak için).
+  - **BOŞLUK ARTIK BİR RAKAM:**
+    `packages/core %93,6` · `packages/shared %91,7` ·
+    `packages/db %48,3` · `apps/web %7,3`
+  - `apps/web`'in %7'si beklenen ve T94'ün kapsam düzeltmesini doğruluyor:
+    geri kalanı sayfa bileşenleri, yani T92'nin Playwright alanı.
+    `packages/db`'nin %48'i seed/init gibi CLI betiklerinden.
+  - **EŞİK KONMADI, bilinçli.** Eşik, kapsamı test yazarak değil test
+    silerek yükseltmeye teşvik eder. Rakamın PR logunda görünmesi yeterli:
+    ölçülmeyen boşluk tartışılmıyor, görünen boşluk tartışılıyor.
+  - **Kurulum tuzağı:** `@vitest/coverage-v8` varsayılan olarak v4 çekti,
+    paketler ise vitest 3'te. "Running mixed versions is not supported"
+    uyarısı verip `reportsDirectory` okunamadı diye patladı. Sürüm eşlendi.
   - Kaynak: CI incelemesi 2026-08-30
 
-- [ ] **T102 (P3, human: ~30dk / CC: ~15dk)** - güvenlik - **Dependabot ve bağımlılık denetimi**
+- [x] **T102 (P3, human: ~30dk / CC: ~15dk)** - güvenlik - **Dependabot ve bağımlılık denetimi**
   - `.github` altında yalnızca `ci.yml` var. Bağımlılık güncellemesi elle,
     bilinen açık taraması hiç yok. `pnpm audit` çıktısına hiç bakılmamış
     olması, açığın yokluğu anlamına gelmiyor.
@@ -2024,9 +2038,22 @@ aynı), migration drift kontrolü, dört adım CLAUDE.md'deki bitmiş sayılma
   - Alternatif: audit'i bloklayıcı yapmak. Seçilmedi — hemen düzeltilemeyen
     bir transitive açık bütün geliştirmeyi durdurur ve ilk çare kontrolü
     kapatmak olur.
+  - **YAPILDI:** `.github/dependabot.yml` (npm + github-actions, haftalık,
+    küçük sürümler tek PR'da gruplu) ve CI'da **bloklamayan**
+    `pnpm audit --audit-level=high` adımı.
+  - **İLK KOŞUDA DÖRT YÜKSEK ŞİDDETLİ AÇIK BULDU.** Biri doğrudan
+    bağımlılıkta ve bu projenin güvenlik modelinin tam kalbinde:
+    **`drizzle-orm`, yanlış kaçırılmış SQL tanımlayıcıları üzerinden SQL
+    injection.** 0.44.7 kullanılıyordu, düzeltme 0.45.2'de.
+    Yükseltildi; lint, typecheck, migration drift ve 546 test yeşil kaldı.
+  - Kalan üçü (`sharp`, `postcss` ×2) Next üzerinden geçişli ve Next
+    yükseltmesi gerektiriyor → **T104**.
+  - **NEDEN BLOKLAMIYOR:** hemen düzeltilemeyen bir geçişli açık bütün
+    geliştirmeyi durdurursa ilk çare adımı kapatmak olur. Görünür olması,
+    bloklaması değil, işi görüyor — nitekim ilk koşuda gördü.
   - Kaynak: CI incelemesi 2026-08-30
 
-- [ ] **T103 (P3, human: ~30dk / CC: ~15dk)** - altyapı - **Action'ları v5 hattına taşı (Node 20 kullanımdan kalkıyor)**
+- [x] **T103 (P3, human: ~30dk / CC: ~15dk)** - altyapı - **Action'ları v5 hattına taşı (Node 20 kullanımdan kalkıyor)**
   - **İLK GERÇEK KOŞUDA ORTAYA ÇIKTI** (run 33318396877). Sabitlenen `v4`
     hatları Node 20 hedefliyor; GitHub şu an zorla Node 24'te çalıştırıyor
     ve her koşuda uyarı basıyor:
@@ -2040,8 +2067,37 @@ aynı), migration drift kontrolü, dört adım CLAUDE.md'deki bitmiş sayılma
     alınmalı; Actions commit SHA'sı bekliyor.
   - Doğrula: push sonrası koşuda "Node.js 20 is deprecated" uyarısı
     kalmamalı.
+  - **YAPILDI:** on `uses:` referansının tamamı v5 hattına, commit
+    SHA'sıyla: checkout v5.1.0, setup-node v5.0.0, upload-artifact v5.0.0,
+    pnpm/action-setup v5.0.0. Dördü de `git ls-remote` ile upstream'de
+    doğrulandı.
+  - T98'deki incelik burada da geçerliydi: `pnpm/action-setup`'ın etiketi
+    anotasyonlu, `v5^{}` ile çözülen commit yazıldı.
+  - **Doğrulanacak:** "Node.js 20 is deprecated" uyarısının kalkması ancak
+    gerçek koşuda görülebilir; v5 hattının bu depoda sorunsuz çalıştığı da
+    öyle. Bir sonraki CI koşusunda bakılacak.
   - Kaynak: CI incelemesi 2026-08-30, ilk gerçek koşu
 
+
+
+- [ ] **T104 (P2, human: ~1g / CC: ~2sa)** - altyapı - **Next yükseltmesi: üç geçişli yüksek şiddetli açık**
+  - **T102'NİN İLK KOŞUSUNDA ÇIKTI.** `pnpm audit` üç yüksek şiddetli açık
+    buluyor ve üçü de Next üzerinden geçişli: `sharp` (libvips CVE'leri) ve
+    `postcss` ×2 (keyfi dosya okuma; source map üzerinden dizin gezinme).
+  - **Neden P2, P1 değil:** üçü de DERLEME zamanı bileşenleri. `postcss`
+    derlemede koşuyor, `sharp` görsel işlemede — ve bu üründe ürün
+    görselleri `next/image` ile değil düz bir img etiketiyle gösteriliyor
+    (T82-T84, adres kullanıcıdan geliyor). Yine de saldırı yüzeyi ve denetim
+    kaydı için kapatılmalı.
+  - **Kapsam:** Next sürümünü açıkların kapandığı hatta çıkar, sonra
+    `pnpm audit` temiz mi bak.
+  - **Yükseltme sonrası ZORUNLU:** duman testi (T93) ve web derlemesi. Next
+    yükseltmeleri modül çözümlemesini etkiliyor ve `next.config.ts`teki
+    `extensionAlias` ayarı kırılgan; bozulursa typecheck yeşil kalır,
+    derleme patlar.
+  - Doğrula: `pnpm audit --audit-level=high` yüksek şiddetli açık
+    döndürmemeli; duman testi 4/4 kalmalı.
+  - Kaynak: CI incelemesi 2026-08-30, T102 ilk koşusu
 
 ---
 
