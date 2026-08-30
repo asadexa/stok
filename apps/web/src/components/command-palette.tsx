@@ -188,6 +188,9 @@ export function CommandPalette({ canCreate }: { canCreate: boolean }) {
   }
 
   return (
+    // tıklayınca kapanma. Klavye kullanıcısı dışarıda kalmıyor: `Escape`
+    // ayrıca dinleniyor ve kapsayıcı `role="dialog"` taşıyor.
+    // biome-ignore lint/a11y/noStaticElementInteractions: arka plana
     <div
       className="fixed inset-0 z-50 flex items-start justify-center bg-ink/40 p-4 pt-[12vh]"
       // Dış tıklama kapatıyor. `currentTarget` kontrolü şart: panelin

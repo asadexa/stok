@@ -42,7 +42,7 @@ export function EmptyState({
           tone === 'ok' ? 'bg-ok-soft text-ok-soft-ink' : 'bg-accent-soft text-accent-soft-ink'
         }`}
       >
-        <svg
+        <svg aria-hidden="true"
           width="26"
           height="26"
           viewBox="0 0 24 24"
@@ -90,7 +90,7 @@ export function AllClear({ children }: { children: React.ReactNode }) {
   return (
     <p className="flex items-center gap-3 rounded-card border border-line bg-surface shadow-card p-4 text-ink-2">
       <span aria-hidden className="grid size-9 shrink-0 place-items-center rounded-lg bg-ok-soft text-ok-soft-ink">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+        <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
           <path d="M20 6 9 17l-5-5" />
         </svg>
       </span>

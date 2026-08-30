@@ -71,6 +71,9 @@ export function SkRows({ rows = 6, thumb = false }: { rows?: number; thumb?: boo
   return (
     <div>
       {Array.from({ length: rows }, (_, i) => (
+        // Liste hiç yeniden sıralanmıyor, öğe eklenip çıkarılmıyor; index
+        // burada kararlı bir kimlik. Kural, sıralanan listeler için var.
+        // biome-ignore lint/suspicious/noArrayIndexKey: sabit yer tutucular.
         <div key={i} className="flex items-center gap-3 border-t border-line px-4 py-3 first:border-t-0">
           {thumb ? <Sk w="38px" h={38} className="shrink-0 rounded-chip" /> : null}
           <div className="min-w-0 flex-1">
@@ -89,6 +92,8 @@ export function SkKpis({ count = 4 }: { count?: number }) {
   return (
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       {Array.from({ length: count }, (_, i) => (
+        // Sabit yer tutucular: liste sıralanmıyor, öğe eklenip çıkmıyor.
+        // biome-ignore lint/suspicious/noArrayIndexKey: kararlı kimlik
         <div key={i} className="rounded-card border border-line bg-surface shadow-card p-4">
           <div className="flex items-start justify-between">
             <Sk w="90px" h={13} />

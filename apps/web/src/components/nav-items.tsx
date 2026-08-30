@@ -47,7 +47,7 @@ export interface NavItem {
  */
 export function isActive(item: NavItem, pathname: string): boolean {
   const paths = [item.href, ...(item.alsoMatches ?? [])]
-  return paths.some((p) => pathname === p || pathname.startsWith(p + '/'))
+  return paths.some((p) => pathname === p || pathname.startsWith(`${p}/`))
 }
 
 function Icon({ children }: { children: React.ReactNode }) {

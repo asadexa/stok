@@ -197,6 +197,9 @@ function ErrorTable({ rows }: { rows: PreviewRow[] }) {
               <td className="px-4 py-2">{row.name || '—'}</td>
               <td className="px-4 py-2 text-ink-2">
                 {row.issues.map((issue, i) => (
+                  // satırın sorun listesi; önizleme boyunca sabit ve
+                  // sıralanmıyor. Sorunların kararlı bir kimliği yok.
+                  // biome-ignore lint/suspicious/noArrayIndexKey: tek bir
                   <div key={i}>
                     {issue.column ? (
                       <span className="font-medium">{issue.column}: </span>

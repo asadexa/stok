@@ -52,7 +52,10 @@ export function ProductThumb({
 
   if (imageUrl) {
     return (
-      // eslint-disable-next-line @next/next/no-img-element
+      // KULLANICIDAN geliyor (T82: tedarikçi kataloğundaki URL). next/image
+      // uzak adresleri `remotePatterns` ile önceden tanımlamayı istiyor;
+      // rastgele bir adres için bu mümkün değil. Zorunlu geri düşüş T84.
+      // biome-ignore lint/performance/noImgElement: görsel adresi
       <img
         src={imageUrl}
         // `alt=""`: görsel yanındaki metnin TEKRARI. Ürün adı hemen yanında

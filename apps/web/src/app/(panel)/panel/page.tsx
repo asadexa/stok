@@ -68,7 +68,7 @@ export default async function DashboardPage() {
             className="flex items-center gap-3 rounded-card border border-crit bg-crit-soft p-4 text-crit-soft-ink hover:brightness-95"
           >
             <span aria-hidden className="grid size-9 shrink-0 place-items-center rounded-lg bg-crit text-surface">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M12 9v4M12 17h.01" />
                 <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0" />
               </svg>
@@ -87,7 +87,7 @@ export default async function DashboardPage() {
             className="flex items-center gap-3 rounded-card border border-crit bg-crit-soft p-4 text-crit-soft-ink hover:brightness-95"
           >
             <span aria-hidden className="grid size-9 shrink-0 place-items-center rounded-lg bg-crit text-surface">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M12 9v4M12 17h.01" />
                 <circle cx="12" cy="12" r="10" />
               </svg>
@@ -104,7 +104,7 @@ export default async function DashboardPage() {
             className="flex items-center gap-3 rounded-card border border-line bg-surface shadow-card p-4 text-ink-2 hover:bg-surface-2"
           >
             <span aria-hidden className="grid size-9 shrink-0 place-items-center rounded-lg bg-surface-2">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
               </svg>
             </span>
@@ -121,7 +121,7 @@ export default async function DashboardPage() {
           foot={`${numFmt.format(summary.inStockCount)} tanesi stokta · arşiv hariç`}
           href="/stok"
           icon={
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="m21 16-9 5-9-5V8l9-5 9 5z" />
               <path d="M3.3 7 12 12l8.7-5" />
               <path d="M12 22V12" />
@@ -137,7 +137,7 @@ export default async function DashboardPage() {
           foot="Eşiğin altına düşenler"
           href="/stok?kritik=1"
           icon={
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 9v4M12 17h.01" />
               <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0" />
             </svg>
@@ -154,7 +154,7 @@ export default async function DashboardPage() {
           tone="ok"
           foot={`${numFmt.format(summary.today.inQty)} adet mal kabul`}
           icon={
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 5v14" />
               <path d="m19 12-7 7-7-7" />
             </svg>
@@ -174,7 +174,7 @@ export default async function DashboardPage() {
             tone="warn"
             foot="Adet × alış fiyatı · bugünkü durum"
             icon={
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M12 2v20" />
                 <path d="M17 6H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
               </svg>
@@ -188,7 +188,7 @@ export default async function DashboardPage() {
             tone="crit"
             foot={`${numFmt.format(summary.today.outQty)} adet çıkış`}
             icon={
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M12 19V5" />
                 <path d="m5 12 7-7 7 7" />
               </svg>

@@ -1830,7 +1830,7 @@ aynı), migration drift kontrolü, dört adım CLAUDE.md'deki bitmiş sayılma
     web 52), web derlemesi, migration drift yok.
   - Kaynak: CI incelemesi 2026-08-30
 
-- [ ] **T95 (P2, human: ~2sa / CC: ~20dk)** - altyapı - **Linter kur ya da sahte `pnpm lint` scriptini kaldır**
+- [x] **T95 (P2, human: ~2sa / CC: ~20dk)** - altyapı - **Linter kur ya da sahte `pnpm lint` scriptini kaldır**
   - Kök `package.json` içinde `"lint": "pnpm -r --if-present lint"` duruyor.
     Hiçbir pakette `lint` scripti yok, depoda hiç linter kurulu değil. Komut
     çalışır, 0 döner, hiçbir şey yapmaz.
@@ -1843,6 +1843,52 @@ aynı), migration drift kontrolü, dört adım CLAUDE.md'deki bitmiş sayılma
     linter olmadan hiç yazılamaz.
   - Doğrula: kasten kural ihlali içeren bir dosya ekle, `pnpm lint` kırmızı
     yansın, sonra sil.
+  - **YAPILDI:** Biome 2.5.11 kuruldu, `biome.json` yapılandırıldı, kök
+    `lint` scripti gerçek hâline getirildi (`biome lint .`) ve CI'da
+    typecheck'ten ÖNCE koşuyor — saniyeler sürüyor ve tip sisteminin
+    yakalayamadığı sınıfı yakalıyor.
+  - **174 tanı → 0.** Yol, kuralları körlemesine kapatmak değildi:
+    - `noNonNullAssertion` **kapalı** (174 tanının 128'i). `tsconfig`'de
+      `noUncheckedIndexedAccess` açık; testte `!` kullanmak o ayarın
+      doğrudan sonucu, stil hatası değil.
+    - `noAutofocus` **kapalı**. PLAN.md Bölüm 11: "Barkod okuyucu = klavye
+      emülasyonu, arama kutusu sayfa açılınca otomatik odaklanmalı."
+      Kural bu üründe yanlış; bilinçli bir ürün kararına karşı çıkıyor.
+    - `useSemanticElements` **kapalı**. `<search>` öğesi yeni ve tarayıcı
+      desteği eşit değil; `<form role="search">` yaygın ve güvenilir kalıp.
+    - `.claude/` hariç tutuldu: vendor gstack kopyası, depoya ait değil.
+  - **GERÇEK İYİLEŞTİRME:** 18 dekoratif SVG ikona `aria-hidden="true"`
+    eklendi (5 dosya). İkonlar metnin yanında duruyor (PLAN.md: renk +
+    ikon + metin); ekran okuyucu için doğru davranış onları atlamak, başlık
+    eklemek aynı bilgiyi iki kez okutur.
+  - **İKİ GERÇEK DÜZELTME:** `nav-items.tsx` string birleştirme → şablon
+    dizesi; `aktar/page.tsx`'te cümle noktalaması açık bir JSX ifadesine
+    alındı (`{";"}`) — JSX artığı bir noktalı virgülle karışmasın.
+  - **ALTI GEREKÇELİ BASTIRMA.** Gerekçesiz bastırma kuralı hiç açmamakla
+    aynı şey; her biri NEDEN'i yazıyor. En önemli ikisi kuralın YANILDIĞI
+    yerler: `save-feedback.tsx`'te `signature` bağımlılığı efekt gövdesinde
+    kullanılmıyor ama olay da bu — yeniden tetikleme anahtarı, kaldırılsa
+    ikinci kayıtta ses duyulmazdı (T79/T81). `command-palette.tsx`'te arka
+    plana tıklama klavye kullanıcısını dışarıda bırakmıyor: `Escape` zaten
+    dinleniyor ve kapsayıcı `role="dialog"` taşıyor.
+  - **YOL BOYUNCA ÇIKANLAR:**
+    - `badge.tsx`'teki dört ikonda `aria-hidden` ZATEN VARDI, yayılmış
+      (`{...common}`) prop'tan geliyordu. Biome bunu çözemediği için yanlış
+      pozitif veriyor; dosya başına gerekçeli bastırma kondu.
+    - `movements.test.ts`'te hiçbir kuralı bastırmayan ÖLÜ bir
+      `biome-ignore` vardı, kaldırıldı.
+    - `biome-ignore` satırı hedefin HEMEN üstünde olmalı. Açıklama
+      satırları onu aşağı itince bastırma tutmuyor ve Biome hem ihlali hem
+      "kullanılmayan bastırma" uyarısını veriyor. Açıklama önce,
+      `biome-ignore` en sonda.
+  - **T45 AÇILDI.** Route handler'da doğrudan `db` kullanımını yasaklayan
+    kural (D5'in makine zorlaması) artık yazılabilir; linter olmadan
+    imkânsızdı.
+  - **FALSİFİKASYONLA DOĞRULANDI (`dogrula`):** `a == b` içeren geçici bir
+    dosya eklendi, `pnpm lint` `noDoubleEquals` ile **exit 1** verdi, dosya
+    silindi. Eski script de sıfırla dönüyordu — fark tam olarak bu.
+  - **Yeşil:** lint (146 dosya, 0 tanı), typecheck (4 paket), test 546,
+    web derlemesi, migration drift yok.
   - Kaynak: CI incelemesi 2026-08-30
 
 - [ ] **T96 (P2, human: ~2sa / CC: ~30dk)** - altyapı - **Windows CI işi**

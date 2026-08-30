@@ -95,6 +95,13 @@ jobs:
       - name: Bağımlılıklar
         run: pnpm install --frozen-lockfile
 
+      # Linter ÖNCE koşuyor: saniyeler sürüyor ve typecheck.in
+      # yakalayamadığı sınıfı yakalıyor (kullanılmayan bağımlılık,
+      # erişilebilirlik, şüpheli JSX). Kırmızıysa daha pahalı
+      # adımları beklemeye gerek yok.
+      - name: Lint
+        run: pnpm lint
+
       - name: Typecheck
         run: pnpm typecheck
 

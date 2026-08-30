@@ -47,7 +47,9 @@ export default async function ImportPage() {
           </li>
           <li>Yeni ürünler için <span className="font-medium">Barkod</span> da zorunlu.</li>
           <li>
-            Stok kodu sistemde varsa o ürün <span className="font-medium">güncellenir</span>;
+            {/* Noktalama açık bir ifade içinde: JSX artığı bir noktalı virgülle
+                karışmasın, hem okuyan hem linter niyeti görsün. */}
+            Stok kodu sistemde varsa o ürün <span className="font-medium">güncellenir</span>{";"}
             dosyada olmayan sütunlara dokunulmaz.
           </li>
           <li>Fiyatlar Türkçe biçimde yazılabilir: 1.234,56</li>

@@ -95,7 +95,7 @@ export async function Shell({
             aria-hidden
             className="grid size-9 shrink-0 place-items-center rounded-chip bg-accent text-accent-ink"
           >
-            <svg
+            <svg aria-hidden="true"
               width="19"
               height="19"
               viewBox="0 0 24 24"
@@ -130,7 +130,7 @@ export async function Shell({
             aria-hidden
             className="grid size-9 shrink-0 place-items-center rounded-lg bg-accent-soft text-accent-soft-ink"
           >
-            <svg
+            <svg aria-hidden="true"
               width="18"
               height="18"
               viewBox="0 0 24 24"
@@ -179,6 +179,8 @@ export async function Shell({
           <form
             action="/stok"
             method="get"
+            // <search> öğesi yeni ve tarayıcı desteği eşit değil;
+            // `<form role="search">` yaygın ve güvenilir kalıp.
             role="search"
             className="order-3 flex h-11 w-full items-center gap-2 rounded-control border border-line-control bg-surface px-3 focus-within:outline-3 focus-within:outline-focus lg:order-none lg:ml-auto lg:w-80"
           >

@@ -77,7 +77,7 @@ export function AlertBell({ summary }: { summary: AlertSummary }) {
               aria-hidden
               className="grid size-7 shrink-0 place-items-center rounded-lg bg-ok-soft text-ok-soft-ink"
             >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+              <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M20 6 9 17l-5-5" />
               </svg>
             </span>
@@ -125,7 +125,7 @@ function BellRow({
           aria-hidden
           className="grid size-8 shrink-0 place-items-center rounded-lg bg-crit-soft text-crit-soft-ink"
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M12 9v4M12 17h.01" />
             <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0" />
           </svg>

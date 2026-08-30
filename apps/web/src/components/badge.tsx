@@ -1,3 +1,7 @@
+// biome-ignore-all lint/a11y/noSvgWithoutTitle: ikonlar dekoratif ve
+// aria-hidden ortak `common` nesnesinden yayiliyor; Biome yayilmis
+// prop.lari cozemedigi icin yanlis pozitif veriyor. Metin her zaman
+// ikonun yaninda (PLAN.md Bolum 11: renk + ikon + metin).
 /**
  * ============================================================================
  * DURUM ROZETİ — T70 (tasarım incelemesi, karar TD1)

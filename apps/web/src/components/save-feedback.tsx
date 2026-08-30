@@ -100,6 +100,10 @@ export function SaveFeedback({
   enabled: boolean
   signature: string
 }) {
+  // efekt gövdesinde KULLANILMIYOR ve olayı da bu. Yeniden tetikleme
+  // anahtarı: her kayıtta değeri değişiyor ve ses yeniden çalıyor.
+  // Kaldırılsaydı ikinci kayıtta hiçbir şey duyulmazdı (T79, T81).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `signature`
   useEffect(() => {
     if (!enabled) return
     play(tone)

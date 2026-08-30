@@ -123,7 +123,7 @@ describe('createMovement - mutlu yol', () => {
     )
 
     const [row] = await admin.db.execute<{ note: string; location_id: string; unit_cost: string }>(
-      // biome-ignore lint: test doğrulaması, ham SQL en okunaklısı
+      // Test doğrulaması: ham SQL en okunaklısı.
       `SELECT note, location_id, unit_cost FROM stock_movements WHERE id = '${res.movementId}'`,
     )
     expect(row?.note).toBe('Cuma sevkiyatı')
