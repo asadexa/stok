@@ -51,7 +51,31 @@ export default defineConfig({
     video: 'off',
   },
 
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  /**
+   * `PLAYWRIGHT_CHROMIUM_PATH` VERİLİRSE O TARAYICI KULLANILIYOR.
+   *
+   * Playwright kendi sürümüne bağlı bir tarayıcı revizyonu indiriyor
+   * (`chromium-1234` gibi). Tarayıcının ÖNCEDEN kurulu geldiği ortamlarda —
+   * CI imajları, kurumsal makineler, geliştirme konteynerleri — revizyon
+   * numarası tutmuyor ve Playwright "install çalıştır" diyerek birkaç yüz
+   * megabaytlık bir indirmeye zorluyor; ağı kısıtlı ortamda o indirme hiç
+   * bitmiyor ve testler HİÇ KOŞMUYOR.
+   *
+   * Yol koda GÖMÜLMÜYOR: ortama özgü bir yolu depoya yazmak, o yolun
+   * olmadığı her makinede testi kırardı. Değişken verilmezse Playwright
+   * her zamanki davranışını sürdürüyor.
+   */
+  projects: [
+    {
+      name: 'chromium',
+      use: {
+        ...devices['Desktop Chrome'],
+        ...(process.env.PLAYWRIGHT_CHROMIUM_PATH
+          ? { launchOptions: { executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH } }
+          : {}),
+      },
+    },
+  ],
 
   webServer: {
     command: 'pnpm run start',

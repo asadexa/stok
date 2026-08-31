@@ -1739,7 +1739,55 @@ veriyle test edilebilir hale gelir.
   - **Doğrulanmadan başlanmasın:** Yİ-ÜFE'nin resmî endeks olduğu bilgi
     birikiminden söylendi, TÜİK'ten teyit EDİLMEDİ.
 
-- [ ] **T92 (P1, human: ~2g / CC: ~1sa)** - test - Faz 10 test kapsamı: sunucu testleri + T38'in öne çekilmesi
+- [~] **T92 (P1, human: ~2g / CC: ~1sa)** - test - Faz 10 test kapsamı: sunucu testleri + T38'in öne çekilmesi
+  - **SUNUCU TARAFI TAMAM (2026-08-31).** `packages/core/src/prices.test.ts`,
+    29 test. Kapsanan yollar: liste fiyatı sunucudan okunuyor; istemcinin
+    gönderdiği liste fiyatı sapmayı sıfırlayamıyor; fiyat yoksa CHECK
+    geçiyor; eşitse sebep istenmiyor; farklı+sebepli kabul; farklı+sebepsiz
+    RED; listede olmayan sebep hem zod hem DB CHECK ile red; "Diğer"de
+    açıklama zorunlu; `client_list_price` ayrı saklanıyor ve uyuşmazlık
+    görünür; giriş=alış / çıkış=satış dayanağı; liste fiyatı harekete
+    donuyor (ürün zamlansa da geçmiş değişmiyor); D7 yetki ayrımı; devirde
+    fiyat zorunlu; ileri tarihli ve satışta geçmiş tarihli `price_date`
+    reddi; alış fiyatının hata metninden sızmaması.
+    **On üç korumanın her biri tek tek kaldırılıp kırmızı yandığı görülerek
+    doğrulandı** — biri (saat dilimi) ilk turda yakalanmadı, testin kendisi
+    de aynı hatayı yapıyordu; düzeltildi.
+  - **T38 / ARAYÜZ AKIŞLARI: YAZILDI, CI'YA BAĞLANMADI.**
+    `apps/web/e2e/faz10-fiyat.spec.ts`, 9 senaryo. Bekleyen tek şey T109.
+  - **KALAN:** `replacementCost` dört kolu ve `price_index` RLS testleri
+    T90'a ait — o iş henüz yapılmadı, testleri de yazılamaz.
+
+- [ ] **T109 (P1, human: ~yarım gün / CC: ~2sa)** - test - **Faz 10 tarayıcı testleri kararsız: sunucu eylemi sonrası sayfa render edilmiyor**
+  - `apps/web/e2e/faz10-fiyat.spec.ts` her koşuda 9 senaryodan 1-3'ünde
+    kırmızı yanıyor ve KIRILAN TEST HER SEFERİNDE DEĞİŞİYOR — yani gerçek
+    bir ürün hatası değil, zamanlamaya bağlı bir takılma.
+  - **Ölçülenler (hepsi eleme amaçlı yapıldı, hiçbiri sebep değil):**
+    - Adres sunucu eyleminden sonra DOĞRU hata koduna dönüyor (`hata=...`),
+      yani sunucu isteği alıp 303 veriyor.
+    - Takılan anda `pg_stat_activity`: tek bağlantı, bekleyen kilit yok,
+      "idle in transaction" yok. Veritabanı temiz.
+    - `auth_attempts` BOŞ: kaba kuvvet koruması (T51) devreye girmiyor.
+    - Giriş ~350 ms, sayfa yüklemeleri ~180 ms. Yavaşlık yok.
+    - Gönderim süresi İKİ MODLU: ya ~110 ms ya 25 sn+ (90 sn'de de bitmiyor).
+      Arada değer yok — yani yavaşlama değil, TAKILMA.
+    - Hidratasyon beklendi (`networkidle`, ardından React'in kendi
+      `__reactFiber$` izi) — düzelmedi.
+    - Her teste ayrı ürün verildi (testler birbirinin stoğunu bozmasın) —
+      düzelmedi.
+    - Mevcut duman testi (`demo-yolu.spec.ts`) 3 koşuda 3 kez YEŞİL; o
+      dosya form GÖNDERMİYOR, yalnızca okuyor.
+  - **Kalan hipotez:** App Router istemci yönlendiricisi, sunucu eylemi
+    yönlendirmesinden sonra yeni segmenti bazen render etmiyor (`<main>`
+    boş kalıyor). Playwright'ın iptal ettiği RSC ön-yüklemeleriyle
+    (`?_rsc=` isteklerinde `ERR_ABORTED`) ilişkili olabilir.
+  - **ÖNCE ŞUNU CEVAPLA: bu kullanıcıyı da etkiliyor mu?** Etkiliyorsa bu
+    bir test sorunu değil, P0 bir ürün hatası — kullanıcı kaydetmeye basıp
+    boş ekranla kalıyor demektir. Elle tarayıcı turlarında (T88/T89)
+    görülmedi ama o turlar birkaç gönderimlikti.
+  - Çözülene kadar bu dosya CI kapısına BAĞLANMAMALI: kararsız bir kapı,
+    kısa sürede kimsenin bakmadığı bir kapıya dönüşür.
+  - Kaynak: T92
   - **Zorunlu regresyon testleri (kural gereği, tartışmasız).** `unit_cost` →
     `unit_price` mevcut davranışı değiştiriyor; kırılacağı ölçülen yerler:
     `role-matrix.test.ts:308,315,319,326`, `excel.test.ts:146`,
