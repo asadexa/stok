@@ -223,7 +223,7 @@ async function loadMovements(
       reason: stockMovements.reason,
       delta: stockMovements.delta,
       note: stockMovements.note,
-      unitCost: stockMovements.unitCost,
+      unitPrice: stockMovements.unitPrice,
     })
     .from(stockMovements)
     .innerJoin(products, eq(products.id, stockMovements.productId))
@@ -241,7 +241,7 @@ async function loadMovements(
     reason: r.reason as MovementReason,
     delta: scaledToNumber(parseScaled(r.delta)),
     note: r.note,
-    unitCost: r.unitCost === null ? null : Number(r.unitCost),
+    unitPrice: r.unitPrice === null ? null : Number(r.unitPrice),
   }))
 }
 

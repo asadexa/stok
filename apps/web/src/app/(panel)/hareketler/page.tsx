@@ -103,8 +103,8 @@ export default async function MovementsPage({
   const visible = hasNext ? rows.slice(0, PAGE_SIZE) : rows
 
   // Fiyat sütunu cevaptan türetiliyor, rolden değil: `listMovements`
-  // yetkisiz role `unitCost` alanını hiç koymuyor.
-  const showCost = visible.some((r) => r.unitCost !== undefined)
+  // yetkisiz role `unitPrice` alanını hiç koymuyor.
+  const showCost = visible.some((r) => r.unitPrice !== undefined)
 
   const filters = {
     urun: productId,
@@ -352,7 +352,7 @@ export default async function MovementsPage({
                     </td>
                     {showCost ? (
                       <td className="tabular px-4 py-2 text-right text-ink-2">
-                        {m.unitCost == null ? '—' : `${formatMoney(m.unitCost)} ₺`}
+                        {m.unitPrice == null ? '—' : `${formatMoney(m.unitPrice)} ₺`}
                       </td>
                     ) : null}
                     <td className="px-4 py-2 text-ink-2">{m.note ?? ''}</td>

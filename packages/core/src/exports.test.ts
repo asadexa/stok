@@ -56,7 +56,7 @@ beforeAll(async () => {
       barcode: tenant.products['EX-1']!.barcode,
       qty: 40,
       reason: 'PURCHASE',
-      unitCost: 3.5,
+      unitPrice: 3.5,
       clientCreatedAt: new Date().toISOString(),
     },
     { db: app.db },

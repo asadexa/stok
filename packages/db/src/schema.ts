@@ -3,6 +3,8 @@ import {
   jobKindsCheckConstraint,
   jobStatusesCheckConstraint,
   multiplierCheckConstraint,
+  priceOverrideReasonsCheckConstraint,
+  priceSourcesCheckConstraint,
   reasonsCheckConstraint,
   rolesCheckConstraint,
   unitsCheckConstraint,
@@ -12,6 +14,7 @@ import {
   type AnyPgColumn,
   boolean,
   check,
+  date,
   index,
   integer,
   jsonb,
@@ -262,9 +265,53 @@ export const stockMovements = pgTable(
     reason: text('reason').notNull(),
     note: text('note'),
     locationId: uuid('location_id').references(() => locations.id),
-    /** Girişte alış fiyatı. Maliyet takibi (Faz 2) bu veriyi bugünden topluyor,
-     *  böylece özellik açıldığında geçmiş veri hazır olur. */
-    unitCost: moneyCol('unit_cost'),
+    /**
+     * Birim fiyat. ANLAMI YÖNDEN TÜRÜYOR: girişte alış maliyeti, çıkışta
+     * satış hasılatı. Eskiden `unit_cost` idi; çıkış hareketlerinde hasılat
+     * tutan bir sütuna "maliyet" demek kalıcı bir yalan olurdu ve ilk
+     * muhasebeciyi yanıltırdı (T88).
+     *
+     * Yöne göre anlam türetmek bu depoda kurulu örüntü — `delta`'nın işareti
+     * de kullanıcıdan değil `reason`'dan türüyor.
+     */
+    unitPrice: moneyCol('unit_price'),
+    /**
+     * O günkü liste fiyatı, harekete DONDURULMUŞ.
+     *
+     * Dondurulmasaydı kontrol çürürdü: `products.sale_price` sonradan
+     * 110 → 120 olursa geçmişteki 10 ₺'lik kasa açığı geriye dönük 20 ₺'ye
+     * dönüşürdü. Defter zaten tam olarak bu yüzden append-only.
+     *
+     * Değeri SUNUCU okuyor (`createMovement`), istemci gönderse bile yok
+     * sayılıyor: aksi halde isteği kendi üreten biri `list_price = unit_price`
+     * yazıp sebep zorunluluğunu atlar ve kontrolün "gizlenemez" iddiası çöker.
+     */
+    listPrice: moneyCol('list_price'),
+    /**
+     * İstemcinin okutma anında GÖRDÜĞÜ liste fiyatı. Sunucununkiyle
+     * farklıysa hareket işaretleniyor.
+     *
+     * Bugün web'de ikisi hep eşit. Alan Faz 5 için değil, UYUŞMAZLIĞI
+     * GÖRÜNÜR KILMAK için var: çevrimdışı gecikmeli senkronda (T28) satış
+     * günü ile senkron günü arasında fiyat değişmişse fark sessiz kalmasın.
+     */
+    clientListPrice: moneyCol('client_list_price'),
+    /**
+     * Fiyatın ait olduğu EKONOMİK an. NULL = hareket tarihi.
+     *
+     * `created_at`'ten ayrı olmak zorunda: 5 yıldır elde tutulan mal bugün
+     * sisteme girilirken hareket bugün oluşur ama fiyat 5 yıl öncesine
+     * aittir. Tarihsiz fiyat enflasyona göre düzeltilemez (T89, T90).
+     */
+    priceDate: date('price_date'),
+    /** Fiyat nereden geldi: LIST / MANUAL / RECEIPT / INDEXED / ESTIMATED. */
+    priceSource: text('price_source'),
+    /**
+     * Liste fiyatından sapma sebebi. Serbest metin DEĞİL, listeden
+     * (`packages/shared/src/prices.ts`). Sapma sebepsiz olamaz — kural
+     * `movements_price_override_ck` ile veritabanında zorlanıyor.
+     */
+    priceOverrideReason: text('price_override_reason'),
     /**
      * Çift kayıt koruması. İstemcide BARKOD OKUTMA ANINDA üretilir,
      * gönderim anında değil (D-1.3): gönderimde üretilseydi uygulama
@@ -294,6 +341,26 @@ export const stockMovements = pgTable(
     check('movements_reason_ck', sql.raw(reasonsCheckConstraint('reason'))),
     // Hiçbir şeyi değiştirmeyen hareket olmamalı: ya veri hatası ya da hata ayıklama artığı.
     check('movements_delta_nonzero_ck', sql`delta <> 0`),
+    check(
+      'movements_price_override_ck',
+      // KASA AÇIĞI KONTROLÜNÜN KALBİ (T88). Liste fiyatından sapıldıysa
+      // sebep zorunlu. Kural burada duruyor çünkü satırı kimin yazdığından
+      // bağımsız korunmalı: uygulama, seed, /api/v1 ve elle SQL — hepsi
+      // aynı kurala tabi. Uygulama katmanındaki ikizi kullanıcıya anlaşılır
+      // hata göstermek için var, kuralın kendisi burası.
+      //
+      // EPSİLON YOK (D6 iptal): fiyat elle yazılmıyor, barkoddan geliyor;
+      // otorite sistemde olduğu için kazara sapma diye bir şey yok ve
+      // bilinçli kararın toleransı olmaz.
+      sql`unit_price IS NULL OR list_price IS NULL
+          OR unit_price = list_price
+          OR price_override_reason IS NOT NULL`,
+    ),
+    check(
+      'movements_price_reason_ck',
+      sql.raw(priceOverrideReasonsCheckConstraint('price_override_reason')),
+    ),
+    check('movements_price_source_ck', sql.raw(priceSourcesCheckConstraint('price_source'))),
   ],
 )
 

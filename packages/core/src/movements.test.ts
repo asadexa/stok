@@ -118,17 +118,17 @@ describe('createMovement - mutlu yol', () => {
         reason: 'PURCHASE',
         note: 'Cuma sevkiyatı',
         locationId: tenant.locationId,
-        unitCost: 12.5,
+        unitPrice: 12.5,
       }),
     )
 
-    const [row] = await admin.db.execute<{ note: string; location_id: string; unit_cost: string }>(
+    const [row] = await admin.db.execute<{ note: string; location_id: string; unit_price: string }>(
       // Test doğrulaması: ham SQL en okunaklısı.
-      `SELECT note, location_id, unit_cost FROM stock_movements WHERE id = '${res.movementId}'`,
+      `SELECT note, location_id, unit_price FROM stock_movements WHERE id = '${res.movementId}'`,
     )
     expect(row?.note).toBe('Cuma sevkiyatı')
     expect(row?.location_id).toBe(tenant.locationId)
-    expect(row?.unit_cost).toBe('12.50')
+    expect(row?.unit_price).toBe('12.50')
   })
 })
 

@@ -58,7 +58,7 @@ afterAll(async () => {
 
 const opts = { db: app.db }
 
-async function move(barcode: string, qty: number, unitCost?: number) {
+async function move(barcode: string, qty: number, unitPrice?: number) {
   return createMovement(
     boss,
     {
@@ -66,7 +66,7 @@ async function move(barcode: string, qty: number, unitCost?: number) {
       barcode,
       qty,
       reason: 'PURCHASE',
-      ...(unitCost === undefined ? {} : { unitCost }),
+      ...(unitPrice === undefined ? {} : { unitPrice }),
       clientCreatedAt: new Date().toISOString(),
     },
     opts,

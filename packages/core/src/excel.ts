@@ -69,7 +69,7 @@ export interface MovementExportRow {
   delta: number
   unit: Unit
   note: string | null
-  unitCost?: number | null
+  unitPrice?: number | null
 }
 
 /**
@@ -119,7 +119,7 @@ export function movementColumns(includePrices: boolean): SheetColumn<MovementExp
   if (!includePrices) return base
   return [
     ...base,
-    { header: 'Birim Maliyet', width: 14, value: (r) => r.unitCost ?? null, format: MONEY_FORMAT },
+    { header: 'Birim Maliyet', width: 14, value: (r) => r.unitPrice ?? null, format: MONEY_FORMAT },
   ]
 }
 

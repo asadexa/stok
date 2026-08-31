@@ -165,7 +165,7 @@ async function writeMovement(
       reason: input.reason,
       note: input.note ?? null,
       locationId: input.locationId ?? null,
-      unitCost: input.unitCost === undefined ? null : input.unitCost.toFixed(2),
+      unitPrice: input.unitPrice === undefined ? null : input.unitPrice.toFixed(2),
       idempotencyKey: input.idempotencyKey,
       clientCreatedAt: new Date(input.clientCreatedAt),
     })
@@ -512,7 +512,7 @@ export async function checkStockInvariant(
  * doğrudan sorguya koysaydık `?userId=<patron>` yazan çalışan patronun
  * hareketlerini okurdu — arayüzde o kutuyu göstermemek bunu engellemez.
  *
- * Alış fiyatı (`unitCost`) çalışan cevabından ÇIKARILIYOR (tehdit S7).
+ * Alış fiyatı (`unitPrice`) çalışan cevabından ÇIKARILIYOR (tehdit S7).
  * ============================================================================
  */
 
@@ -526,7 +526,7 @@ export interface MovementRow {
   delta: number
   reason: string
   note: string | null
-  unitCost?: number | null
+  unitPrice?: number | null
   createdAt: Date
 }
 
@@ -554,7 +554,7 @@ export async function listMovements(
           delta: stockMovements.delta,
           reason: stockMovements.reason,
           note: stockMovements.note,
-          unitCost: stockMovements.unitCost,
+          unitPrice: stockMovements.unitPrice,
           createdAt: stockMovements.createdAt,
         })
         .from(stockMovements)
@@ -583,7 +583,7 @@ export async function listMovements(
     rows.map((r) => ({
       ...r,
       delta: scaledToNumber(parseScaled(r.delta)),
-      unitCost: r.unitCost === null ? null : Number(r.unitCost),
+      unitPrice: r.unitPrice === null ? null : Number(r.unitPrice),
     })),
   )
 }

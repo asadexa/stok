@@ -265,7 +265,7 @@ async function main() {
           createdAt: openingAt,
           clientCreatedAt: openingAt,
           locationId: p.locationId,
-          unitCost: p.purchasePrice as string,
+          unitPrice: p.purchasePrice as string,
         })
         seq++
 
@@ -308,7 +308,7 @@ async function main() {
             createdAt: at,
             clientCreatedAt: at,
             locationId: p.locationId,
-            unitCost: reason === 'PURCHASE' ? (p.purchasePrice as string) : null,
+            unitPrice: reason === 'PURCHASE' ? (p.purchasePrice as string) : null,
           })
           seq++
         }

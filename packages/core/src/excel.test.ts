@@ -143,7 +143,7 @@ function movementRow(overrides: Partial<MovementExportRow> = {}): MovementExport
     delta: 12.5,
     unit: 'ADET',
     note: null,
-    unitCost: 3.75,
+    unitPrice: 3.75,
     ...overrides,
   }
 }

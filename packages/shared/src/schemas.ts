@@ -79,7 +79,7 @@ export const createMovementSchema = z.object({
   note: z.string().trim().max(500).optional(),
   locationId: z.string().uuid().optional(),
   /** Girişte alış fiyatı. Maliyet takibi (Faz 2) bu veriyi bugünden topluyor. */
-  unitCost: z.number().nonnegative().finite().optional(),
+  unitPrice: z.number().nonnegative().finite().optional(),
   /** Cihaz saati. Sunucu saatinden AYRI saklanır; sıralama sunucu saatiyle. */
   clientCreatedAt: z.string().datetime({ offset: true }),
   /** Negatif stok override. Sunucu ayrıca admin rolü arar (PLAN.md U1). */

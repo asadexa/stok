@@ -64,6 +64,13 @@
       "when": 1787643598096,
       "tag": "0008_product_image_url",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1788166493865,
+      "tag": "0009_price_ledger",
+      "breakpoints": true
     }
   ]
 }

@@ -78,7 +78,7 @@ export function actorCan(actor: Actor, permission: Permission): boolean {
  * GÖRMEMELİ. Arayüzde gizlemek yetmez: cevabın içinde giderse tarayıcı
  * ağ sekmesinde, mobilde de proxy'de görünür.
  */
-export const PRICE_FIELDS = ['purchasePrice', 'salePrice', 'unitCost'] as const
+export const PRICE_FIELDS = ['purchasePrice', 'salePrice', 'unitPrice'] as const
 
 export type PriceField = (typeof PRICE_FIELDS)[number]
 
