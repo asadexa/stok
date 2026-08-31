@@ -2080,7 +2080,7 @@ aynı), migration drift kontrolü, dört adım CLAUDE.md'deki bitmiş sayılma
 
 
 
-- [ ] **T104 (P2, human: ~1g / CC: ~2sa)** - altyapı - **Next yükseltmesi: üç geçişli yüksek şiddetli açık**
+- [x] **T104 (P2, human: ~1g / CC: ~2sa)** - altyapı - **Next yükseltmesi: üç geçişli yüksek şiddetli açık**
   - **T102'NİN İLK KOŞUSUNDA ÇIKTI.** `pnpm audit` üç yüksek şiddetli açık
     buluyor ve üçü de Next üzerinden geçişli: `sharp` (libvips CVE'leri) ve
     `postcss` ×2 (keyfi dosya okuma; source map üzerinden dizin gezinme).
@@ -2098,6 +2098,35 @@ aynı), migration drift kontrolü, dört adım CLAUDE.md'deki bitmiş sayılma
   - Doğrula: `pnpm audit --audit-level=high` yüksek şiddetli açık
     döndürmemeli; duman testi 4/4 kalmalı.
   - Kaynak: CI incelemesi 2026-08-30, T102 ilk koşusu
+  - **KAPANDI, ama görevin varsayımı yanlıştı.** "Sürümü açıkların
+    kapandığı hatta çıkar" diyordu; 15.x hattında öyle bir sürüm YOK.
+    En yeni 15.5.24 bile `postcss`'i **8.4.31'e sabitliyor** ve yama
+    8.5.18'de. Sürüm yükseltmek tek başına çözmüyor.
+  - `sharp` farklıydı: Next'in kendi aralığı zaten `^0.34.3 || ^0.35.3`,
+    yani yamalı hat destekleniyordu; pnpm sadece alt sınırı seçmişti.
+  - Çözüm `pnpm-workspace.yaml` içinde `overrides`. package.json'daki
+    `pnpm.overrides` alanı pnpm 11'de OKUNMUYOR — depo zaten `allowBuilds`
+    ayarını workspace dosyasında tutuyor, override da oraya ait.
+  - postcss override'ı yeni sürüm getirmiyor: depoda Tailwind için zaten
+    8.5.26 vardı, ağaç tek sürüme indi.
+  - Next 16 ikisini de kaynağında çözerdi (postcss 8.5.23, sharp ^0.35.3)
+    ama major yükseltme; derleme zamanı bir P2 açığı için orantısız risk.
+    Ayrı görev: **T105**.
+  - Doğrulandı: `pnpm audit --audit-level=high` yüksek açık döndürmüyor
+    (3 high + 2 moderate kapandı), lint temiz, typecheck temiz, 546 test
+    yeşil, `next build` başarılı, duman testi 4/4.
+
+- [ ] **T105 (P3, human: ~1g / CC: ~2sa)** - altyapı - **Next 16'ya geçiş**
+  - T104 geçişli açıkları `overrides` ile kapattı; bu, kaynağı değil
+    belirtiyi çözüyor. Next 16 `postcss` 8.5.23 ve `sharp` ^0.35.3
+    getiriyor, yani override'lara gerek kalmıyor.
+  - **Neden hemen değil:** major sürüm. `next.config.ts`teki
+    `extensionAlias` ayarı modül çözümlemesine bağlı ve kırılgan —
+    bozulursa typecheck yeşil kalır, derleme patlar (T104 notu).
+  - Kapsam: yükselt, `extensionAlias`ı doğrula, override'ları kaldır,
+    `pnpm audit` hâlâ temiz mi bak.
+  - Doğrula: lint + typecheck + testler + `next build` + duman testi 4/4.
+  - Kaynak: T104 kapanışı
 
 ---
 
