@@ -167,7 +167,10 @@ async function writeMovement(
 
   // Liste fiyatı hata metnine YALNIZCA görmeye yetkili role konuyor
   // (tehdit S7). Bkz. `resolvePrice`.
-  const price = resolvePrice(input, target, canSeePrices(actor.role))
+  //
+  // "Bugün" SUNUCU saatinden: istemciden gelseydi ileri tarihli fiyat
+  // kontrolü (T89) istemcinin saatini geri alarak atlanırdı.
+  const price = resolvePrice(input, target, canSeePrices(actor.role), todayIso())
 
   const [inserted] = await tx
     .insert(stockMovements)
@@ -185,6 +188,7 @@ async function writeMovement(
       clientListPrice: price.clientListPrice,
       priceSource: price.priceSource,
       priceOverrideReason: price.priceOverrideReason,
+      priceDate: price.priceDate,
       idempotencyKey: input.idempotencyKey,
       clientCreatedAt: new Date(input.clientCreatedAt),
     })
@@ -245,6 +249,47 @@ interface ResolvedPrice {
   clientListPrice: string | null
   priceSource: PriceSource | null
   priceOverrideReason: string | null
+  priceDate: string | null
+}
+
+/**
+ * ============================================================================
+ * AÇILIŞ DEĞERLEMESİ — FİYATIN EKONOMİK TARİHİ (T89)
+ *
+ * 5 yıldır rafta duran mal bugün sisteme giriliyor. Hareketin tarihi bugün,
+ * fiyatın tarihi 5 yıl önce. Bu iki tarih AYRI olmak zorunda: aynı sayılsaydı
+ * enflasyon düzeltmesi (T90) o fiyatı bugünün parası sanar ve yenileme
+ * maliyetini olduğundan düşük hesaplardı.
+ *
+ * GEÇMİŞ TARİHLİ FİYAT LİSTE FİYATIYLA KARŞILAŞTIRILMIYOR. 5 yıl önceki
+ * 45 ₺'yi bugünkü 80 ₺'lik listeyle kıyaslamak kategori hatası: aradaki
+ * fark bir indirim değil, enflasyon. Sapma sebebi sormak kullanıcıyı her
+ * devir satırında anlamsız bir seçime zorlardı.
+ *
+ * AMA BU BİR KAÇAK OLAMAZ. Satışta geçmiş tarih serbest bırakılsaydı kasa
+ * açığı kontrolü (T88) tek alanla atlanırdı: çalışan fiyat tarihine dünü
+ * yazar, karşılaştırma düşer, 10 ₺'lik açık sebepsiz kaydedilir. Bu yüzden
+ * geçmiş tarih YALNIZCA satış dayanağı OLMAYAN sebeplerde kabul ediliyor —
+ * satış ve müşteri iadesinde fiyatın anı, işlemin anıdır.
+ * ============================================================================
+ */
+function resolvePriceDate(input: CreateMovementInput, today: string): string | null {
+  if (input.priceDate === undefined) return null
+  if (input.priceDate > today) {
+    throw new AppError('PRICE_DATE_INVALID', `price date ${input.priceDate} is in the future`, {
+      reason: 'FUTURE',
+      priceDate: input.priceDate,
+    })
+  }
+  if (input.priceDate < today && reasonPriceBasis(input.reason) === 'SALE') {
+    throw new AppError(
+      'PRICE_DATE_INVALID',
+      `past price date ${input.priceDate} not allowed for sale-based ${input.reason}`,
+      { reason: 'PAST_ON_SALE', priceDate: input.priceDate },
+    )
+  }
+  // Bugünse yazmaya değmez: sütunun sözleşmesi "boş = hareket tarihi".
+  return input.priceDate === today ? null : input.priceDate
 }
 
 interface PriceContext {
@@ -257,12 +302,27 @@ function money(value: string | null): number | null {
   return value === null ? null : Number(value)
 }
 
+/**
+ * Bugünün tarihi `YYYY-MM-DD`, YEREL saat diliminde.
+ *
+ * `toISOString()` UTC'ye çeviriyor ve Türkiye'de (UTC+3) gece yarısından
+ * 03:00'e kadar DÜNÜ döndürürdü. O aralıkta girilen "bugün" tarihli bir
+ * fiyat geçmiş sayılır, liste karşılaştırması sessizce düşer ve kasa
+ * açığı kontrolü her gece üç saat kapalı kalırdı.
+ */
+function todayIso(now = new Date()): string {
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}`
+}
+
 function resolvePrice(
   input: CreateMovementInput,
   product: PriceContext,
   canSeeAllPrices: boolean,
+  today: string,
 ): ResolvedPrice {
   const basis = reasonPriceBasis(input.reason)
+  const priceDate = resolvePriceDate(input, today)
 
   // Para el değiştirmeyen sebepler (fire, kullanım, sayım düzeltmesi).
   // Fiyat SESSİZCE YUTULMUYOR: kullanıcı yazdığı tutarın kaydedildiğini
@@ -280,16 +340,26 @@ function resolvePrice(
       clientListPrice: null,
       priceSource: null,
       priceOverrideReason: null,
+      priceDate: null,
     }
   }
 
   const listPrice = money(basis === 'SALE' ? product.salePrice : product.purchasePrice)
 
-  // Fiyat girilmediyse hareket yine yazılıyor. Zorunlu kılmak T88'in işi
-  // değil: bugünün akışını kıran bir zorunluluk, veriyi toplamaya
-  // başlamadan önce kullanıcıyı formdan kaçırırdı. `OPENING` için zorunlu
-  // olması T89'un konusu.
   if (input.unitPrice === undefined) {
+    // DEVİRDE FİYAT ZORUNLU (T89). Defter append-only: fiyatsız yazılan
+    // bir devir satırının değeri sonradan EKLENEMEZ, yani o stok sonsuza
+    // kadar değersiz görünür. Tek şansı bu ekran.
+    //
+    // Diğer sebeplerde zorunlu DEĞİL: bugünün akışını kıran bir
+    // zorunluluk, veri toplanmaya başlamadan kullanıcıyı formdan
+    // kaçırırdı (T88).
+    if (input.reason === 'OPENING') {
+      throw new AppError('PRICE_REQUIRED', 'OPENING movements must carry a unit price', {
+        reason: input.reason,
+        reasonLabel: reasonLabel(input.reason as MovementReason),
+      })
+    }
     return {
       unitPrice: null,
       // Fiyat yoksa liste fiyatı da yazılmıyor: tek başına bir liste
@@ -299,6 +369,31 @@ function resolvePrice(
       clientListPrice: null,
       priceSource: null,
       priceOverrideReason: null,
+      priceDate: null,
+    }
+  }
+
+  /**
+   * Fiyat BAŞKA BİR ANA ait mi. İki durumda liste fiyatı dondurulmuyor ve
+   * sapma sebebi sorulmuyor, çünkü kıyaslanacak bir "olması gereken" yok:
+   *
+   *   geçmiş tarihli  → aradaki fark indirim değil ENFLASYON
+   *   tahmini         → kullanıcı zaten "bilmiyorum, tahminim bu" diyor
+   *
+   * `list_price` NULL kaldığı için DB CHECK de sessiz kalıyor; kural ile
+   * veri aynı şeyi söylüyor.
+   */
+  const detached = priceDate !== null || input.priceEstimated
+
+  if (detached) {
+    return {
+      unitPrice: input.unitPrice.toFixed(2),
+      listPrice: null,
+      clientListPrice:
+        input.clientListPrice === undefined ? null : input.clientListPrice.toFixed(2),
+      priceSource: input.priceEstimated ? 'ESTIMATED' : (input.priceSource ?? 'MANUAL'),
+      priceOverrideReason: null,
+      priceDate,
     }
   }
 
@@ -341,6 +436,7 @@ function resolvePrice(
     priceOverrideReason: priceOverrideRequiresReason(input.unitPrice, listPrice)
       ? (input.priceOverrideReason ?? null)
       : null,
+    priceDate,
   }
 }
 
@@ -702,6 +798,10 @@ export interface MovementRow {
   clientListPrice?: number | null
   /** Sapma sebebi. Yalnızca `unitPrice !== listPrice` olan satırlarda dolu. */
   priceOverrideReason?: string | null
+  /** Fiyatın ekonomik tarihi (T89). Boş = hareket tarihi. */
+  priceDate?: string | null
+  /** Fiyat nereden geldi: liste / elle / tahmini … (T89). */
+  priceSource?: string | null
   createdAt: Date
 }
 
@@ -733,6 +833,8 @@ export async function listMovements(
           listPrice: stockMovements.listPrice,
           clientListPrice: stockMovements.clientListPrice,
           priceOverrideReason: stockMovements.priceOverrideReason,
+          priceDate: stockMovements.priceDate,
+          priceSource: stockMovements.priceSource,
           createdAt: stockMovements.createdAt,
         })
         .from(stockMovements)

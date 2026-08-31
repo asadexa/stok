@@ -5,6 +5,7 @@ import {
   type JobKind,
   type MovementReason,
   type PriceOverrideReason,
+  type PriceSource,
   type Role,
   type Unit,
   exportMovementsSchema,
@@ -227,6 +228,8 @@ async function loadMovements(
       unitPrice: stockMovements.unitPrice,
       listPrice: stockMovements.listPrice,
       priceOverrideReason: stockMovements.priceOverrideReason,
+      priceDate: stockMovements.priceDate,
+      priceSource: stockMovements.priceSource,
     })
     .from(stockMovements)
     .innerJoin(products, eq(products.id, stockMovements.productId))
@@ -247,6 +250,8 @@ async function loadMovements(
     unitPrice: r.unitPrice === null ? null : Number(r.unitPrice),
     listPrice: r.listPrice === null ? null : Number(r.listPrice),
     priceOverrideReason: r.priceOverrideReason as PriceOverrideReason | null,
+    priceDate: r.priceDate,
+    priceSource: r.priceSource as PriceSource | null,
   }))
 }
 

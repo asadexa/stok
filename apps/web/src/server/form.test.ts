@@ -9,6 +9,7 @@ import {
   numberOr,
   optionalNumber,
   optionalText,
+  preserveFields,
   text,
 } from '@/server/form'
 
@@ -196,5 +197,62 @@ describe('alan okuyucuları: girilmedi mi, temizlendi mi', () => {
   it('numberOr boş alanda varsayılanı veriyor', () => {
     expect(numberOr(form({ minStok: '' }), 'minStok', 0)).toBe(0)
     expect(numberOr(form({ minStok: '5' }), 'minStok', 0)).toBe(5)
+  })
+})
+
+/**
+ * ============================================================================
+ * HATA DÖNÜŞÜNDE FORM GERİ DOLDURULUYOR MU
+ *
+ * Bu blok bir hata sınıfını koruyor: sunucu eylemi hata verip yönlendirdiğinde
+ * taşınmayan alan varsayılanına döner ve kullanıcı bunu FARK ETMEZ, çünkü
+ * ikinci gönderim başarılı olur. Tarayıcı testinde yaşandı: miktar 5 yazıldı,
+ * "birim fiyat zorunlu" hatası alındı, fiyat dolduruldu ve stoğa 5 yerine
+ * 1 girdi (T89).
+ * ============================================================================
+ */
+describe('preserveFields', () => {
+  const formOf = (entries: Record<string, string>) => {
+    const f = new FormData()
+    for (const [k, v] of Object.entries(entries)) f.append(k, v)
+    return f
+  }
+
+  it('girilen alanları taşıyor', () => {
+    const kept = preserveFields(formOf({ miktar: '5', fiyat: '45,00', not: 'eski stok' }), [
+      'miktar',
+      'fiyat',
+      'not',
+    ])
+    expect(kept.get('miktar')).toBe('5')
+    expect(kept.get('fiyat')).toBe('45,00')
+    expect(kept.get('not')).toBe('eski stok')
+  })
+
+  it('MİKTAR sıfırlanmıyor — sessiz yanlış kaydın kaynağı buydu', () => {
+    const kept = preserveFields(formOf({ miktar: '5' }), ['miktar', 'fiyat'])
+    expect(kept.get('miktar')).toBe('5')
+    // Girilmemiş alan taşınmıyor: sorgu dizesini boş anahtarlarla şişirmenin
+    // faydası yok ve sayfa zaten varsayılanını biliyor.
+    expect(kept.has('fiyat')).toBe(false)
+  })
+
+  it('boş ve yalnızca boşluktan oluşan değer taşınmıyor', () => {
+    const kept = preserveFields(formOf({ not: '   ', fiyat: '' }), ['not', 'fiyat'])
+    expect(kept.has('not')).toBe(false)
+    expect(kept.has('fiyat')).toBe(false)
+  })
+
+  it('ek alanlar formdan bağımsız eklenebiliyor', () => {
+    // Onay kutusu işaretsizken FormData'da HİÇ BULUNMUYOR; taşınacak değer
+    // de "on" değil, sayfanın beklediği "1".
+    const kept = preserveFields(formOf({ miktar: '2' }), ['miktar'], {
+      barkod: '869123',
+      tahmini: '1',
+      yok: undefined,
+    })
+    expect(kept.get('barkod')).toBe('869123')
+    expect(kept.get('tahmini')).toBe('1')
+    expect(kept.has('yok')).toBe(false)
   })
 })

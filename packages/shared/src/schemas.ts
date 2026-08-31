@@ -122,6 +122,29 @@ export const createMovementSchema = z.object({
   priceOverrideReason: priceOverrideReasonEnum.optional(),
   /** Yalnızca sunucunun bilemeyeceği kaynaklar; gerisini sunucu türetiyor. */
   priceSource: clientPriceSourceEnum.optional(),
+  /**
+   * Fiyatın ait olduğu EKONOMİK AN — hareketin yazıldığı an değil (T89).
+   *
+   * 5 yıldır rafta duran bir malın devri bugün yazılıyor ama fiyatı 5 yıl
+   * öncesine ait. İkisi aynı sütunda tutulsaydı enflasyon düzeltmesi
+   * (T90) imkansız olurdu: sistem o fiyatı bugünün parası sanardı ve
+   * yenileme maliyeti olduğundan düşük çıkardı.
+   *
+   * Boş = hareket tarihi. `YYYY-MM-DD`; saat yok çünkü fiyatın saati
+   * diye bir şey yok ve saat dilimi tartışması gereksiz.
+   */
+  priceDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Fiyat tarihi GG.AA.YYYY biçiminde olmalı')
+    .optional(),
+  /**
+   * "Elimde fatura yok, bugün aynısını kaça alacağımı yazdım."
+   *
+   * Ayrı bir bayrak değil, `price_source = 'ESTIMATED'` oluyor. Boolean
+   * tutulsaydı fiyat kaynağı iki yerden okunurdu ve "fişten okundu ama
+   * tahmini" gibi anlamsız bir durum temsil edilebilirdi.
+   */
+  priceEstimated: z.boolean().default(false),
   /** Cihaz saati. Sunucu saatinden AYRI saklanır; sıralama sunucu saatiyle. */
   clientCreatedAt: z.string().datetime({ offset: true }),
   /** Negatif stok override. Sunucu ayrıca admin rolü arar (PLAN.md U1). */

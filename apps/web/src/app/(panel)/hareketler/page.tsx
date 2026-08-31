@@ -14,7 +14,7 @@ import { redirect } from 'next/navigation'
 import { ExportControl } from '@/components/export-control'
 import { EmptyState } from '@/components/empty-state'
 import { Pagination } from '@/components/pagination'
-import { dayEndIso, dayStartIso, formatDateTime, formatMoney } from '@/lib/format'
+import { dayEndIso, dayStartIso, formatDateTime, formatIsoDate, formatMoney } from '@/lib/format'
 import { type FormParams, errorQuery, messageFrom } from '@/server/form'
 import { exportHref, exportPlanFor } from '@/server/export'
 import { currentActor } from '@/server/session'
@@ -385,6 +385,20 @@ export default async function MovementsPage({
                           : m.unitPrice === null
                             ? '—'
                             : `${formatMoney(m.unitPrice)} ₺`}
+                        {/*
+                          FİYATIN EKONOMİK TARİHİ ve TAHMİNİ İŞARETİ (T89).
+                          Toplanıp gösterilmeseydi 5 yıllık bir devir ile
+                          bugünkü bir alış tabloda AYNI görünürdü ve
+                          kullanıcı hangi sayının ne kadar eski olduğunu
+                          bilemezdi — T90'ın düzelteceği fark tam da bu.
+                        */}
+                        {m.priceDate || m.priceSource === 'ESTIMATED' ? (
+                          <span className="block text-xs font-normal text-ink-2">
+                            {m.priceDate ? formatIsoDate(m.priceDate) : null}
+                            {m.priceDate && m.priceSource === 'ESTIMATED' ? ' · ' : null}
+                            {m.priceSource === 'ESTIMATED' ? 'tahmini' : null}
+                          </span>
+                        ) : null}
                       </td>
                     ) : null}
                     {showOverride ? (

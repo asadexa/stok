@@ -373,7 +373,10 @@ describe('createMovement - ilk hareket', () => {
         idempotencyKey: randomUUID(),
         barcode: fresh.products['F-1']!.barcode,
         qty: 3,
-        reason: 'OPENING',
+        // `OPENING` değil: T89 devirde birim fiyat zorunlu kıldı ve bu test
+        // "projeksiyon satırı yokken ilk hareket yazılabiliyor mu" diye
+        // soruyor, fiyat kuralını değil.
+        reason: 'PURCHASE',
         clientCreatedAt: new Date().toISOString(),
       },
       { db: app.db },

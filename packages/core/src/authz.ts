@@ -142,6 +142,10 @@ export const MOVEMENT_PRICE_FIELDS = [
   'listPrice',
   'clientListPrice',
   'priceOverrideReason',
+  // Fiyatın tarihi ve kaynağı da fiyat bilgisidir: "5 yıl önceki faturadan"
+  // demek, alış fiyatının nereden geldiğini söylemektir (T89).
+  'priceDate',
+  'priceSource',
 ] as const
 
 export type MovementPriceField = (typeof MOVEMENT_PRICE_FIELDS)[number]

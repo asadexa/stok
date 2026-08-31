@@ -22,6 +22,7 @@ import {
   numberOr,
   optionalNumber,
   optionalText,
+  preserveFields,
   text,
 } from '@/server/form'
 import { currentActor } from '@/server/session'
@@ -61,6 +62,10 @@ interface HareketParams extends FormParams {
   fiyat?: string
   sebep?: string
   sapma?: string
+  fiyatTarihi?: string
+  tahmini?: string
+  miktar?: string
+  not?: string
   /** Kayıt sonrası onay şeridi. */
   urun?: string
   onceki?: string
@@ -117,6 +122,10 @@ export default async function MovementEntryPage({
             ? {}
             : { clientListPrice: optionalNumber(form, 'liste') }),
           ...(overrideReason ? { priceOverrideReason: overrideReason } : {}),
+          ...(optionalText(form, 'fiyatTarihi')
+            ? { priceDate: optionalText(form, 'fiyatTarihi') }
+            : {}),
+          priceEstimated: form.get('tahmini') === 'on',
           // Cihaz saati yok: web tarayıcısı "cihaz" değil ve sunucu saati
           // zaten doğru. Mobil bu alanı gerçek cihaz saatiyle dolduracak.
           clientCreatedAt: new Date().toISOString(),
@@ -129,14 +138,28 @@ export default async function MovementEntryPage({
         `/hareket?urun=${encodeURIComponent(result.productName)}` +
         `&onceki=${previous}&yeni=${result.newQty}`
     } catch (err) {
-      // Hata olduğunda GİRİLENLER KORUNUYOR: en sık hata "sapma sebebi
-      // seçmediniz" ve kullanıcı yalnızca o alanı doldurup tekrar
-      // gönderecek. Fiyatı ve sebebi de sıfırlasaydık her hata, etiketi
-      // yeniden okutup formu baştan doldurmak demek olurdu.
-      const keep = new URLSearchParams({ barkod: scanned })
-      if (reason) keep.set('sebep', reason)
-      if (unitPrice !== undefined) keep.set('fiyat', String(unitPrice))
-      if (overrideReason) keep.set('sapma', overrideReason)
+      /**
+       * HATA DÖNÜŞÜNDE FORMUN TAMAMI KORUNUYOR.
+       *
+       * MİKTAR EN KRİTİĞİ ve tarayıcı testinde yakalandı: kullanıcı 5
+       * yazıp "fiyat zorunlu" hatası alıyor, fiyatı dolduruyor, ama
+       * miktar sessizce varsayılana (1) dönmüş oluyordu — ve ikinci
+       * gönderim BAŞARILI olduğu için hiçbir uyarı çıkmıyordu. Yani
+       * hata mesajı, sessiz bir YANLIŞ KAYIT üretiyordu. Depoda bunun
+       * farkı sayım gününe kadar görünmez.
+       */
+      const keep = preserveFields(
+        form,
+        // Formdaki KULLANICI GİRDİSİ olan her alan. Listeden bir ad
+        // düşerse o alan sessizce sıfırlanır — bkz. `preserveFields`.
+        ['miktar', 'sebep', 'not', 'fiyat', 'sapma', 'fiyatTarihi'],
+        {
+          barkod: scanned,
+          // Onay kutusu işaretsizken FormData'da hiç bulunmuyor; taşınacak
+          // değer de "on" değil, sayfanın beklediği "1".
+          tahmini: form.get('tahmini') === 'on' ? '1' : undefined,
+        },
+      )
       target = `/hareket?${keep.toString()}&${errorQuery(err)}`
     }
     redirect(target)
@@ -287,7 +310,7 @@ export default async function MovementEntryPage({
                   inputMode="decimal"
                   required
                   autoFocus
-                  defaultValue="1"
+                  defaultValue={params.miktar ?? '1'}
                   className="mt-1 h-16 w-full rounded-control border-2 border-line-control bg-surface px-4 text-xl"
                 />
               </label>
@@ -397,6 +420,58 @@ export default async function MovementEntryPage({
                     ))}
                   </select>
                 </label>
+
+                {/*
+                  ── AÇILIŞ DEĞERLEMESİ (T89) ──────────────────────────
+
+                  KRİTİK ALAN FİYAT DEĞİL TARİH. 5 yıldır rafta duran malın
+                  devri bugün yazılıyor ama fiyatı 5 yıl öncesine ait. İkisi
+                  aynı sayılsaydı enflasyon düzeltmesi (T90) o fiyatı bugünün
+                  parası sanar ve yenileme maliyetini düşük hesaplardı.
+
+                  YÖNLENDİRME METNİ FORMUN İÇİNDE, yardım sayfasında değil:
+                  kullanıcının tıkandığı yer tam olarak burası ve "eski
+                  fatura yoksa ne yazacağım" sorusunun cevabı, sorunun
+                  sorulduğu anda görünmek zorunda.
+                */}
+                <div className="mt-4 rounded-control bg-surface-2 p-3">
+                  <p className="text-sm text-ink-2">
+                    <span className="font-medium text-ink">Eski mal mı giriyorsunuz?</span>{' '}
+                    Elinizde eski fatura varsa o tutarı ve fatura tarihini girin — sistem
+                    bugüne taşır. Fatura yoksa bugün aynısını kaça alacağınızı yazıp
+                    “tahmini” işaretleyin.
+                  </p>
+
+                  <label className="mt-3 block">
+                    <span className="text-sm font-medium">
+                      Fiyat tarihi{' '}
+                      <span className="font-normal text-ink-2">
+                        (boş = bugün; satışta geçmiş tarih girilemez)
+                      </span>
+                    </span>
+                    <input
+                      name="fiyatTarihi"
+                      type="date"
+                      defaultValue={params.fiyatTarihi ?? ''}
+                      className="mt-1 h-14 w-full rounded-control border border-line-control bg-surface px-3 text-base"
+                    />
+                  </label>
+
+                  <label className="mt-3 flex min-h-14 items-center gap-3">
+                    <input
+                      type="checkbox"
+                      name="tahmini"
+                      defaultChecked={params.tahmini === '1'}
+                      className="size-5 shrink-0"
+                    />
+                    <span className="text-sm">
+                      <span className="font-medium">Tahmini fiyat</span>
+                      <span className="block text-ink-2">
+                        Faturam yok, bugünkü değerini tahmin ettim
+                      </span>
+                    </span>
+                  </label>
+                </div>
               </fieldset>
 
               <label className="block">
@@ -405,6 +480,7 @@ export default async function MovementEntryPage({
                   name="not"
                   type="text"
                   maxLength={500}
+                  defaultValue={params.not ?? ''}
                   className="mt-1 h-14 w-full rounded-control border border-line-control bg-surface px-3 text-base"
                 />
               </label>

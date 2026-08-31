@@ -117,6 +117,43 @@ export function logServerFault(scope: string, err: unknown): void {
   console.error(`[${scope}] ${err.code}: ${err.message}`, err.details)
 }
 
+/**
+ * ============================================================================
+ * HATA DÖNÜŞÜNDE FORMU GERİ DOLDURMA
+ *
+ * Sunucu eylemi hata verdiğinde yönlendirme yapıyoruz ve form YENİDEN
+ * kuruluyor; taşınmayan her alan varsayılanına döner.
+ *
+ * BU SESSİZ BİR YANLIŞ KAYIT ÜRETİR. Tarayıcı testinde yaşandı: kullanıcı
+ * miktara 5 yazıyor, "birim fiyat zorunlu" hatası alıyor, fiyatı dolduruyor
+ * ve kaydediyor — ama miktar bu arada varsayılana (1) dönmüş oluyor. İkinci
+ * gönderim BAŞARILI olduğu için hiçbir uyarı çıkmıyor; depoda farkı sayım
+ * gününe kadar kimse görmüyor.
+ *
+ * Alanları tek tek elle taşımak yerine bu yardımcı var: yeni bir alan
+ * eklendiğinde listeye yazılması unutulursa aynı hata sessizce geri gelir.
+ *
+ * Boş alanlar taşınmıyor — sorgu dizesini `miktar=&not=&fiyat=` diye
+ * şişirmenin faydası yok. `keepEmpty` ile istisna yapılabiliyor: gerçekten
+ * boş gönderilmiş bir alanın boş kalması gerekiyorsa.
+ * ============================================================================
+ */
+export function preserveFields(
+  form: FormData,
+  fields: readonly string[],
+  extra: Record<string, string | undefined> = {},
+): URLSearchParams {
+  const search = new URLSearchParams()
+  for (const name of fields) {
+    const value = String(form.get(name) ?? '').trim()
+    if (value !== '') search.set(name, value)
+  }
+  for (const [key, value] of Object.entries(extra)) {
+    if (value !== undefined && value !== '') search.set(key, value)
+  }
+  return search
+}
+
 /** `AppError`'ı `hata=KOD&sku=...` biçimli sorgu dizesine çevirir. */
 export function errorQuery(err: unknown): string {
   rethrowControlFlow(err)

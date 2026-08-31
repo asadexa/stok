@@ -1,5 +1,12 @@
-import { type Unit, formatQty, priceOverrideReasonLabel, reasonLabel, roleLabel } from '@stok/shared'
-import type { MovementReason, PriceOverrideReason, Role } from '@stok/shared'
+import {
+  type Unit,
+  formatQty,
+  priceOverrideReasonLabel,
+  priceSourceLabel,
+  reasonLabel,
+  roleLabel,
+} from '@stok/shared'
+import type { MovementReason, PriceOverrideReason, PriceSource, Role } from '@stok/shared'
 import ExcelJS from 'exceljs'
 
 /**
@@ -72,6 +79,8 @@ export interface MovementExportRow {
   unitPrice?: number | null
   listPrice?: number | null
   priceOverrideReason?: PriceOverrideReason | null
+  priceDate?: string | null
+  priceSource?: PriceSource | null
 }
 
 /**
@@ -140,7 +149,26 @@ export function movementColumns(includePrices: boolean): SheetColumn<MovementExp
       width: 22,
       value: (r) => (r.priceOverrideReason ? priceOverrideReasonLabel(r.priceOverrideReason) : null),
     },
+    // Fiyatın EKONOMİK tarihi (T89) — hareketin tarihi değil. Metin olarak
+    // yazılıyor, tarih hücresi olarak değil: `price_date` bir takvim günü ve
+    // Excel tarih hücresi onu yerel saate göre kaydırabilir.
+    {
+      header: 'Fiyat Tarihi',
+      width: 14,
+      value: (r) => (r.priceDate ? isoToTr(r.priceDate) : null),
+    },
+    {
+      header: 'Fiyat Kaynağı',
+      width: 16,
+      value: (r) => (r.priceSource ? priceSourceLabel(r.priceSource) : null),
+    },
   ]
+}
+
+/** `YYYY-MM-DD` → "12.06.2021". Takvim günü; saat dilimine sokulmuyor. */
+function isoToTr(value: string): string {
+  const [y, m, d] = value.split('-')
+  return y && m && d ? `${d}.${m}.${y}` : value
 }
 
 export interface SheetSpec<T> {

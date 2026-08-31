@@ -119,8 +119,10 @@ async function rawPrices(movementId: string) {
     client_list_price: string | null
     price_source: string | null
     price_override_reason: string | null
+    price_date: string | null
   }>(sql`
-    SELECT unit_price, list_price, client_list_price, price_source, price_override_reason
+    SELECT unit_price, list_price, client_list_price, price_source,
+           price_override_reason, price_date::text AS price_date
       FROM stock_movements WHERE id = ${movementId}
   `)
   return [...rows][0]!
@@ -390,6 +392,120 @@ describe('yetki: hangi fiyat kime görünüyor (D7)', () => {
 
     const bossSees = await lookupBarcode(boss, tenant.products['A4-001']!.barcode, { db: app.db })
     expect(bossSees.purchasePrice).toBe(80)
+  })
+})
+
+/**
+ * ============================================================================
+ * T89 — AÇILIŞ DEĞERLEMESİ
+ *
+ * Müşteri 5 yıldır elinde tuttuğu malı sisteme girerken fiyat alanında
+ * tıkanıyor: eski fatura yok, bugünkü fiyat da doğru değil.
+ *
+ * Kritik alan fiyat değil TARİH. Bu bloğun sınadığı şey, o tarihin
+ * T88'in kasa açığı kontrolünde bir KAÇAK açmadığı.
+ * ============================================================================
+ */
+describe('açılış değerlemesi: fiyatın ekonomik tarihi', () => {
+  /**
+   * Tarihler YEREL saatten üretiliyor, `toISOString()` ile DEĞİL.
+   *
+   * `toISOString()` UTC'ye çevirir ve UTC'den sapmalı saat dilimlerinde
+   * günün bir bölümünde BAŞKA BİR GÜN döndürür (Türkiye'de 00:00–03:00
+   * arası dünü). Testin kendisi bunu yaparsa, sunucudaki aynı hatayı
+   * yakalayamaz: iki taraf da aynı yanlış günü hesaplar ve test yeşil
+   * yanar. Mutasyon testinde tam olarak bu yaşandı.
+   */
+  const gunFarki = (n: number) => {
+    const d = new Date()
+    d.setDate(d.getDate() + n)
+    const p = (x: number) => String(x).padStart(2, '0')
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+  }
+  const gunOnce = (n: number) => gunFarki(-n)
+
+  it('devirde birim fiyat ZORUNLU', async () => {
+    // Defter append-only: fiyatsız yazılan bir devir satırının değeri
+    // sonradan eklenemez, o stok sonsuza kadar değersiz görünür.
+    await expectAppError(
+      call(boss, req('A4-001', { reason: 'OPENING' })),
+      'PRICE_REQUIRED',
+    )
+  })
+
+  it('geçmiş tarihli devir liste fiyatıyla KARŞILAŞTIRILMIYOR', async () => {
+    // 5 yıl önceki 45 ₺'yi bugünkü 80 ₺'lik listeyle kıyaslamak kategori
+    // hatası: aradaki fark indirim değil enflasyon. Sebep sorulsaydı
+    // kullanıcı her devir satırında anlamsız bir seçime zorlanırdı.
+    const result = await call(
+      boss,
+      req('A4-001', { reason: 'OPENING', unitPrice: 45, priceDate: gunOnce(1800) }),
+    )
+    const row = await rawPrices(result.movementId)
+
+    expect(row.unit_price).toBe('45.00')
+    expect(row.price_date).toBe(gunOnce(1800))
+    // Liste fiyatı DONMUYOR: kıyaslanacak bir "olması gereken" yok.
+    expect(row.list_price).toBeNull()
+    expect(row.price_override_reason).toBeNull()
+  })
+
+  it('"tahmini" işareti fiyat kaynağına yazılıyor', async () => {
+    // Faturası olmayan kullanıcı bugünkü yenileme bedelini yazıyor.
+    // Ayrı boolean tutulsaydı kaynak iki yerden okunur ve "fişten okundu
+    // ama tahmini" gibi anlamsız bir durum temsil edilebilirdi.
+    const result = await call(
+      boss,
+      req('A4-001', { reason: 'OPENING', unitPrice: 60, priceEstimated: true }),
+    )
+    const row = await rawPrices(result.movementId)
+
+    expect(row.price_source).toBe('ESTIMATED')
+    expect(row.list_price).toBeNull()
+    expect(row.price_date).toBeNull()
+  })
+
+  it('bugün tarihli devir NORMAL kurala tabi: sapma sebebi isteniyor', async () => {
+    // Geçmiş tarih yoksa fiyat BUGÜNÜN parası demektir ve listeden sapması
+    // bilinçli bir karardır. Aksi halde "tarihi boş bırak" tek başına
+    // kontrolü kapatan bir düğme olurdu.
+    await expectAppError(
+      call(boss, req('A4-001', { reason: 'OPENING', unitPrice: 45 })),
+      'PRICE_OVERRIDE_REASON_REQUIRED',
+    )
+  })
+
+  it('SATIŞTA GEÇMİŞ TARİH REDDEDİLİYOR — kasa açığı kaçağı kapalı', async () => {
+    // Bu testin varlık sebebi: geçmiş tarih serbest bırakılsaydı T88 tek
+    // alanla atlanırdı. Çalışan fiyat tarihine dünü yazar, karşılaştırma
+    // düşer, 10 ₺'lik açık sebepsiz kaydedilirdi.
+    const err = await expectAppError(
+      call(staff, req('A4-001', { unitPrice: 1, priceDate: gunOnce(1) })),
+      'PRICE_DATE_INVALID',
+    )
+    expect(err.details).toMatchObject({ reason: 'PAST_ON_SALE' })
+  })
+
+  it('ileri tarihli fiyat reddediliyor', async () => {
+    const err = await expectAppError(
+      call(boss, req('A4-001', { reason: 'OPENING', unitPrice: 45, priceDate: gunFarki(1) })),
+      'PRICE_DATE_INVALID',
+    )
+    expect(err.details).toMatchObject({ reason: 'FUTURE' })
+  })
+
+  it('bugün tarihi sütuna YAZILMIYOR: boş = hareket tarihi', async () => {
+    // Bu test aynı zamanda saat dilimi korumasını sınıyor: sunucu "bugün"ü
+    // UTC'den okusaydı, UTC'den sapmalı bir saat diliminde günün bir
+    // bölümünde bu tarih ya GEÇMİŞ (sessizce sütuna yazılır) ya da
+    // GELECEK (reddedilir) sayılırdı. Türkiye'de o pencere her gece
+    // 00:00–03:00 — kasa açığı kontrolünün her gece üç saat kapalı
+    // kalması demek.
+    const result = await call(
+      boss,
+      req('A4-001', { reason: 'OPENING', unitPrice: 80, priceDate: gunFarki(0) }),
+    )
+    expect((await rawPrices(result.movementId)).price_date).toBeNull()
   })
 })
 

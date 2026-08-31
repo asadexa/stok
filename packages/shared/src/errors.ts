@@ -137,6 +137,24 @@ export const ERROR_CODES = {
     tr: (d) => `"${d.reasonLabel ?? 'Bu işlem'}" için birim fiyat girilmez`,
   },
 
+  // --- Açılış değerlemesi (T89) ---
+  PRICE_REQUIRED: {
+    http: 400,
+    retryable: false,
+    // Devir hareketi fiyatsız yazılabilseydi, sisteme giren eski stoğun
+    // değeri SONSUZA KADAR bilinmez kalırdı: defter append-only, sonradan
+    // eklenemez. Tek şansı bu ekran.
+    tr: (d) => `"${d.reasonLabel ?? 'Bu işlem'}" için birim fiyat zorunlu`,
+  },
+  PRICE_DATE_INVALID: {
+    http: 400,
+    retryable: false,
+    tr: (d) =>
+      d.reason === 'FUTURE'
+        ? 'Fiyat tarihi bugünden ileri olamaz'
+        : 'Satış ve müşteri iadesinde fiyat tarihi bugünden eski olamaz',
+  },
+
   LAST_BARCODE: {
     http: 409,
     retryable: false,

@@ -1652,7 +1652,7 @@ veriyle test edilebilir hale gelir.
     sorgulanmıyor ama hiçbir kuruş rapordan düşmüyor.
   - **T88'e bağlı.** T34 yazılmadıysa önce o.
 
-- [ ] **T89 (P2, human: ~2g / CC: ~yarım gün)** - hareket - Açılış değerlemesi: `OPENING` sebebine fiyat + ekonomik tarih + "tahmini" işareti
+- [x] **T89 (P2, human: ~2g / CC: ~yarım gün)** - hareket - Açılış değerlemesi: `OPENING` sebebine fiyat + ekonomik tarih + "tahmini" işareti
   - Neden: Müşteri 5 yıldır elinde tuttuğu malı sisteme girerken fiyat
     alanında tıkanıyor — eski fatura yok, bugünkü fiyat da doğru değil.
   - **Kritik alan fiyat değil TARİH.** Tarihsiz fiyat enflasyona göre
@@ -1661,6 +1661,34 @@ veriyle test edilebilir hale gelir.
     T90 bu sütun olmadan çalışamaz.
   - İki yol da formda: fatura varsa tutar + fatura tarihi (sistem bugüne
     taşır); fatura yoksa bugünkü yenileme bedeli + `price_estimated = true`.
+  - **UYGULANDI 2026-08-31.** `price_estimated` boolean'ı YERİNE
+    `price_source = 'ESTIMATED'` yazılıyor: ayrı bir bayrak, fiyat kaynağını
+    iki yerden okunur hale getirir ve "fişten okundu ama tahmini" gibi
+    anlamsız bir durumu temsil edilebilir kılardı.
+  - **GEÇMİŞ TARİH T88'DE KAÇAK AÇABİLİRDİ — kapatıldı.** Geçmiş tarihli
+    fiyat liste fiyatıyla karşılaştırılmıyor (aradaki fark indirim değil
+    enflasyon). Serbest bırakılsaydı kasa açığı kontrolü TEK ALANLA
+    atlanırdı: çalışan fiyat tarihine dünü yazar, karşılaştırma düşer,
+    10 ₺'lik açık sebepsiz kaydedilirdi. Bu yüzden geçmiş tarih yalnızca
+    satış dayanağı OLMAYAN sebeplerde kabul ediliyor; satış ve müşteri
+    iadesinde fiyatın anı işlemin anıdır. Testi `prices.test.ts` içinde ve
+    koruma kaldırılıp kırmızı yandığı görülerek doğrulandı.
+  - **"Bugün" SUNUCU YEREL saatinden okunuyor, `toISOString()` ile DEĞİL.**
+    UTC'ye çevirmek Türkiye'de (UTC+3) her gece 00:00–03:00 arasında dünü
+    döndürürdü: o pencerede girilen "bugün" tarihli fiyat geçmiş sayılır,
+    liste karşılaştırması sessizce düşer ve kasa açığı kontrolü her gece
+    üç saat kapalı kalırdı. Mutasyon testi bunu ilk turda YAKALAYAMADI —
+    testin kendisi de `toISOString()` kullanıyordu ve iki taraf aynı yanlış
+    günü hesaplıyordu; test yerel saate çevrilince koruma kanıtlanabildi.
+  - **Tarayıcı turunda bulunan hata (düzeltildi):** hata dönüşünde MİKTAR
+    korunmuyordu. Kullanıcı 5 yazıp "birim fiyat zorunlu" hatası alıyor,
+    fiyatı dolduruyor ve stoğa 5 yerine 1 giriyordu — ikinci gönderim
+    BAŞARILI olduğu için hiçbir uyarı çıkmıyordu, yani hata mesajı sessiz
+    bir YANLIŞ KAYIT üretiyordu. Alanları elle taşımak yerine
+    `preserveFields()` yardımcısı yazıldı (`apps/web/src/server/form.ts`,
+    testli). **Kalan risk:** sayfanın verdiği alan adı listesi birim testli
+    değil, yalnızca tarayıcıda doğrulandı; listeye yeni bir alan eklenmesi
+    unutulursa aynı sessiz sıfırlama geri gelir.
 
 - [ ] **T90 (P2, human: ~1 hafta / CC: ~2-3g)** - fiyat - Yenileme maliyeti: satış anında "bugün yerine koymak kaça mal olur"
   - Neden: Bugünkü maliyetten giren mal 6 ay sonra aynı rakamdan satılırsa
