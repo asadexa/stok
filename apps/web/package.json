@@ -10,6 +10,7 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
+    "test:e2e:ci": "playwright test --grep-invert @kararsiz",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

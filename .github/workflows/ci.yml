@@ -219,8 +219,13 @@ jobs:
       # Dosya adıyla dışlamak yerine ETİKET: ad listesi eskidiğinde yeni
       # yazılan bir test hiç koşmadan öylece kalırdı. Etiketle varsayılan
       # DAHİL, dışlanan görünür.
+      # AYRI SCRIPT, argüman geçirme YOK. `run test:e2e -- --grep-invert ...`
+      # denendi ve SESSİZCE ÇALIŞMADI: pnpm'in eklediği `--` Playwright'a
+      # konumsal argüman gibi göründü, süzgeç uygulanmadı ve kararsız
+      # kapsam yine koştu. Filtre script'in İÇİNDE olunca geçirilecek bir
+      # argüman kalmıyor.
       - name: Duman testi
-        run: pnpm --filter @stok/web run test:e2e -- --grep-invert @kararsiz
+        run: pnpm --filter @stok/web run test:e2e:ci
 
       # Kırmızı yandığında ekran görüntüsü ve iz dosyası olmadan uzaktan
       # teşhis koymak, T61'deki "log yok" durumunun aynısı olur.
