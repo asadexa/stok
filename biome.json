@@ -27,6 +27,65 @@
       }
     }
   },
-  "formatter": { "enabled": false },
-  "assist": { "enabled": false }
+  "formatter": {
+    "enabled": false
+  },
+  "assist": {
+    "enabled": false
+  },
+  "overrides": [
+    {
+      "includes": [
+        "packages/core/**/*.ts",
+        "!**/*.test.ts"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "@stok/db": {
+                    "importNames": [
+                      "adminDbUnsafe"
+                    ],
+                    "message": "adminDbUnsafe RLS'i ATLAYAN sahip bağlantısıdır (packages/db/src/client.ts). Uygulama kodundan çağrılırsa tenant izolasyonu tamamen devre dışı kalır ve bu, tek tenant'la test ederken ASLA fark edilmez. Yalnızca migration, seed ve test kurulumu içindir. Veri erişimi için appDb() + withTenant() kullan (D5)."
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "apps/**/*.ts",
+        "apps/**/*.tsx",
+        "!**/*.test.ts",
+        "!apps/**/test/**"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "@stok/db": {
+                    "importNames": [
+                      "adminDbUnsafe",
+                      "withTenant"
+                    ],
+                    "message": "adminDbUnsafe RLS'i ATLAYAN sahip bağlantısıdır (packages/db/src/client.ts). Uygulama kodundan çağrılırsa tenant izolasyonu tamamen devre dışı kalır ve bu, tek tenant'la test ederken ASLA fark edilmez. Yalnızca migration, seed ve test kurulumu içindir. Veri erişimi için appDb() + withTenant() kullan (D5). withTenant() sorgu yazılan yerdir ve sorgular packages/core'a aittir. apps/web bir servisi cagirir, veritabanina kendisi gitmez: appDb() handle'ini core fonksiyonuna parametre olarak gecir. Bu katman ayrimi, tenant kapsaminin tek yerde denetlenebilmesini sagliyor (D5)."
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
 }

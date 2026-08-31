@@ -1297,8 +1297,27 @@ G1, G2 ve G4 kapandı. G3 (yazıcı) TODOS E5'e bağlı, aşağıda gerekçesi y
   - Doğrula: bir güncelleme yayınla, geri al, cihazda doğrula
 - [x] **T44 (P1, human: ~2sa / CC: ~15dk)** - shared - `packages/shared/reasons.ts` tek kaynak: zod enum, Türkçe etiket eşlemesi, DB CHECK constraint senkron testi
   - Kaynak: D-2.3, D-2.4. Üç yerde ayrı yazılırsa drift kaçınılmaz
-- [ ] **T45 (P1, human: ~1sa / CC: ~10dk)** - güvenlik - ESLint kuralı: route handler içinde doğrudan `db` kullanımı yasak, sadece `withTenant()`
+- [x] **T45 (P1, human: ~1sa / CC: ~10dk)** - güvenlik - Lint kuralı: uygulama katmanında RLS'i atlayan bağlantı yasak
   - Kaynak: D5. RLS'i insan disiplinine bırakmamak için makine zorlaması
+  - **GÖREVİN İFADESİ DÜZELTİLDİ.** "Route handler içinde doğrudan `db`
+    kullanımı yasak" diye yazılmıştı ama mevcut mimaride `appDb()` ZATEN
+    her sayfa ve route'ta çağrılıyor — handle alınıp core servisine
+    parametre geçiliyor, sorguyu core çalıştırıyor. O ifadeyi harfiyen
+    uygulamak çalışan mimariyi yasaklardı.
+  - Korunması gereken gerçek değişmez iki tane ve ikisi de ölçüldü:
+    `apps/web` bugün SIFIR doğrudan sorgu çalıştırıyor, ve `adminDbUnsafe`
+    uygulama kodunda hiç geçmiyor.
+  - Kural Biome `noRestrictedImports` ile, iki katmanlı:
+    - `packages/core` → `adminDbUnsafe` yasak
+    - `apps/**` → `adminDbUnsafe` + `withTenant` yasak
+  - **Neden `withTenant` de yasak:** web'de ona ihtiyaç duyulması, sorgunun
+    yanlış katmanda yazıldığının işareti. Sorgular core'a ait.
+  - **Neden ESLint değil Biome:** depo T95'te Biome'a geçti; ikinci bir
+    linter ikinci bir kaynak olurdu. Ayrıca editörde anında uyarı veriyor.
+  - `adminDbUnsafe`'in kendi yorumu zaten "Uygulama kodundan ASLA" diyordu;
+    eksik olan tek şey bunu zorlayan makineydi.
+  - Doğrulandı: üç ihlal (web'de iki, core'da bir) bilerek eklendi, lint
+    üçünü de yakaladı; geri alındı, lint tekrar temiz.
 - [x] **T46 (P1, human: ~3sa / CC: ~25dk)** - test - **RLS çapraz tenant test seti** (4 test): A→B okuma engelli, A→B yazma engelli, `SET LOCAL` yapılmadan 0 satır, uygulama rolü BYPASSRLS taşımıyor
   - Kaynak: Bölüm 3 test boşluğu. Test edilmeyen güvenlik kontrolü, varlığı bilinmeyen kontroldür
 - [x] **T47 (P1, human: ~3sa / CC: ~25dk)** - test - Rol matrisi sunucu tarafı testleri (11 satırın her biri)
