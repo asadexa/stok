@@ -2,7 +2,10 @@ import {
   MOVEMENT_REASONS,
   MOVEMENT_REASON_VALUES,
   type MovementReason,
+  type PriceOverrideReason,
+  priceOverrideReasonLabel,
   reasonLabel,
+  reasonPriceBasis,
 } from '@stok/shared'
 import { actorCan, exportMovements, getProduct, listMovements, listTenantUsers } from '@stok/core'
 import { appDb } from '@stok/db'
@@ -102,9 +105,21 @@ export default async function MovementsPage({
   const hasNext = rows.length > PAGE_SIZE
   const visible = hasNext ? rows.slice(0, PAGE_SIZE) : rows
 
-  // Fiyat sütunu cevaptan türetiliyor, rolden değil: `listMovements`
-  // yetkisiz role `unitPrice` alanını hiç koymuyor.
-  const showCost = visible.some((r) => r.unitPrice !== undefined)
+  // Fiyat sütunları cevaptan türetiliyor, rolden değil: `listMovements`
+  // yetkisiz role fiyat alanlarını hiç koymuyor (T88 / D7 — kural artık
+  // satır bazında: satış fiyatı kalıyor, alış fiyatı gidiyor).
+  const pricedRows = visible.filter((r) => r.unitPrice !== undefined)
+  const showPrice = pricedRows.length > 0
+  // BAŞLIK DA CEVAPTAN TÜRÜYOR. Rolü ekranda ikinci kez yorumlamak
+  // (`role === 'ADMIN' ? ... : ...`) yetki kararını iki yere bölerdi.
+  // Gelen satırların hepsi satış dayanaklıysa sütun satış fiyatıdır;
+  // "Birim fiyat" yazmak çalışana alış fiyatı da varmış gibi görünürdü.
+  const priceHeader = pricedRows.every((r) => reasonPriceBasis(r.reason as MovementReason) === 'SALE')
+    ? 'Satış fiyatı'
+    : 'Birim fiyat'
+  // Sapma sütunu YALNIZCA gerçekten sapma varsa çiziliyor: baştan sona
+  // boş bir "Sapma" sütunu tabloyu genişletir, hiçbir şey söylemez.
+  const showOverride = pricedRows.some((r) => r.priceOverrideReason != null)
 
   const filters = {
     urun: productId,
@@ -318,7 +333,12 @@ export default async function MovementsPage({
                   <th className="px-4 py-2 font-medium">Ürün</th>
                   <th className="px-4 py-2 text-right font-medium">Miktar</th>
                   <th className="px-4 py-2 font-medium">İşlem</th>
-                  {showCost ? <th className="px-4 py-2 text-right font-medium">Birim maliyet</th> : null}
+                  {showPrice ? (
+                    <th className="px-4 py-2 text-right font-medium">{priceHeader}</th>
+                  ) : null}
+                  {showOverride ? (
+                    <th className="px-4 py-2 font-medium">Sapma</th>
+                  ) : null}
                   <th className="px-4 py-2 font-medium">Not</th>
                 </tr>
               </thead>
@@ -350,9 +370,41 @@ export default async function MovementsPage({
                     <td className="px-4 py-2 text-ink-2">
                       {reasonLabel(m.reason as MovementReason)}
                     </td>
-                    {showCost ? (
+                    {showPrice ? (
                       <td className="tabular px-4 py-2 text-right text-ink-2">
-                        {m.unitPrice == null ? '—' : `${formatMoney(m.unitPrice)} ₺`}
+                        {/*
+                          ÜÇ AYRI DURUM, ÜÇ AYRI GÖSTERİM:
+                            alan yok   → "gizli"   (görmeye yetkin yok)
+                            null       → "—"       (fiyat girilmemiş)
+                            dolu       → tutar
+                          İkisini de "—" yapmak, çalışana "bu satın almanın
+                          fiyatı hiç girilmemiş" dedirtirdi.
+                        */}
+                        {m.unitPrice === undefined
+                          ? 'gizli'
+                          : m.unitPrice === null
+                            ? '—'
+                            : `${formatMoney(m.unitPrice)} ₺`}
+                      </td>
+                    ) : null}
+                    {showOverride ? (
+                      <td className="px-4 py-2 text-ink-2">
+                        {m.priceOverrideReason == null ? (
+                          ''
+                        ) : (
+                          // Renk TEK BAŞINA anlam taşımıyor (PLAN.md §11):
+                          // ok işareti + etiket + tutar birlikte.
+                          <span className="whitespace-nowrap">
+                            <span aria-hidden>↓ </span>
+                            {priceOverrideReasonLabel(m.priceOverrideReason as PriceOverrideReason)}
+                            {m.listPrice != null && m.unitPrice != null ? (
+                              <span className="tabular block text-xs text-ink-2">
+                                liste {formatMoney(m.listPrice)} ₺ · fark{' '}
+                                {formatMoney(m.listPrice - m.unitPrice)} ₺
+                              </span>
+                            ) : null}
+                          </span>
+                        )}
                       </td>
                     ) : null}
                     <td className="px-4 py-2 text-ink-2">{m.note ?? ''}</td>

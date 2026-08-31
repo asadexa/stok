@@ -53,6 +53,23 @@ export const PRICE_OVERRIDE_REASON_VALUES = Object.keys(
   PRICE_OVERRIDE_REASONS,
 ) as PriceOverrideReason[]
 
+/**
+ * Hata metinlerinde para: "168,34". Ondalık ayırıcı VİRGÜL.
+ *
+ * `errors.ts` Türkçe metnin tek kaynağı ve orada ham `168.34` yazmak,
+ * uygulamanın geri kalanının `tr-TR` biçimlediği bir sayıyı tek bir
+ * ekranda İngilizce göstermek olurdu. (Tarayıcı testinde yakalandı.)
+ *
+ * `Intl` yerine elle: bu paket sunucuda, tarayıcıda ve ileride React
+ * Native'de çalışıyor; `Intl` verisi her üçünde de eksiksiz olmayabilir
+ * ve eksikse sessizce İngilizce biçime düşer.
+ */
+export function formatMoneyTr(value: number): string {
+  const [whole, cents] = Math.abs(value).toFixed(2).split('.') as [string, string]
+  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+  return `${value < 0 ? '-' : ''}${grouped},${cents}`
+}
+
 export function priceOverrideReasonLabel(reason: PriceOverrideReason): string {
   return PRICE_OVERRIDE_REASONS[reason].tr
 }

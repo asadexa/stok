@@ -179,6 +179,8 @@ export interface TestProductSpec {
   category?: string
   /** Alış fiyatı. Stok değeri toplamlarını sınamak için. */
   purchasePrice?: string
+  /** Liste satış fiyatı. Kasa açığı kontrolünü (T88) sınamak için. */
+  salePrice?: string
 }
 
 export interface TestProduct {
@@ -277,6 +279,7 @@ export async function seedTestTenant(
       // özeti ikisini farklı sayıyor ve fixture o ayrımı korumalı.
       category: spec.category ?? null,
       purchasePrice: spec.purchasePrice ?? null,
+      salePrice: spec.salePrice ?? null,
       archivedAt: spec.archived ? new Date() : null,
     })
 

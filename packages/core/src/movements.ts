@@ -2,9 +2,14 @@ import {
   AppError,
   type CreateMovementInput,
   type CreateMovementResponse,
+  type MovementReason,
+  type PriceSource,
   type Unit,
   createMovementSchema,
   listMovementsSchema,
+  priceOverrideRequiresReason,
+  reasonLabel,
+  reasonPriceBasis,
   toDelta,
 } from '@stok/shared'
 import {
@@ -21,7 +26,13 @@ import {
   withTenant,
 } from '@stok/db'
 import { and, desc, eq, gte, isNull, lte, sql } from 'drizzle-orm'
-import { type Actor, movementUserScope, redactPricesAll, requirePermission } from './authz.js'
+import {
+  type Actor,
+  canSeePrices,
+  movementUserScope,
+  redactMovementPricesAll,
+  requirePermission,
+} from './authz.js'
 import { issuesOf, parseOrThrow, validationError } from './validate.js'
 import { formatScaled, multiplyScaled, parseScaled, scaledFromNumber, scaledToNumber } from './numeric.js'
 
@@ -154,6 +165,10 @@ async function writeMovement(
     )
   }
 
+  // Liste fiyatı hata metnine YALNIZCA görmeye yetkili role konuyor
+  // (tehdit S7). Bkz. `resolvePrice`.
+  const price = resolvePrice(input, target, canSeePrices(actor.role))
+
   const [inserted] = await tx
     .insert(stockMovements)
     .values({
@@ -165,7 +180,11 @@ async function writeMovement(
       reason: input.reason,
       note: input.note ?? null,
       locationId: input.locationId ?? null,
-      unitPrice: input.unitPrice === undefined ? null : input.unitPrice.toFixed(2),
+      unitPrice: price.unitPrice,
+      listPrice: price.listPrice,
+      clientListPrice: price.clientListPrice,
+      priceSource: price.priceSource,
+      priceOverrideReason: price.priceOverrideReason,
       idempotencyKey: input.idempotencyKey,
       clientCreatedAt: new Date(input.clientCreatedAt),
     })
@@ -197,6 +216,135 @@ async function writeMovement(
 }
 
 /**
+ * ============================================================================
+ * KASA AÇIĞI KONTROLÜ — FİYATIN SUNUCUDA KARARA BAĞLANMASI (T88)
+ *
+ * Senaryo: fiş liste fiyatından 110 ₺ yazıyor, müşteri tanıdık diye 100 ₺
+ * ödüyor, kasada 10 ₺ açık kalıyor. Amaç açığı ENGELLEMEK DEĞİL, GİZLENEMEZ
+ * yapmak.
+ *
+ *   list_price         110  sunucunun üründen OKUDUĞU, harekete dondurulan
+ *   client_list_price  110  istemcinin gördüğünü İDDİA ETTİĞİ
+ *   unit_price         100  gerçekte ne olduğu
+ *   fark                10  ürün sonradan düzenlense de değişmez
+ *
+ * OTORİTE SUNUCUDA. İstemcinin gönderdiği liste fiyatı karşılaştırmaya HİÇ
+ * girmiyor; girseydi kontrolün tamamı kağıt üzerinde kalırdı: fiyatı elle
+ * yazan bir istemci `listPrice: 100` gönderip sapmayı sıfırlar, sebep hiç
+ * sorulmaz, açık da hiç görünmezdi.
+ *
+ * LİSTE FİYATI HAREKETE DONDURULUYOR. `products.sale_price` sonradan
+ * 110 → 120 olursa geçmişteki 10 ₺'lik açık geriye dönük 20 ₺'ye dönüşürdü.
+ * Defter tam da bunun için append-only; o günkü liste fiyatı da hareketle
+ * birlikte donmalı.
+ * ============================================================================
+ */
+interface ResolvedPrice {
+  unitPrice: string | null
+  listPrice: string | null
+  clientListPrice: string | null
+  priceSource: PriceSource | null
+  priceOverrideReason: string | null
+}
+
+interface PriceContext {
+  purchasePrice: string | null
+  salePrice: string | null
+}
+
+/** `numeric(12,2)` metnini sayıya çevirir. Kuruş sınırlı, güvenli. */
+function money(value: string | null): number | null {
+  return value === null ? null : Number(value)
+}
+
+function resolvePrice(
+  input: CreateMovementInput,
+  product: PriceContext,
+  canSeeAllPrices: boolean,
+): ResolvedPrice {
+  const basis = reasonPriceBasis(input.reason)
+
+  // Para el değiştirmeyen sebepler (fire, kullanım, sayım düzeltmesi).
+  // Fiyat SESSİZCE YUTULMUYOR: kullanıcı yazdığı tutarın kaydedildiğini
+  // sanır, oysa raporda hiç görünmezdi.
+  if (basis === null) {
+    if (input.unitPrice !== undefined) {
+      throw new AppError('PRICE_NOT_APPLICABLE', `reason ${input.reason} carries no price`, {
+        reason: input.reason,
+        reasonLabel: reasonLabel(input.reason as MovementReason),
+      })
+    }
+    return {
+      unitPrice: null,
+      listPrice: null,
+      clientListPrice: null,
+      priceSource: null,
+      priceOverrideReason: null,
+    }
+  }
+
+  const listPrice = money(basis === 'SALE' ? product.salePrice : product.purchasePrice)
+
+  // Fiyat girilmediyse hareket yine yazılıyor. Zorunlu kılmak T88'in işi
+  // değil: bugünün akışını kıran bir zorunluluk, veriyi toplamaya
+  // başlamadan önce kullanıcıyı formdan kaçırırdı. `OPENING` için zorunlu
+  // olması T89'un konusu.
+  if (input.unitPrice === undefined) {
+    return {
+      unitPrice: null,
+      // Fiyat yoksa liste fiyatı da yazılmıyor: tek başına bir liste
+      // fiyatı "bu fiyattan işlem gördü" gibi okunur, oysa hiçbir fiyat
+      // kaydedilmedi.
+      listPrice: null,
+      clientListPrice: null,
+      priceSource: null,
+      priceOverrideReason: null,
+    }
+  }
+
+  if (priceOverrideRequiresReason(input.unitPrice, listPrice) && !input.priceOverrideReason) {
+    /**
+     * LİSTE FİYATI HATA DETAYINA HER ZAMAN KONMUYOR (tehdit S7).
+     *
+     * Detaylar Türkçe hata metnine giriyor ve o metin kullanıcıya, adres
+     * çubuğuna ve ağ sekmesine düşüyor. Alış fiyatından sapan bir GİRİŞ
+     * yazan çalışan, "Liste fiyatı 168,34 ₺" uyarısından ürünün alış
+     * fiyatını öğrenirdi — listeden gizlediğimiz sayıyı forma yanlış
+     * fiyat yazarak sorgulamak mümkün olurdu. Satış fiyatı için kısıt
+     * yok: raf etiketinde zaten yazıyor.
+     *
+     * `message` (İngilizce, yalnızca log) tam sayıyı taşımaya devam
+     * ediyor: hata ayıklarken gereken bilgi orada.
+     */
+    const mayReveal = canSeeAllPrices || basis === 'SALE'
+    throw new AppError(
+      'PRICE_OVERRIDE_REASON_REQUIRED',
+      `unit price ${input.unitPrice} deviates from list ${listPrice} without a reason`,
+      mayReveal
+        ? { unitPrice: input.unitPrice, listPrice, reason: input.reason }
+        : { reason: input.reason },
+    )
+  }
+
+  return {
+    unitPrice: input.unitPrice.toFixed(2),
+    listPrice: listPrice === null ? null : listPrice.toFixed(2),
+    clientListPrice:
+      input.clientListPrice === undefined ? null : input.clientListPrice.toFixed(2),
+    // İstemci yalnızca sunucunun gözlemleyemeyeceğini iddia edebiliyor
+    // (fiş / tahmin); gerisini burada türetiyoruz. Şema da bunu zorluyor.
+    priceSource: input.priceSource ?? (input.unitPrice === listPrice ? 'LIST' : 'MANUAL'),
+    // Sapma yokken gelen sebep DÜŞÜRÜLÜYOR: "110'a sattım ama tanıdık
+    // indirimi yaptım" diye bir satır rapora girer ve indirim toplamını
+    // şişirirdi. DB CHECK bunu yakalamaz — sebep fazlalık olduğunda da
+    // geçerli sayılıyor.
+    priceOverrideReason: priceOverrideRequiresReason(input.unitPrice, listPrice)
+      ? (input.priceOverrideReason ?? null)
+      : null,
+  }
+}
+
+/**
  * Barkodu ürüne çevirir. `tenant_id` filtresi RLS'e EK olarak yazılıyor:
  * RLS zaten süzüyor ama açık filtre `barcodes_tenant_barcode_uq` index'ini
  * kullandırıyor ve niyeti okuyana gösteriyor.
@@ -224,6 +372,14 @@ export interface BarcodeLookup {
   qtyMultiplier: number
   /** Şu anki stok. Kilit ALINMADAN okundu, yani yazma anında değişebilir. */
   qty: number
+  /**
+   * Ürünün liste satış fiyatı. HERKESE AÇIK: raf etiketinde yazıyor,
+   * müşteri zaten görüyor. Gizlenseydi çalışan sapmayı hesaplayamaz,
+   * "kaça satıyorum" sorusunu ekranda cevaplayamazdı (T88).
+   */
+  salePrice: number | null
+  /** Alış fiyatı — ticari sır (tehdit S7). Yetkisiz rolde ALAN HİÇ YOK. */
+  purchasePrice?: number | null
   archivedAt: Date | null
 }
 
@@ -248,6 +404,8 @@ export async function lookupBarcode(
           sku: products.sku,
           unit: products.unit,
           archivedAt: products.archivedAt,
+          purchasePrice: products.purchasePrice,
+          salePrice: products.salePrice,
           qtyMultiplier: productBarcodes.qtyMultiplier,
           qty: currentStock.qty,
         })
@@ -273,7 +431,7 @@ export async function lookupBarcode(
         throw new AppError('BARCODE_UNKNOWN', `barcode ${trimmed} not found`, { barcode: trimmed })
       }
 
-      return {
+      const lookup: BarcodeLookup = {
         barcode: trimmed,
         productId: row.productId,
         productName: row.productName,
@@ -283,8 +441,13 @@ export async function lookupBarcode(
         // Hiç hareketi olmayan ürünün projeksiyon satırı yok; 0 göstermeli,
         // boş değil. Boş hücre "bilinmiyor" der, oysa cevap "sıfır".
         qty: row.qty === null ? 0 : scaledToNumber(parseScaled(row.qty)),
+        salePrice: money(row.salePrice),
         archivedAt: row.archivedAt,
       }
+      // Alan YALNIZCA yetkiliye ekleniyor; `null` atayıp geçmek "alış
+      // fiyatı girilmemiş" gibi okunur ve ekran ikisini ayıramaz.
+      if (canSeePrices(actor.role)) lookup.purchasePrice = money(row.purchasePrice)
+      return lookup
     },
     options.db,
   )
@@ -298,6 +461,9 @@ async function resolveBarcode(tx: Tx, tenantId: string, barcode: string) {
       productId: products.id,
       productName: products.name,
       archivedAt: products.archivedAt,
+      // Liste fiyatları SUNUCUDA okunuyor, istemciden gelmiyor (T88).
+      purchasePrice: products.purchasePrice,
+      salePrice: products.salePrice,
     })
     .from(productBarcodes)
     .innerJoin(products, eq(products.id, productBarcodes.productId))
@@ -512,7 +678,9 @@ export async function checkStockInvariant(
  * doğrudan sorguya koysaydık `?userId=<patron>` yazan çalışan patronun
  * hareketlerini okurdu — arayüzde o kutuyu göstermemek bunu engellemez.
  *
- * Alış fiyatı (`unitPrice`) çalışan cevabından ÇIKARILIYOR (tehdit S7).
+ * Fiyat alanları çalışan cevabından SATIR BAZINDA çıkarılıyor (T88 / D7):
+ * satış fiyatı kalıyor, alış fiyatı gidiyor (tehdit S7). Gerekçe
+ * `authz.ts` → `redactMovementPricesAll`.
  * ============================================================================
  */
 
@@ -526,7 +694,14 @@ export interface MovementRow {
   delta: number
   reason: string
   note: string | null
+  /** Gerçekleşen birim fiyat. ALAN YOKSA yetki yok, `null` ise girilmemiş. */
   unitPrice?: number | null
+  /** O günkü liste fiyatı, harekete dondurulmuş (T88). */
+  listPrice?: number | null
+  /** İstemcinin gördüğünü iddia ettiği liste fiyatı; uyuşmazlık kanıtı. */
+  clientListPrice?: number | null
+  /** Sapma sebebi. Yalnızca `unitPrice !== listPrice` olan satırlarda dolu. */
+  priceOverrideReason?: string | null
   createdAt: Date
 }
 
@@ -555,6 +730,9 @@ export async function listMovements(
           reason: stockMovements.reason,
           note: stockMovements.note,
           unitPrice: stockMovements.unitPrice,
+          listPrice: stockMovements.listPrice,
+          clientListPrice: stockMovements.clientListPrice,
+          priceOverrideReason: stockMovements.priceOverrideReason,
           createdAt: stockMovements.createdAt,
         })
         .from(stockMovements)
@@ -578,12 +756,14 @@ export async function listMovements(
     options.db,
   )
 
-  return redactPricesAll(
+  return redactMovementPricesAll(
     actor,
     rows.map((r) => ({
       ...r,
       delta: scaledToNumber(parseScaled(r.delta)),
-      unitPrice: r.unitPrice === null ? null : Number(r.unitPrice),
+      unitPrice: money(r.unitPrice),
+      listPrice: money(r.listPrice),
+      clientListPrice: money(r.clientListPrice),
     })),
   )
 }

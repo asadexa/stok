@@ -1565,7 +1565,7 @@ satmalıyım" — ileriye bakan bir soru, geçmiş maliyet eşleştirmesi gerekt
 U2 açık kalabilir; dahası T88 tarihli fiyat toplamaya başlayınca U2 gerçek
 veriyle test edilebilir hale gelir.
 
-- [ ] **T88 (P1, human: ~2g / CC: ~2sa)** - hareket - Kasa açığı kontrolü: liste fiyatı dondurulur, sapma zorunlu sebeple açıklanır
+- [x] **T88 (P1, human: ~2g / CC: ~2sa)** - hareket - Kasa açığı kontrolü: liste fiyatı dondurulur, sapma zorunlu sebeple açıklanır
   - **Neden (2026-08-30 düzeltmesi):** Bu bir kâr marjı özelliği DEĞİL, kasa
     mutabakatı kontrolü. Senaryo: kırtasiyede çalışan A4 satıyor, fiş liste
     fiyatından 110 ₺ yazıyor, müşteri tanıdık diye 100 ₺ alınıyor, kasada
@@ -1612,19 +1612,35 @@ veriyle test edilebilir hale gelir.
     `LIST` / `MANUAL` / `RECEIPT` / `INDEXED` / `ESTIMATED`. Kullanıcı ileride
     muhasebe uygulaması entegre edip fiş okutacak ve fiyat oradan gelecek;
     kaynak bugünden kayıtlı olmazsa o gün ikinci bir migration gerekir.
-  - **Yetki: AYRI ALAN ADI (karar D7, mühendislik incelemesi).** Çalışanın
-    görebildiği satış fiyatı `saleUnitPrice` diye AYRI bir alanda dönüyor;
-    `unitPrice` yetkisiz rolde HİÇ bulunmuyor.
-    Gerekçe: satır bazlı gizleme (`unitPrice` bazı satırlarda var bazılarında
-    yok) `authz.ts:88`'in önlemek için yazıldığı belirsizliği geri getirirdi —
-    `hareketler/page.tsx:355` `m.unitCost == null` eksik alanı da yakalar ve
-    `—` basar, çalışan "fiyat girilmemiş" ile "yetkim yok"u ayırt edemez.
-    Ayrı ad ile "alan yoksa yetki yok" invariantı bozulmuyor: `unitPrice`
-    yokluğu her zaman yetkisizlik, `saleUnitPrice` yokluğu her zaman
-    "girilmemiş".
-    `PURCHASE` ve `OPENING` fiyatları çalışana kapalı kalıyor (tehdit S7).
-    **T53 notu:** `/api/v1` iki alanı da yayınlayacak; adlandırma sözleşmesi
-    API belgesinde açıkça yazılmalı.
+  - **Yetki: D7'DEN SAPILDI (2026-08-31, uygulama sırasında).** D7 çalışanın
+    gördüğü fiyatı `saleUnitPrice` diye AYRI bir alanda döndürmeyi söylüyordu;
+    tasarım belgesi (`docs/designs/fiyat-defteri.md`, ONAYLANDI) ise aynı
+    alanın SATIR BAZINDA gizlenmesini söylüyor ve mevcut testin "girişlerde
+    yok, satışlarda var" olarak güncellenmesini istiyor. **İki onaylı belge
+    burada çelişiyordu.** Tasarım belgesindeki yol uygulandı:
+    `unitPrice` / `listPrice` / `priceOverrideReason` satır bazında
+    çıkarılıyor, ayrım `reasonPriceBasis(reason) === 'SALE'`.
+    D7'nin haklı itirazı — "`m.unitCost == null` eksik alanı da yakalar ve
+    `—` basar, çalışan 'girilmemiş' ile 'yetkim yok'u ayırt edemez" —
+    ekranda ÜÇ AYRI DURUM basılarak kapatıldı ve tarayıcıda doğrulandı:
+    alan yok → `gizli`, `null` → `—`, dolu → tutar. Sütun BAŞLIĞI da
+    cevaptan türüyor (`Satış fiyatı` / `Birim fiyat`), rolden değil.
+    Ayrım `reason === 'SALE'` yerine `priceBasis` üzerinden: müşteri
+    iadesinde (`RETURN_IN`) de ödenen tutar satış fiyatıdır.
+    `PURCHASE` ve `OPENING` fiyatları çalışana kapalı (tehdit S7).
+    **Kalan risk:** presence kontrolü (`'unitPrice' in row`) `== null`
+    kontrolünden farklı ve bunu bilmeyen bir tüketici sessizce yanlış
+    yazar. Bugün tek tüketici var ve doğru yazılmış.
+    **T53 notu (ZORUNLU):** `/api/v1` sözleşmesinde "alanın YOKLUĞU yetki
+    yokluğudur, `null` girilmemiş demektir" açıkça yazılmalı; mobil bu
+    ayrımı kaçırırsa çalışana "fiyat girilmemiş" gösterir.
+  - **Sapma sebebi ZORUNLULUĞU hata metninde alış fiyatını SIZDIRMIYOR**
+    (tarayıcı testinde yakalandı, 2026-08-31). Hata detayları Türkçe metne,
+    oradan adres çubuğuna ve ağ sekmesine düşüyor; alış fiyatından sapan bir
+    GİRİŞ yazan çalışan "Liste fiyatı 80,00 ₺" uyarısından listeden
+    gizlediğimiz sayıyı öğrenirdi — yanlış fiyat yazarak sorgulanabilir bir
+    kaçak. `listPrice` detaylara yalnızca yetkili role ya da satış dayanaklı
+    sebeplerde konuyor; metin sayısız da anlamlı kalıyor.
 
 - [ ] **T88.1 (P1, human: ~2sa / CC: ~20dk)** - rapor - Kasa açığı gün sonu raporuna binsin
   - Neden: **Okunmayan kayıt kontrol değildir.** T88 açığı kaydediyor; onu
@@ -2188,6 +2204,28 @@ aynı), migration drift kontrolü, dört adım CLAUDE.md'deki bitmiş sayılma
   - Not: barkod ve miktar alanları 64 px'te kaldı, yani en sık dokunulan
     iki alan zaten hedefin üstünde.
   - Kaynak: T56 kapanışı
+
+- [ ] **T107 (P3, human: ~10dk / CC: ~5dk)** - arayüz - **favicon yok: her sayfada 404**
+  - Tarayıcıda ölçüldü (T88 demo turu): `GET /favicon.ico` → 404, ve bu
+    konsola hata olarak düşüyor. Tek başına zararsız ama konsolu KİRLETİYOR:
+    gerçek bir JS hatası bu gürültünün içinde gözden kaçar, ve tarayıcı
+    testinin "konsol temiz mi" kontrolü hep kirli döner.
+  - `apps/web/src/app/icon.svg` yeterli; kabuktaki kutu logosu zaten var.
+  - Kaynak: T88 tarayıcı turu
+
+- [ ] **T108 (P2, human: ~1sa / CC: ~20dk)** - hareket - **fiyat alanı sebebe göre açılıp kapanmıyor**
+  - T88 formu JavaScript'siz (T52 kararı: depodaki eski Android tarayıcı).
+    Bu yüzden "Birim fiyat" ve "Sapma sebebi" alanları HER sebepte görünüyor,
+    fire/kullanım seçilse bile. Sunucu yanlış eşleşmeyi `PRICE_NOT_APPLICABLE`
+    ile reddediyor ve etikette hangi işlemlerde geçerli olduğu yazıyor — yani
+    kullanıcı kaybolmuyor ama GEREKSİZ BİR TUR atıyor.
+  - Ölçülmeden çözülmemeli: bu gerçekten yaşanıyor mu? Depoda fire girişi
+    ne sıklıkta yapılıyor ve kullanıcı oraya fiyat yazmaya kalkıyor mu?
+    Kalkmıyorsa bu iş HİÇ YAPILMAMALI — JS eklemek T52'nin kararını geri
+    almak demek ve bedeli eski tarayıcıda formun tamamen çalışmaması.
+  - Yapılacaksa: progressive enhancement (JS varsa gizle, yoksa hepsi
+    görünür kalsın), JS'e bağımlı gizleme DEĞİL.
+  - Kaynak: T88 tarayıcı turu
 
 ---
 

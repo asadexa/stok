@@ -1,8 +1,10 @@
 import { randomUUID } from 'node:crypto'
 import {
   type MovementReason,
+  PRICE_OVERRIDE_REASON_VALUES,
   type Unit,
   formatQty,
+  priceOverrideReasonLabel,
   reasonLabel,
   selectableReasons,
 } from '@stok/shared'
@@ -11,8 +13,17 @@ import { appDb } from '@stok/db'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { Alert, SubmitButton } from '@/components/field'
+import { formatMoney } from '@/lib/format'
 import { SaveFeedback } from '@/components/save-feedback'
-import { type FormParams, errorQuery, messageFrom, numberOr, optionalText, text } from '@/server/form'
+import {
+  type FormParams,
+  errorQuery,
+  messageFrom,
+  numberOr,
+  optionalNumber,
+  optionalText,
+  text,
+} from '@/server/form'
 import { currentActor } from '@/server/session'
 import { readSoundEnabled } from '@/server/theme'
 
@@ -46,6 +57,10 @@ import { readSoundEnabled } from '@/server/theme'
 
 interface HareketParams extends FormParams {
   barkod?: string
+  /** Hata sonrası geri doldurulan alanlar — kullanıcı baştan yazmasın. */
+  fiyat?: string
+  sebep?: string
+  sapma?: string
   /** Kayıt sonrası onay şeridi. */
   urun?: string
   onceki?: string
@@ -80,6 +95,9 @@ export default async function MovementEntryPage({
     if (!owner) redirect('/giris')
 
     const scanned = text(form, 'barkod')
+    const reason = text(form, 'sebep')
+    const unitPrice = optionalNumber(form, 'fiyat')
+    const overrideReason = optionalText(form, 'sapma')
     let target: string
     try {
       const result = await createMovement(
@@ -88,8 +106,17 @@ export default async function MovementEntryPage({
           idempotencyKey: text(form, 'anahtar'),
           barcode: scanned,
           qty: numberOr(form, 'miktar', 0),
-          reason: text(form, 'sebep'),
+          reason,
           ...(optionalText(form, 'not') ? { note: optionalText(form, 'not') } : {}),
+          ...(unitPrice === undefined ? {} : { unitPrice }),
+          // Ekranda GÖRÜLEN liste fiyatı da gidiyor. Sunucu bunu
+          // karşılaştırmada kullanmıyor — kendi okuduğunu kullanıyor —
+          // ama ayrı sütuna yazıyor: fiyat aradan değiştiyse fiş ile
+          // sistemin ayrıştığı ancak iki sayı yan yana durunca görülür.
+          ...(optionalNumber(form, 'liste') === undefined
+            ? {}
+            : { clientListPrice: optionalNumber(form, 'liste') }),
+          ...(overrideReason ? { priceOverrideReason: overrideReason } : {}),
           // Cihaz saati yok: web tarayıcısı "cihaz" değil ve sunucu saati
           // zaten doğru. Mobil bu alanı gerçek cihaz saatiyle dolduracak.
           clientCreatedAt: new Date().toISOString(),
@@ -102,9 +129,15 @@ export default async function MovementEntryPage({
         `/hareket?urun=${encodeURIComponent(result.productName)}` +
         `&onceki=${previous}&yeni=${result.newQty}`
     } catch (err) {
-      // Hata olduğunda barkodu KORUYORUZ: kullanıcı miktarı düzeltip
-      // tekrar deneyecek, etiketi ikinci kez okutmak zorunda kalmamalı.
-      target = `/hareket?barkod=${encodeURIComponent(scanned)}&${errorQuery(err)}`
+      // Hata olduğunda GİRİLENLER KORUNUYOR: en sık hata "sapma sebebi
+      // seçmediniz" ve kullanıcı yalnızca o alanı doldurup tekrar
+      // gönderecek. Fiyatı ve sebebi de sıfırlasaydık her hata, etiketi
+      // yeniden okutup formu baştan doldurmak demek olurdu.
+      const keep = new URLSearchParams({ barkod: scanned })
+      if (reason) keep.set('sebep', reason)
+      if (unitPrice !== undefined) keep.set('fiyat', String(unitPrice))
+      if (overrideReason) keep.set('sapma', overrideReason)
+      target = `/hareket?${keep.toString()}&${errorQuery(err)}`
     }
     redirect(target)
   }
@@ -266,9 +299,104 @@ export default async function MovementEntryPage({
               <fieldset>
                 <legend className="text-sm font-medium">İşlem</legend>
                 <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                  <ReasonGroup title="Giriş" tone="giris" reasons={selectableReasons('IN')} />
-                  <ReasonGroup title="Çıkış" tone="cikis" reasons={selectableReasons('OUT')} />
+                  <ReasonGroup
+                    title="Giriş"
+                    tone="giris"
+                    reasons={selectableReasons('IN')}
+                    selected={params.sebep}
+                  />
+                  <ReasonGroup
+                    title="Çıkış"
+                    tone="cikis"
+                    reasons={selectableReasons('OUT')}
+                    selected={params.sebep}
+                  />
                 </div>
+              </fieldset>
+
+              {/*
+                ── KASA AÇIĞI KONTROLÜ (T88) ────────────────────────────
+
+                Senaryo: liste 110 ₺, tanıdığa 100 ₺ verildi, kasada 10 ₺
+                açık. Amaç açığı ENGELLEMEK DEĞİL, GİZLENEMEZ yapmak.
+
+                LİSTE FİYATI ÖNCE OKUNUR HALDE YAZIYOR. Yazmasaydı çalışan
+                sapıp sapmadığını bilemezdi ve "sebep seçin" uyarısı
+                anlamsız bir engel gibi görünürdü.
+
+                ALANLAR KOŞULLU GİZLENMİYOR. Bu form BİLEREK JavaScript'siz
+                (T52): depodaki eski Android tarayıcıda da çalışıyor.
+                Sebebe göre alan açıp kapatmak JS gerektirirdi; onun yerine
+                hangi işlemlerde fiyat girildiği etiketin İÇİNDE yazıyor —
+                sunucu yanlış eşleşmeyi zaten reddediyor, kullanıcı da
+                nedenini formda okuyor.
+              */}
+              <fieldset className="rounded-control border border-line p-3">
+                <legend className="px-1 text-sm font-medium">Fiyat</legend>
+
+                <p className="text-sm text-ink-2">
+                  Liste satış fiyatı:{' '}
+                  <span className="tabular font-semibold text-ink">
+                    {found.salePrice === null ? 'girilmemiş' : `${formatMoney(found.salePrice)} ₺`}
+                  </span>
+                  {found.purchasePrice == null ? null : (
+                    <>
+                      {' · alış: '}
+                      <span className="tabular font-semibold text-ink">
+                        {formatMoney(found.purchasePrice)} ₺
+                      </span>
+                    </>
+                  )}
+                </p>
+                {/* Ekranda görülen liste fiyatı sunucuya da gidiyor; sunucu
+                    kendi okuduğuyla karşılaştırmıyor ama ayrı sütuna yazıyor
+                    ki ekran bayatladıysa kanıt kalsın. */}
+                {found.salePrice === null ? null : (
+                  <input type="hidden" name="liste" value={found.salePrice} />
+                )}
+
+                <label className="mt-3 block">
+                  <span className="text-sm font-medium">
+                    Birim fiyat{' '}
+                    <span className="font-normal text-ink-2">
+                      (alış, satış ve iadelerde; fire/kullanımda girilmez)
+                    </span>
+                  </span>
+                  <input
+                    name="fiyat"
+                    type="text"
+                    inputMode="decimal"
+                    defaultValue={params.fiyat ?? ''}
+                    placeholder={found.salePrice === null ? '' : String(found.salePrice)}
+                    className="mt-1 h-14 w-full rounded-control border border-line-control bg-surface px-3 text-base"
+                  />
+                </label>
+
+                <label className="mt-3 block">
+                  <span className="text-sm font-medium">
+                    Sapma sebebi{' '}
+                    <span className="font-normal text-ink-2">
+                      (liste fiyatından farklı yazdıysanız zorunlu)
+                    </span>
+                  </span>
+                  {/*
+                    SERBEST METİN DEĞİL, LİSTE. Takip toplanabilirlik demek:
+                    "bu ay tanıdık indirimine kaç lira gitti" sorusunu
+                    serbest metin cevaplayamaz.
+                  */}
+                  <select
+                    name="sapma"
+                    defaultValue={params.sapma ?? ''}
+                    className="mt-1 h-14 w-full rounded-control border border-line-control bg-surface px-3 text-base"
+                  >
+                    <option value="">— Sapma yok —</option>
+                    {PRICE_OVERRIDE_REASON_VALUES.map((r) => (
+                      <option key={r} value={r}>
+                        {priceOverrideReasonLabel(r)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
               </fieldset>
 
               <label className="block">
@@ -294,10 +422,13 @@ function ReasonGroup({
   title,
   tone,
   reasons,
+  selected,
 }: {
   title: string
   tone: 'giris' | 'cikis'
   reasons: MovementReason[]
+  /** Hatadan sonra geri gelen seçim; yoksa ilk giriş sebebi. */
+  selected?: string
 }) {
   const color = tone === 'giris' ? 'text-giris' : 'text-cikis'
   return (
@@ -314,7 +445,14 @@ function ReasonGroup({
               name="sebep"
               value={reason}
               // İlk giriş sebebi varsayılan: mal kabulü en sık yapılan iş.
-              defaultChecked={tone === 'giris' && index === 0}
+              // Hata dönüşünde kullanıcının seçtiği sebep korunuyor —
+              // yoksa "sapma sebebi seçin" uyarısından sonra işlem
+              // sessizce "Satın alma"ya döner ve satış kaydı kaybolurdu.
+              defaultChecked={
+                selected === undefined || selected === ''
+                  ? tone === 'giris' && index === 0
+                  : selected === reason
+              }
               required
               className="size-5"
             />

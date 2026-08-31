@@ -312,17 +312,27 @@ describe('satır 5: alış fiyatı ve maliyet gizleme (tehdit S7)', () => {
     expect(withCost?.unitPrice).toBe(42.5)
   })
 
-  it('çalışan cevabında unitPrice ALANI HİÇ YOK', async () => {
-    // null bırakmak yetmez: arayüz "fiyat girilmemiş" ile "görmeye
+  it('çalışan cevabında ALIŞ fiyatı ALANI HİÇ YOK, SATIŞ fiyatı var (T88)', async () => {
+    // T88'e kadar kural "sütunu topluca sil"di. Sütun artık iki farklı
+    // şey tutuyor — girişte alış, çıkışta satış — ve kural satır bazına
+    // indi: satış fiyatı ticari sır değil, müşteri zaten biliyor.
+    //
+    // null bırakmak yine yetmez: arayüz "fiyat girilmemiş" ile "görmeye
     // yetkin yok" durumlarını ayırt edemez ve kullanıcıya yanlış bilgi
     // gösterir. Ayrıca değer ağ sekmesinde görünmemeli.
     await createMovement(staff, req(tenant.products['M-1']!.barcode, { qty: 1, unitPrice: 99 }), {
       db: app.db,
     })
+    await createMovement(
+      staff,
+      req(tenant.products['M-1']!.barcode, { qty: 1, reason: 'SALE', unitPrice: 77 }),
+      { db: app.db },
+    )
     const rows = await listMovements(staff, { productId: tenant.products['M-1']!.id }, { db: app.db })
 
-    expect(rows.length).toBeGreaterThan(0)
-    for (const row of rows) {
+    const purchases = rows.filter((r) => r.reason === 'PURCHASE')
+    expect(purchases.length).toBeGreaterThan(0)
+    for (const row of purchases) {
       expect(Object.hasOwn(row, 'unitPrice')).toBe(false)
       // Değer başka bir alana sızmış olabilir; alan adına değil DEĞERE
       // bakıyoruz. Ham JSON içinde '99' aramak flaky'di: satırdaki
@@ -330,6 +340,9 @@ describe('satır 5: alış fiyatı ve maliyet gizleme (tehdit S7)', () => {
       // ayda bir sebepsiz kırmızıya dönüyordu.
       expect(Object.values(row)).not.toContain(99)
     }
+
+    const sale = rows.find((r) => r.reason === 'SALE')
+    expect(sale?.unitPrice).toBe(77)
   })
 
   it('redactPrices üç fiyat alanının hepsini çıkarır', () => {

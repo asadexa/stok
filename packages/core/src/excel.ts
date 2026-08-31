@@ -1,5 +1,5 @@
-import { type Unit, formatQty, reasonLabel, roleLabel } from '@stok/shared'
-import type { MovementReason, Role } from '@stok/shared'
+import { type Unit, formatQty, priceOverrideReasonLabel, reasonLabel, roleLabel } from '@stok/shared'
+import type { MovementReason, PriceOverrideReason, Role } from '@stok/shared'
 import ExcelJS from 'exceljs'
 
 /**
@@ -70,6 +70,8 @@ export interface MovementExportRow {
   unit: Unit
   note: string | null
   unitPrice?: number | null
+  listPrice?: number | null
+  priceOverrideReason?: PriceOverrideReason | null
 }
 
 /**
@@ -117,9 +119,27 @@ export function movementColumns(includePrices: boolean): SheetColumn<MovementExp
     { header: 'Not', width: 30, value: (r) => r.note },
   ]
   if (!includePrices) return base
+  /**
+   * KASA AÇIĞI ÜÇ SÜTUNLA RAPORLANIYOR (T88): liste, gerçekleşen, sebep.
+   * Yalnızca "Birim Fiyat" konsaydı 100 ₺'lik bir satır masum görünürdü —
+   * açık ancak iki sayı YAN YANA durduğunda okunur, ve sebep olmadan
+   * "bu ay tanıdık indirimine kaç lira gitti" sorusu cevapsız kalırdı.
+   *
+   * EXCEL'DE KURAL SATIR BAZINA İNMİYOR, ekrandakinin aksine (D7). Çalışan
+   * hiç fiyat sütunu almıyor: karışık bir dökümde SATIN ALMA satırındaki
+   * boş "Birim Fiyat" hücresi "bu bilgi var ama sana gösterilmiyor" demek
+   * olurdu. Ekranda sütun başlığı satır türüne göre okunuyor, Excel'de
+   * öyle bir bağlam yok.
+   */
   return [
     ...base,
-    { header: 'Birim Maliyet', width: 14, value: (r) => r.unitPrice ?? null, format: MONEY_FORMAT },
+    { header: 'Liste Fiyatı', width: 14, value: (r) => r.listPrice ?? null, format: MONEY_FORMAT },
+    { header: 'Birim Fiyat', width: 14, value: (r) => r.unitPrice ?? null, format: MONEY_FORMAT },
+    {
+      header: 'Sapma Sebebi',
+      width: 22,
+      value: (r) => (r.priceOverrideReason ? priceOverrideReasonLabel(r.priceOverrideReason) : null),
+    },
   ]
 }
 

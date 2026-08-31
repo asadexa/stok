@@ -4,6 +4,12 @@ import {
   type BarcodeKind,
   multiplierMatchesKind,
 } from './barcodes.js'
+import {
+  PRICE_OVERRIDE_REASON_VALUES,
+  PRICE_OVERRIDE_REASONS,
+  type PriceOverrideReason,
+  type PriceSource,
+} from './prices.js'
 import { MOVEMENT_REASON_VALUES, MOVEMENT_REASONS, type MovementReason } from './reasons.js'
 import { ROLE_VALUES, type Role } from './roles.js'
 import { UNIT_VALUES, type Unit } from './units.js'
@@ -12,6 +18,24 @@ const reasonEnum = z.enum(MOVEMENT_REASON_VALUES as [MovementReason, ...Movement
 const unitEnum = z.enum(UNIT_VALUES as [Unit, ...Unit[]])
 const barcodeKindEnum = z.enum(BARCODE_KIND_VALUES as [BarcodeKind, ...BarcodeKind[]])
 const roleEnum = z.enum(ROLE_VALUES as [Role, ...Role[]])
+const priceOverrideReasonEnum = z.enum(
+  PRICE_OVERRIDE_REASON_VALUES as [PriceOverrideReason, ...PriceOverrideReason[]],
+)
+
+/**
+ * İSTEMCİNİN İDDİA EDEBİLECEĞİ FİYAT KAYNAKLARI — hepsi değil (T88).
+ *
+ * `LIST`, `MANUAL` ve `INDEXED` sunucunun TÜRETTİĞİ değerler: fiyatın liste
+ * fiyatına eşit olup olmadığını, ya da endeksle hesaplanıp hesaplanmadığını
+ * sunucu zaten biliyor. İstemcinin bunları göndermesine izin verilseydi,
+ * elle yazılmış bir fiyat `LIST` etiketiyle kaydedilebilir ve kasa açığı
+ * raporu "liste fiyatından satıldı" diye yalan söylerdi.
+ *
+ * Geriye kalan ikisi sunucunun BİLEMEYECEĞİ gözlemler — fiş okundu mu,
+ * kullanıcı tahmin mi etti — o yüzden yalnızca onlar istemciden geliyor.
+ */
+const CLIENT_PRICE_SOURCES = ['RECEIPT', 'ESTIMATED'] as const satisfies readonly PriceSource[]
+const clientPriceSourceEnum = z.enum(CLIENT_PRICE_SOURCES)
 
 /** NUMERIC(14,3): en fazla 3 ondalık basamak. */
 const MAX_DECIMALS = 3
@@ -78,13 +102,41 @@ export const createMovementSchema = z.object({
   }),
   note: z.string().trim().max(500).optional(),
   locationId: z.string().uuid().optional(),
-  /** Girişte alış fiyatı. Maliyet takibi (Faz 2) bu veriyi bugünden topluyor. */
-  unitPrice: z.number().nonnegative().finite().optional(),
+  /**
+   * Hareketin GERÇEKLEŞEN birim fiyatı — girişte alış, çıkışta satış (T88).
+   * `moneySchema`: kuruş sınırı burada zorlanıyor, yoksa PostgreSQL fazla
+   * basamağı sessizce yuvarlar ve girilen tutar kaydedilenden farklı olur.
+   */
+  unitPrice: moneySchema.optional(),
+  /**
+   * İstemcinin o an ekranda gördüğü liste fiyatı. KARŞILAŞTIRMADA
+   * KULLANILMIYOR — sunucu liste fiyatını üründen kendisi okuyor.
+   *
+   * Ayrı sütuna yazılıyor ki uyuşmazlık GÖRÜNÜR olsun: fiş 110 ₺ yazarken
+   * sunucudaki liste 120 ₺ ise, ekranın bayat olduğu ancak bu iki sayı yan
+   * yana durduğunda anlaşılır. Sunucununkiyle sessizce değiştirilseydi
+   * müşteriye yanlış fiş kesildiği hiç fark edilmezdi.
+   */
+  clientListPrice: moneySchema.optional(),
+  /** Liste fiyatından sapma sebebi. Serbest metin değil, listeden (T88). */
+  priceOverrideReason: priceOverrideReasonEnum.optional(),
+  /** Yalnızca sunucunun bilemeyeceği kaynaklar; gerisini sunucu türetiyor. */
+  priceSource: clientPriceSourceEnum.optional(),
   /** Cihaz saati. Sunucu saatinden AYRI saklanır; sıralama sunucu saatiyle. */
   clientCreatedAt: z.string().datetime({ offset: true }),
   /** Negatif stok override. Sunucu ayrıca admin rolü arar (PLAN.md U1). */
   allowNegative: z.boolean().default(false),
 })
+  // "Diğer" sebebi TEK BAŞINA hiçbir şey anlatmıyor; açıklamasız
+  // kaydedilseydi rapor "bu ay 4.200 ₺ Diğer" derdi ve kimse nedenini
+  // öğrenemezdi. Kuralın kendisi `prices.ts`'te, veri olarak duruyor.
+  .refine(
+    (m) =>
+      m.priceOverrideReason === undefined ||
+      !PRICE_OVERRIDE_REASONS[m.priceOverrideReason].requiresNote ||
+      (m.note !== undefined && m.note !== ''),
+    { message: '"Diğer" seçildiğinde açıklama zorunlu', path: ['note'] },
+  )
 
 export type CreateMovementInput = z.infer<typeof createMovementSchema>
 
