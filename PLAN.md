@@ -1093,7 +1093,7 @@ G1, G2 ve G4 kapandı. G3 (yazıcı) TODOS E5'e bağlı, aşağıda gerekçesi y
     gereken metin.
   - `ink-3` kaldırılmadı: 14 px ve üstü ikincil metin ile yer tutucularda
     (44 kullanım) meşru. Kural token'ın yanına yazıldı.
-- [ ] **T56 (P3, human: ~4sa / CC: ~30dk)** - web - **Sol kenar çubuğu + yapışkan arama şeridi**
+- [x] **T56 (P3, human: ~4sa / CC: ~30dk)** - web - **Sol kenar çubuğu + yapışkan arama şeridi**
   - T54'ün referans görselden aldığı TEK yapısal değişiklik. Bugün üst
     şerit + `max-w-6xl` (1152 px) var.
   - Kazanç: menü hedefleri 56 px satıra çıkıyor (bugün `py-2`, yani
@@ -1104,6 +1104,17 @@ G1, G2 ve G4 kapandı. G3 (yazıcı) TODOS E5'e bağlı, aşağıda gerekçesi y
   - P3: kural ihlalini kapatıyor ama mevcut ekranlar çalışıyor. T53 ve
     T34'ten sonra.
 
+  - **KAPANIŞ (T104 turu).** Yapısal kısım T66-T68'de teslim edilmiş:
+    `shell.tsx` içinde 244 px kalıcı `<aside>` (≥1024 px, `lg:sticky`),
+    altında 64 px alt gezinme çubuğu (<1024 px), ve yapışkan üst şeritte
+    her sayfada arama kutusu. Önerdiğim 72 px ikon rayı yerine alt çubuk
+    seçilmiş — dokunmatik için daha iyi.
+  - **56 px hedefi tutmadı ve bu bilinçli.** Menü satırları `h-12` (48 px),
+    form kontrolleri `h-13` (52 px). `field.tsx` gerekçeyi yazıyor:
+    referans görselin oranları için düşürülmüş, WCAG 2.5.5'in 44 px
+    eşiğinin üstünde kalınmış.
+  - **Ama kural metni güncellenmemiş.** PLAN Bölüm 11 ve CLAUDE.md hâlâ
+    "minimum 56 px" diyor. Kod ile kural ayrıştı → T106.
 - [x] **T57 (P1, human: ~2sa / CC: ~20dk)** - altyapı - **Demo yolu her platformda çalışsın**
   - **KULLANICI TESTİNDE ORTAYA ÇIKTI.** Windows'ta demo hiç başlamadı;
     kullanıcı ilk komutta duvara tosladı. İki ayrı hata vardı ve ikisi de
@@ -2162,6 +2173,21 @@ aynı), migration drift kontrolü, dört adım CLAUDE.md'deki bitmiş sayılma
     `pnpm audit` hâlâ temiz mi bak.
   - Doğrula: lint + typecheck + testler + `next build` + duman testi 4/4.
   - Kaynak: T104 kapanışı
+
+- [ ] **T106 (P2, human: ~1sa / CC: ~15dk)** - tasarım - **56 px kuralı ile kod ayrıştı, biri düzeltilmeli**
+  - PLAN Bölüm 11 ve CLAUDE.md "minimum 56 px dokunma hedefi (eldiven var)"
+    diyor. Kod: menü satırı 48 px, form kontrolü 52 px, barkod/miktar 64 px.
+  - İkisi de savunulabilir ama İKİSİ BİRDEN DOĞRU OLAMAZ. Yazılı kural ile
+    kodun ayrışması, bu projede tekrar eden en pahalı hata sınıfı: sonraki
+    kişi hangisine uyacağını bilemez.
+  - **Karar kullanıcınındır, çünkü 56 px bir ürün kararıydı:** eldivenli el,
+    soğuk, acele. Referans görselin oranları için indirmek estetik bir
+    tercih; ikisini tartan kişi ürünü kullanacak olan.
+  - Seçenekler: (a) kuralı 52/48'e indir ve gerekçesini yaz, (b) kodu 56'ya
+    çıkar, (c) ikili kural yaz — "dokunma hedefi 56, işaretleme kontrolü 48".
+  - Not: barkod ve miktar alanları 64 px'te kaldı, yani en sık dokunulan
+    iki alan zaten hedefin üstünde.
+  - Kaynak: T56 kapanışı
 
 ---
 
