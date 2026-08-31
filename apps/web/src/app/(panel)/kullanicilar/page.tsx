@@ -150,7 +150,7 @@ export default async function UsersPage({
                   <span className="rounded-md bg-line px-2 py-1 text-xs">Pasif</span>
                 )}
                 {person.id === actor.userId ? (
-                  <span className="text-xs text-ink-3">(siz)</span>
+                  <span className="text-xs text-ink-2">(siz)</span>
                 ) : null}
               </div>
 

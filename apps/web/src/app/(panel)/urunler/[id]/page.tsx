@@ -313,7 +313,7 @@ export default async function ProductPage({
                 </span>
               ) : null}
               {b.archivedAt ? (
-                <span className="text-xs text-ink-3">
+                <span className="text-xs text-ink-2">
                   {formatDate(b.archivedAt)} tarihinde kaldırıldı
                 </span>
               ) : null}
@@ -373,7 +373,7 @@ export default async function ProductPage({
           <SubmitButton tone={product.archivedAt ? 'secondary' : 'danger'}>
             {product.archivedAt ? 'Arşivden çıkar' : 'Ürünü arşivle'}
           </SubmitButton>
-          <p className="mt-2 text-xs text-ink-3">
+          <p className="mt-2 text-xs text-ink-2">
             {product.archivedAt
               ? 'Ürün yeniden okutulabilir hale gelir.'
               : 'Arşivlenen ürüne hareket yazılamaz. Geçmişi ve stoğu silinmez, listede "arşiv dahil" filtresiyle görünür.'}

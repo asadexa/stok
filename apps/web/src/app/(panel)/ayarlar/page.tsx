@@ -295,7 +295,7 @@ function PasswordField({
         autoComplete={autoComplete}
         className="mt-1.5 h-13 w-full rounded-control border border-line-control bg-surface px-3.5 text-base text-ink"
       />
-      {hint ? <span className="mt-1.5 block text-xs text-ink-3">{hint}</span> : null}
+      {hint ? <span className="mt-1.5 block text-xs text-ink-2">{hint}</span> : null}
     </label>
   )
 }

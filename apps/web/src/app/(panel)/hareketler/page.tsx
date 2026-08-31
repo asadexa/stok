@@ -336,7 +336,7 @@ export default async function MovementsPage({
                       >
                         {m.productName}
                       </Link>
-                      <div className="tabular text-xs text-ink-3">{m.productSku}</div>
+                      <div className="tabular text-xs text-ink-2">{m.productSku}</div>
                     </td>
                     <td
                       className={`tabular whitespace-nowrap px-4 py-2 text-right font-medium ${

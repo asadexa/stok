@@ -76,10 +76,13 @@ export function TextField({
         placeholder={placeholder}
         className={INPUT}
       />
-      {/* İpucu `text-ink-3`: beyaza 4,64:1. Eskiden `text-slate-500` (4,77:1)
-          idi ve 12 px'te sınırda geçiyordu; token artık her iki temada da
-          ölçülü. */}
-      {hint ? <span className="mt-1.5 block text-xs text-ink-3">{hint}</span> : null}
+      {/* İpucu `text-ink-2`: beyaza 6,76:1, koyu temada 7,54:1.
+          `ink-3` DEĞİL: o token aydınlık temada 4,64:1 ve AA eşiğini
+          (4,5) ancak geçiyor. T55'in bulgusu zaten "12 px'te sınırda bir
+          oran kullanma"ydı; ipucu yönerge taşıyor ("ondalık ayırıcı
+          virgül"), okunamazsa alan yanlış doldurulur. `ink-3` 14 px ve
+          üstü ikincil metin ile yer tutucular için meşru kalıyor. */}
+      {hint ? <span className="mt-1.5 block text-xs text-ink-2">{hint}</span> : null}
     </label>
   )
 }
@@ -111,7 +114,7 @@ export function SelectField({
           </option>
         ))}
       </select>
-      {hint ? <span className="mt-1.5 block text-xs text-ink-3">{hint}</span> : null}
+      {hint ? <span className="mt-1.5 block text-xs text-ink-2">{hint}</span> : null}
     </label>
   )
 }

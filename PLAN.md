@@ -1061,7 +1061,7 @@ G1, G2 ve G4 kapandı. G3 (yazıcı) TODOS E5'e bağlı, aşağıda gerekçesi y
   - Yedi artboard: Kurallar, Renk, Tipografi, Bileşenler + uygulanmış
     Panel / Stok / Hareket ekranları.
 
-- [ ] **T55 (P2, human: ~2sa / CC: ~15dk)** - web - **Ölçülen erişilebilirlik açıklarını kapat**
+- [x] **T55 (P2, human: ~2sa / CC: ~15dk)** - web - **Ölçülen erişilebilirlik açıklarını kapat**
   - T54'teki kontrast hesabının bulguları. Üçü de WCAG eşiğinin ALTINDA
     ve depoda ışık kötü — bu ürün için "sınırda geçer" yeterli değil.
   - `border-slate-300` → `border-slate-500` girdi kenarlığında.
@@ -1077,6 +1077,22 @@ G1, G2 ve G4 kapandı. G3 (yazıcı) TODOS E5'e bağlı, aşağıda gerekçesi y
     elle yazılmış kopyalar (`stok/page.tsx`, `hareket/page.tsx`) da
     aynı değere çekilmeli, yoksa ekranlar ayrışır.
 
+  - **KAPANIŞ (T104 turu).** Üç maddenin ikisi T68'de kapanmıştı: kenarlık
+    `--line-control` (#848aa8, 3,40:1) ve odak halkası (3 px, 7,25:1,
+    `outline-none` kaldırıldı).
+  - **Üçüncüsü kapanmamış, KÖTÜLEŞMİŞTİ.** 12 px ipucu `text-slate-500`
+    (4,77:1) iken `text-ink-3`e (4,64:1) taşınmıştı. Dosyanın kendi yorumu
+    "12 px'te sınırda geçiyordu" diye kabul ediyor ama yeni değer daha
+    düşük. T55'in bulgusu zaten oranın sınırda olmasıydı; token değişimi
+    onu çözmedi, bir tık aşağı çekti.
+  - Ölçüldü (hex → sRGB → WCAG): `ink-3` aydınlık 4,64:1 / koyu 5,56:1;
+    `ink-2` aydınlık 6,76:1 / koyu 7,54:1.
+  - 12 px içerik taşıyan yedi yer `text-ink-2`ye alındı: iki form ipucu,
+    ayarlar ipucu, "(siz)" işareti, barkod arşiv tarihi, arşiv eylem
+    açıklaması, hareket listesinde stok kodu. Hepsi kullanıcının OKUMASI
+    gereken metin.
+  - `ink-3` kaldırılmadı: 14 px ve üstü ikincil metin ile yer tutucularda
+    (44 kullanım) meşru. Kural token'ın yanına yazıldı.
 - [ ] **T56 (P3, human: ~4sa / CC: ~30dk)** - web - **Sol kenar çubuğu + yapışkan arama şeridi**
   - T54'ün referans görselden aldığı TEK yapısal değişiklik. Bugün üst
     şerit + `max-w-6xl` (1152 px) var.

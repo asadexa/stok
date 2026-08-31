@@ -33,7 +33,7 @@
   /* Metin */
   --ink: #171827; /* beyaza 17,55:1 */
   --ink-2: #565a73; /* beyaza  6,76:1 */
-  --ink-3: #6e7391; /* beyaza  4,64:1 — 12px ipucu metni burada durur */
+  --ink-3: #6e7391; /* beyaza  4,64:1 — 14px+ ikincil metin ve yer tutucu. 12px İÇİN KULLANMA (T55) */
 
   /* Vurgu — SADECE gezinme, birincil eylem ve bağlantıda.
      Tablo hücresine, rozete, sayıya GİRMEZ: orada anlam renkleri konuşur. */
