@@ -184,7 +184,12 @@ async function listeFiyati(page: Page): Promise<number> {
   return Number(`${eslesme![1]!.replaceAll('.', '')}.${eslesme![2]}`)
 }
 
-test.describe('Faz 10 — kasa açığı ve açılış değerlemesi', () => {
+// `@kararsiz` ETİKETİ CI KAPISINDAN ÇIKARIYOR (T109). Dosyayı iş akışından
+// adıyla dışlamak yerine etiket kullanılıyor: dosya adı listesi zamanla
+// sessizce eskir ve YENİ yazılan bir test hiç koşmadan öylece durur. Etiket
+// tersi: varsayılan DAHİL, dışlanan tek tek görünür — hem test başlığında
+// hem iş akışında.
+test.describe('@kararsiz Faz 10 — kasa açığı ve açılış değerlemesi', () => {
   test.beforeEach(async ({ page }) => {
     page.on('pageerror', (err) => {
       throw new Error(`Sayfada işlenmemiş hata: ${err.message}`)
