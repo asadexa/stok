@@ -7,6 +7,7 @@ import { resetCookieJar } from '@/test/cookie-jar'
 import { TEST_DB_NAME } from '@/test/db-name'
 
 import { GET as aramaGET } from './arama/route'
+import { POST as cronPOST } from './cron/route'
 import { POST as aktarimHatalariPOST } from './rapor/aktarim-hatalari/route'
 import { GET as hareketGET } from './rapor/hareket/route'
 import { GET as sablonGET } from './rapor/sablon/route'
@@ -167,5 +168,163 @@ describe('oturum yaşam döngüsü', () => {
 
     const res = await aramaGET(req('/api/arama?q=kalem'))
     expect(res.status, 'çıkıştan sonra uç hâlâ açık').not.toBe(200)
+  })
+})
+
+/**
+ * ============================================================================
+ * T34 — CRON UCU
+ *
+ * Bu uç ROTALAR listesinde değil çünkü oturumla değil paylaşılan sırla
+ * korunuyor: zamanlayıcının çerezi yok. Ama sınanan arıza sınıfı aynı —
+ * "kontrol satırı silinmiş, uç herkese açık kalmış". Fark şu ki burada açık
+ * kalmanın bedeli daha ağır: uç HER TENANT'ın gün sonu raporunu gönderiyor
+ * ve kuyruğunu işliyor, yani kimliksiz bir istek bütün müşterilere
+ * istediği kadar e-posta attırabilir.
+ * ============================================================================
+ */
+describe('cron ucu (T34)', () => {
+  const SIR = 'x'.repeat(40)
+  let onceki: Record<string, string | undefined>
+
+  function cronReq(authorization?: string): NextRequest {
+    return new NextRequest(new URL('http://localhost/api/cron'), {
+      method: 'POST',
+      headers: authorization ? { authorization } : undefined,
+    })
+  }
+
+  // Sorgular drizzle yerine doğrudan postgres.js istemcisiyle: `sql`
+  // şablonu drizzle-orm'dan gelir ve o, apps/web'in bağımlılığı değil.
+  // Sırf iki sayım sorgusu için bağımlılık eklemek, web paketini
+  // veritabanı katmanına doğrudan bağlardı.
+  async function isSayisi(): Promise<number> {
+    const rows = await admin.client<{ n: string }[]>`SELECT count(*)::text AS n FROM background_jobs`
+    return Number(rows[0]?.n ?? '0')
+  }
+
+  beforeAll(() => {
+    onceki = {
+      CRON_SECRET: process.env.CRON_SECRET,
+      SMTP_URL: process.env.SMTP_URL,
+      REPORT_FROM_EMAIL: process.env.REPORT_FROM_EMAIL,
+    }
+    // SMTP AYARI BURADA, testlerin içinde değil: eksik olsaydı kapı
+    // açıldığında tur SMTP yapılandırması yüzünden düşer ve "uç kapalı"
+    // testleri, kapı açık olsa BİLE yeşil yanardı — yanlış sebeple geçen
+    // bir güvenlik testi, testin hiç olmamasından kötü.
+    // Ulaşılamayan adres bilerek: sınanan şey turun BAŞLAYIP başlamadığı.
+    process.env.SMTP_URL = 'smtp://127.0.0.1:1/?connectionTimeout=500&greetingTimeout=500'
+    process.env.REPORT_FROM_EMAIL = 'rapor@ornek.test'
+  })
+
+  /**
+   * Her test TEMİZ kuyrukla başlıyor. Aksi halde bir önceki testin
+   * oluşturduğu işler `dedupeKey` yüzünden yeniden üretilmiyor ve turun
+   * hiç iş işlemediği görülüyordu — testin sırasına bağlı, teşhisi pahalı
+   * bir yanlış yeşil.
+   */
+  beforeEach(async () => {
+    await admin.client`DELETE FROM background_jobs`
+  })
+
+  afterAll(async () => {
+    for (const [k, v] of Object.entries(onceki)) {
+      if (v === undefined) delete process.env[k]
+      else process.env[k] = v
+    }
+    await admin.client`DELETE FROM background_jobs`
+  })
+
+  it('CRON_SECRET tanımsızsa uç KAPALI', async () => {
+    delete process.env.CRON_SECRET
+    const once = await isSayisi()
+
+    const res = await cronPOST(cronReq(`Bearer ${SIR}`))
+
+    expect(res.status).toBe(500)
+    // ASIL KONTROL: "sır yoksa doğrulama yapma" varsayılanı, ortam
+    // değişkenini eklemeyi unutan kurulumda ucu internete açardı.
+    expect(await isSayisi(), 'sır tanımsızken cron turu çalıştı').toBe(once)
+  })
+
+  it('KISA sır kabul edilmiyor', async () => {
+    // 8 karakterlik bir sır kaba kuvvetle denenebilir ve bu uç kimlik
+    // doğrulama sayacına (T51) TABİ DEĞİL: orası e-posta başına sayıyor,
+    // burada kullanıcı yok. Tek savunma sırrın tahmin edilemezliği.
+    process.env.CRON_SECRET = 'kisa-sir'
+    const once = await isSayisi()
+
+    const res = await cronPOST(cronReq('Bearer kisa-sir'))
+
+    expect(res.status, 'kısa sır kabul edildi').toBe(500)
+    expect(await isSayisi(), 'kısa sırla cron turu çalıştı').toBe(once)
+  })
+
+  it('sırsız istek 401', async () => {
+    process.env.CRON_SECRET = SIR
+    const once = await isSayisi()
+
+    const res = await cronPOST(cronReq())
+
+    expect(res.status).toBe(401)
+    expect(((await res.json()) as { code?: string }).code).toBe('TOKEN_INVALID')
+    expect(await isSayisi(), 'sırsız istekte cron turu çalıştı').toBe(once)
+  })
+
+  it('YANLIŞ sır 401 — uzunluk aynı olsa bile', async () => {
+    process.env.CRON_SECRET = SIR
+    const once = await isSayisi()
+
+    const res = await cronPOST(cronReq(`Bearer ${'y'.repeat(SIR.length)}`))
+
+    expect(res.status).toBe(401)
+    expect(await isSayisi(), 'yanlış sırla cron turu çalıştı').toBe(once)
+  })
+
+  it('SMTP YAPILANDIRILMAMIŞSA da tur çalışıyor', async () => {
+    // Gerçek kurulumda ölçülerek bulundu: SMTP eksikken uç 500 dönüyor ve
+    // turun tamamı düşüyordu — kuyruk işlenmiyor, invariant denetlenmiyor,
+    // sayaçlar budanmıyor. Hiçbiri e-postaya bağlı değil.
+    process.env.CRON_SECRET = SIR
+    delete process.env.SMTP_URL
+    const once = await isSayisi()
+
+    const res = await cronPOST(cronReq(`Bearer ${SIR}`))
+    const body = (await res.json()) as { code?: string; tenants?: { result?: { ran: number } }[] }
+
+    expect(body.code, `tur düştü: ${JSON.stringify(body)}`).toBeUndefined()
+    expect(body.tenants?.[0]?.result?.ran, 'kuyruk işlenmedi').toBeGreaterThan(0)
+    expect(await isSayisi(), 'iş kuyruğa hiç girmedi').toBeGreaterThan(once)
+
+    process.env.SMTP_URL = 'smtp://127.0.0.1:1/?connectionTimeout=500&greetingTimeout=500'
+  })
+
+
+  it('DOĞRU sırla tur çalışıyor', async () => {
+    process.env.CRON_SECRET = SIR
+
+    const res = await cronPOST(cronReq(`Bearer ${SIR}`))
+    const body = (await res.json()) as {
+      day?: string
+      code?: string
+      tenants?: { result?: { ran: number; succeeded: number; retried: number } }[]
+    }
+
+    // Gövde hata sözleşmesi değil cron sonucu: kapı açıldı, tur döndü.
+    expect(body.code, `kapı açılmadı: ${JSON.stringify(body)}`).toBeUndefined()
+    expect(body.tenants?.length, 'hiçbir tenant işlenmedi').toBeGreaterThan(0)
+
+    const tur = body.tenants?.[0]?.result
+    expect(tur?.ran, 'kuyruk hiç işlenmedi').toBeGreaterThan(0)
+    // SMTP ölü: rapor GİTMEDİ. "başarılı" sayılması G4'ün ta kendisi.
+    expect(tur?.succeeded, 'gönderilemeyen rapor başarılı sayıldı').toBe(0)
+    expect(tur?.retried, 'başarısız iş tekrar sırasına girmedi').toBeGreaterThan(0)
+
+    // İlk tur 200: işin bir deneme hakkı daha var ve durumu kuyrukta
+    // yazılı. Her geçici SMTP hatasında alarm çalmak, operatörü alarmı
+    // yok saymaya alıştırırdı. Hak bittiğinde 500 dönüyor — bkz.
+    // packages/core/src/cron.test.ts, "deneme hakkı bitince".
+    expect(res.status).toBe(200)
   })
 })

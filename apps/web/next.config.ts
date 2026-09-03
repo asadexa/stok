@@ -92,6 +92,18 @@ function assertServerConfig(): void {
   // AÇIK kalıyor (fail closed). LAN'da düz HTTP ile servis edilen bir
   // kurulumda tarayıcı o çerezi saklamıyor ve giriş ekranı hiçbir hata
   // göstermeden kendini tekrar ediyor. Bkz. src/server/session.ts.
+  // CRON_SECRET yoksa uygulama çalışır ama gün sonu raporu ve kritik stok
+  // taraması HİÇ ÇIKMAZ — kimse de fark etmez (G4'ün tam tanımı). Hata
+  // değil çünkü zamanlayıcısı olmayan bir kurulum (tek depo, elle bakan
+  // yönetici) geçerli; ama sessiz de kalmamalı.
+  if (!process.env.CRON_SECRET) {
+    console.warn(
+      'UYARI: CRON_SECRET tanımlı değil. POST /api/cron kapalı kalacak,\n' +
+        '       yani gün sonu raporu ve kritik stok taraması hiç çalışmaz.\n' +
+        '       Üret: openssl rand -base64 32',
+    )
+  }
+
   if (!process.env.APP_URL) {
     console.warn(
       'UYARI: APP_URL tanımlı değil. Oturum çerezi Secure olarak işaretlenecek,\n' +
