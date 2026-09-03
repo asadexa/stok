@@ -42,8 +42,15 @@ import { readSoundEnabled } from '@/server/theme'
  *
  * BARKOD ADIMI `GET`, YAZMA ADIMI `POST`. Barkod çözümleme salt okunur, o
  * yüzden adres çubuğunda taşınabiliyor: sayfa yenilenebilir, geri tuşu
- * çalışır, tarayıcı önceden çekse bile zarar yok. JavaScript de gerekmiyor —
- * depodaki eski Android tarayıcıda da çalışıyor.
+ * çalışır, tarayıcı önceden çekse bile zarar yok.
+ *
+ * BURADA "JAVASCRIPT DE GEREKMİYOR" YAZIYORDU — DOĞRU DEĞİLDİ (ölçüldü
+ * 2026-09-03, T110). Sayfa akışla (streaming) geliyor ve akan içeriği
+ * yerine koyan şey SATIR İÇİ SCRIPT'LER. JavaScript kapalıyken ekranda
+ * "Sayfa yükleniyor" iskeleti kalıyor ve "Kaydet" düğmesi hiç oluşmuyor,
+ * yani form kullanılamıyor. Barkod adımının GET olması hâlâ değerli
+ * (adres taşınabilir, geri tuşu çalışır) ama JS'siz çalışma iddiası
+ * kaldırıldı.
  *
  * BARKOD OKUYUCU = KLAVYE. Alan `autoFocus` ve okuyucu satır sonu
  * gönderdiğinde form kendiliğinden gönderiliyor. Kaydettikten sonra
@@ -347,12 +354,13 @@ export default async function MovementEntryPage({
                 sapıp sapmadığını bilemezdi ve "sebep seçin" uyarısı
                 anlamsız bir engel gibi görünürdü.
 
-                ALANLAR KOŞULLU GİZLENMİYOR. Bu form BİLEREK JavaScript'siz
-                (T52): depodaki eski Android tarayıcıda da çalışıyor.
-                Sebebe göre alan açıp kapatmak JS gerektirirdi; onun yerine
-                hangi işlemlerde fiyat girildiği etiketin İÇİNDE yazıyor —
-                sunucu yanlış eşleşmeyi zaten reddediyor, kullanıcı da
-                nedenini formda okuyor.
+                ALANLAR KOŞULLU GİZLENMİYOR. Gerekçe "form JS'siz çalışıyor"
+                DEĞİL — o iddia yanlış çıktı (T110). Gerekçe daha basit:
+                hangi işlemlerde fiyat girildiği etiketin İÇİNDE yazıyor ve
+                sunucu yanlış eşleşmeyi zaten reddediyor, yani koşullu
+                gizleme olmadan da kullanıcı ne yapacağını biliyor.
+                Alanları sebebe göre açıp kapatmak ölçülmüş bir ihtiyaç
+                değil; ölçülmeden yapılırsa T108'in uyardığı gereksiz iş.
               */}
               <fieldset className="rounded-control border border-line p-3">
                 <legend className="px-1 text-sm font-medium">Fiyat</legend>

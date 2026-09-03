@@ -1777,14 +1777,29 @@ veriyle test edilebilir hale gelir.
       düzelmedi.
     - Mevcut duman testi (`demo-yolu.spec.ts`) 3 koşuda 3 kez YEŞİL; o
       dosya form GÖNDERMİYOR, yalnızca okuyor.
-  - **Kalan hipotez:** App Router istemci yönlendiricisi, sunucu eylemi
-    yönlendirmesinden sonra yeni segmenti bazen render etmiyor (`<main>`
-    boş kalıyor). Playwright'ın iptal ettiği RSC ön-yüklemeleriyle
-    (`?_rsc=` isteklerinde `ERR_ABORTED`) ilişkili olabilir.
-  - **ÖNCE ŞUNU CEVAPLA: bu kullanıcıyı da etkiliyor mu?** Etkiliyorsa bu
-    bir test sorunu değil, P0 bir ürün hatası — kullanıcı kaydetmeye basıp
-    boş ekranla kalıyor demektir. Elle tarayıcı turlarında (T88/T89)
-    görülmedi ama o turlar birkaç gönderimlikti.
+  - **2026-09-03 ÖLÇÜMÜ — SUNUCU TEMİZ, İSTEMCİ GEZİNMİYOR.** Takılan
+    gönderimde ağ izi alındı:
+    - `POST /hareket` sunucuya ULAŞIYOR ve **303 dönüyor** — yani sunucu
+      eylemi çalıştı, doğrulama yapıldı, yönlendirme üretildi.
+    - Tarayıcı bu 303'ü İZLEMİYOR: adres çubuğu ilk haliyle kalıyor
+      (`/hareket?barkod=…`, hata parametresi yok), `<main>` hâlâ gönderim
+      ÖNCESİ formu gösteriyor (~838 karakter metin — iskelet değil, çünkü
+      iskeletin metni yok), hata şeridi hiç oluşmuyor.
+    - Yani kullanıcının gördüğü şey: **"Kaydet"e basıyor, hiçbir şey
+      olmuyor.** Sessiz. Tekrar basmak çift kayıt üretmiyor (idempotency
+      anahtarı okutma anında üretiliyor, D-1.3) — bu tasarım kararı
+      burada kurtarıcı oldu.
+    - Sıklık ölçüldü: 8 gönderimde 4'e kadar çıkıyor; oran koşudan koşuya
+      değişiyor (önceki turda 5'te 1).
+  - **JS AÇIK/KAPALI KARŞILAŞTIRMASI YAPILAMADI** ve sebebi ayrı bir
+    bulgu: JavaScript kapalıyken form ZATEN render edilmiyor (T110).
+    Yani kaçağın "istemci yönlendiricisinde" olduğu, JS'siz yolu
+    çalıştırarak değil, yalnızca ağ iziyle gösterilebildi.
+  - **BU KULLANICIYI ETKİLER.** Tarayıcı otomasyonuna özgü olduğunu
+    gösteren bir kanıt YOK; istek gerçek bir tıklamayla gidiyor ve sunucu
+    normal cevap veriyor. Bir sonraki adım Next sürümünü/`loading.tsx`
+    sınırını değiştirip oranın düşüp düşmediğini ölçmek — `/hareket`
+    altında Suspense sınırı var ve şüphe oraya işaret ediyor.
   - Çözülene kadar bu dosya CI kapısına BAĞLANMAMALI: kararsız bir kapı,
     kısa sürede kimsenin bakmadığı bir kapıya dönüşür.
   - Kaynak: T92
@@ -2290,9 +2305,13 @@ aynı), migration drift kontrolü, dört adım CLAUDE.md'deki bitmiş sayılma
   - Kaynak: T88 tarayıcı turu
 
 - [ ] **T108 (P2, human: ~1sa / CC: ~20dk)** - hareket - **fiyat alanı sebebe göre açılıp kapanmıyor**
-  - T88 formu JavaScript'siz (T52 kararı: depodaki eski Android tarayıcı).
-    Bu yüzden "Birim fiyat" ve "Sapma sebebi" alanları HER sebepte görünüyor,
-    fire/kullanım seçilse bile. Sunucu yanlış eşleşmeyi `PRICE_NOT_APPLICABLE`
+  - "Birim fiyat" ve "Sapma sebebi" alanları HER sebepte görünüyor,
+    fire/kullanım seçilse bile.
+    **GEREKÇE DEĞİŞTİ (T110):** eskiden "form JS'siz çalışıyor, koşullu
+    gizleme JS gerektirir" deniyordu; o iddia ölçümle yanlış çıktı — JS
+    kapalıyken form zaten kullanılamıyor. Yani teknik engel YOK; geriye
+    yalnızca "gerekli mi" sorusu kalıyor ve o da aşağıdaki gibi ölçülmeden
+    cevaplanmamalı. Sunucu yanlış eşleşmeyi `PRICE_NOT_APPLICABLE`
     ile reddediyor ve etikette hangi işlemlerde geçerli olduğu yazıyor — yani
     kullanıcı kaybolmuyor ama GEREKSİZ BİR TUR atıyor.
   - Ölçülmeden çözülmemeli: bu gerçekten yaşanıyor mu? Depoda fire girişi
@@ -2302,6 +2321,26 @@ aynı), migration drift kontrolü, dört adım CLAUDE.md'deki bitmiş sayılma
   - Yapılacaksa: progressive enhancement (JS varsa gizle, yoksa hepsi
     görünür kalsın), JS'e bağımlı gizleme DEĞİL.
   - Kaynak: T88 tarayıcı turu
+
+- [ ] **T110 (P1, human: ~2sa / CC: ~1sa)** - arayüz - **"JavaScript gerekmiyor" iddiası YANLIŞ: JS kapalıyken form kullanılamıyor**
+  - Ölçüldü (2026-09-03, gerçek tarayıcı, `javaScriptEnabled: false`):
+    `/hareket?barkod=…` sayfasında `main` metni yalnızca **"Sayfa
+    yükleniyor"**, ve **"Kaydet" düğmesi hiç yok** (rol sorgusu 0 döndü).
+    Giriş çalışıyor (303 → `/panel`), ama panel de iskelette kalıyor.
+  - Sebep: sayfalar AKIŞLA (streaming Suspense) geliyor ve akan içeriği
+    yerine koyan şey satır içi script'ler. JS kapalıyken içerik hiç
+    yerleşmiyor. `loading.tsx` olan her ekran aynı durumda.
+  - **Neden önemli:** iki ayrı karar bu yanlış iddiaya dayanıyordu —
+    `hareket/page.tsx` başlığındaki "JavaScript de gerekmiyor" notu ve
+    T108'in "alanları koşullu gizlemek JS gerektirir, o yüzden yapmıyoruz"
+    gerekçesi. Kod yorumları düzeltildi; karar gerekçeleri yeniden
+    kuruldu.
+  - **Karar gerekiyor (kullanıcının):** depodaki eski Android tarayıcılar
+    gerçekten JS'siz mi? Öyleyse bu P0'dır ve akış sınırları kaldırılmalı
+    (ya da bu ekranlar için `loading.tsx` düşürülmeli). Değilse iddia
+    kaldırıldığı için sorun kalmıyor ve T108 farklı gerekçeyle
+    değerlendirilir.
+  - Kaynak: T109 teşhisi
 
 ---
 
