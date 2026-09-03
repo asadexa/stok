@@ -1791,6 +1791,31 @@ veriyle test edilebilir hale gelir.
       burada kurtarıcı oldu.
     - Sıklık ölçüldü: 8 gönderimde 4'e kadar çıkıyor; oran koşudan koşuya
       değişiyor (önceki turda 5'te 1).
+  - **2026-09-03 İKİNCİ TUR — KAPSAM SANILANDAN BÜYÜK.** Takılma hareket
+    formuna ya da `redirect()`'e ÖZGÜ DEĞİL:
+
+    | Form | Nerede | Takılan |
+    |---|---|---|
+    | Giriş | kök düzen, kabuk YOK | **0/12** |
+    | Tema düğmesi | panel kabuğu içinde, `revalidatePath` | **7/12** |
+    | Hareket kaydı | panel kabuğu içinde, `redirect` | 3–6/12 |
+
+    Yani **panel kabuğundaki HER sunucu eylemi** etkileniyor: çıkış yap,
+    tema, ürün kaydetme, kullanıcı yönetimi, içe aktarma… hepsi. Bu, hatayı
+    "Kaydet bazen çalışmıyor"dan "panelde hiçbir yazma işlemi güvenilir
+    değil"e çıkarıyor.
+  - **KOLAY TEKRAR ÜRETİM (kullanıcı 30 saniyede doğrulayabilir):** panele
+    gir, üst şeritteki TEMA düğmesine arka arkaya bas. Ekran temasının
+    değişmediği tıklamalar bu hatadır. Seed verisi, barkod, form doldurma
+    gerekmiyor. **Bunu kendi tarayıcında dene** — Playwright'a özgü olup
+    olmadığı sorusunu tek başına cevaplıyor.
+  - **ELENEN HİPOTEZLER (hepsi A/B ölçüldü, hiçbiri sebep değil):**
+    - `loading.tsx` (Suspense sınırı): yerinde 3/10, kaldırılmış 2/10.
+    - Hidratasyon zamanlaması: tıklamadan önce React'in `__reactFiber$`
+      izi beklenip 2 sn daha beklendi → 3/10. Değişmedi.
+    - Bağlantı ön-yükleme (`prefetch`): kapalıyken 6/16, açıkken 6/16.
+    - `SessionKeepAlive` (T87, `/oturum/yenile`): ölçümde o istek HİÇ
+      atılmıyor (`needsPersist` false), yani zaten devrede değil.
   - **JS AÇIK/KAPALI KARŞILAŞTIRMASI YAPILAMADI** ve sebebi ayrı bir
     bulgu: JavaScript kapalıyken form ZATEN render edilmiyor (T110).
     Yani kaçağın "istemci yönlendiricisinde" olduğu, JS'siz yolu
@@ -1800,6 +1825,12 @@ veriyle test edilebilir hale gelir.
     normal cevap veriyor. Bir sonraki adım Next sürümünü/`loading.tsx`
     sınırını değiştirip oranın düşüp düşmediğini ölçmek — `/hareket`
     altında Suspense sınırı var ve şüphe oraya işaret ediyor.
+  - **SIRADAKİ ADIM:** kabuk bileşenlerini teker teker çıkarıp tema
+    düğmesiyle ölçmek (`CommandPalette`, `AlertBell`, `ThemeToggle`,
+    `SidebarNav`). Tema düğmesi ölçümü ucuz — seed verisi ve form
+    doldurma gerektirmiyor, bir tıklama ve `<html data-theme>` kontrolü.
+    Panel düzeninin kendisi (`alertSummary` sorgusu, `currentActor`
+    önbelleği) de aday.
   - Çözülene kadar bu dosya CI kapısına BAĞLANMAMALI: kararsız bir kapı,
     kısa sürede kimsenin bakmadığı bir kapıya dönüşür.
   - Kaynak: T92
