@@ -95,17 +95,24 @@ büyük kısmı veritabanında duruyor.
 
 ## Nerede kaldık
 
-Faz 0–4 bitti (T1–T25), artı T44/T46/T47/T50/T51/T52/T54 ve CI.
-462 test yeşil.
+Faz 0–4 bitti (T1–T25), artı T34/T35/T37/T44/T46/T47/T50/T51/T52/T54/T55/
+T56/T88/T88.1/T89/T93/T94 ve CI. **599 test yeşil.**
+
+Cron turu (T34) `POST /api/cron` ucundan çalışıyor: `CRON_SECRET` sırrıyla,
+her tenant için planla → kuyruğu işle → bakım. **Ucu VURAN zamanlayıcı
+henüz yok** (T112, T42'ye bağlı) — kurulmadan gün sonu raporu çıkmaz.
 
 Sıradaki işler `PLAN.md`'de numaralı duruyor:
 
 | Görev | Ne |
 |---|---|
-| **T53** | `/api/v1` REST uçları — Faz 5'in (mobil) tamamı buna bağlı |
-| **T34** | Cron: kuyruk işçisi + gün sonu raporu |
-| **T55** | Ölçülen üç kontrast açığı (kenarlık, odak halkası, ipucu) |
-| **T56** | Sol kenar çubuğu + yapışkan arama şeridi |
+| **T36** | Yapısal log + metrik + alarm |
+| **T39/T40** | Düşman QA + kaos testi |
+| **T41** | 5 ADR |
+| **T107** | Favicon 404 |
+| **T109** | Panel içindeki her sunucu eylemi bazen asılı kalıyor (teşhis yarım) |
+| **T42/T43** | Deploy hattı — kullanıcı "bir sonraki adım" dedi |
+| **T53** | `/api/v1` REST uçları — Faz 5'in (mobil) tamamı buna bağlı, EN SON |
 
 ## gstack
 

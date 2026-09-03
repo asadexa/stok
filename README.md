@@ -67,10 +67,21 @@ işletmenin tek bir ürününü bile göremezsiniz (veritabanı seviyesinde RLS)
   emülasyonu) kullanmayı bekliyor.
 - **Mobil uygulama yok.** Barkod okutma, offline kuyruk, PIN ile hızlı
   kullanıcı geçişi — hepsi Faz 5.
-- **Arka plan işçisi çalışmıyor.** 20.000 satırın üstündeki bir export
-  kuyruğa girer ama kimse işlemez (cron T34'e bağlı). Örnek veride bu eşiğe
-  ulaşılmıyor.
-- **E-posta gönderilmiyor.** SMTP ayarlanmadı.
+- **Gün sonu raporu kendiliğinden çıkmaz.** Kod hazır (T34) ama demoda
+  zamanlayıcı yok. Elle tetiklemek için `.env` içine `CRON_SECRET` yazın
+  (`openssl rand -base64 32`) ve şunu çalıştırın:
+
+  ```bash
+  curl -X POST -H "Authorization: Bearer $CRON_SECRET" \
+       http://localhost:3000/api/cron
+  ```
+
+  Aynı tur kuyruktaki export işlerini de işler ve stok invariant'ını
+  denetler. Turun cevabı JSON; invariant kırıksa ya da bir işin deneme
+  hakkı bittiyse HTTP 500 döner.
+- **E-posta gönderilmiyor.** SMTP ayarlanmadı, yani yukarıdaki tur çalışır
+  ama rapor teslim edilemez ve iş "başarısız" olarak Sistem Sağlığı
+  kartında görünür — bu bilerek: gönderilemeyen rapor sessiz kalmamalı.
 
 ---
 

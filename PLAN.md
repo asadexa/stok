@@ -867,10 +867,11 @@ CI incelemesi (2026-08-30) iki P1 boşluk buldu: kurulumdan girişe giden yol
 hiç yürünmüyor (T93) ve `apps/web` sıfır testle sessizce atlanıyor (T94).
 Tamamı Faz 11 altında, T93-T102.
 
-**Açık uçlar (ikisi de T34'e bağlı):**
-- `auth_prune_attempts()` yazıldı ama çağıran yok; `auth_attempts` yavaşça büyür.
-- `runQueuedJobs()` yazıldı ama çağıran cron yok; kuyruğa alınan export işleri
-  bir işçi çalıştırılana kadar QUEUED bekler.
+**Açık uçlar KAPANDI (T34).** `POST /api/cron` her turda kuyruğu işliyor ve
+`auth_prune_attempts()`'i çağırıyor. Kalan koşul kod değil kurulum: zamanlayıcı
+o ucu vurmuyorsa hiçbiri çalışmaz. `CRON_SECRET` tanımsızsa uygulama açılırken
+uyarıyor (`next.config.ts`) — sessiz kalsaydı, raporun hiç çıkmadığı ilk gün
+değil aylar sonra fark edilirdi.
 
 Yeniden kullanılabilecek **sistem** var (ERPNext, InvenTree) ve D1'de bilinçli olarak
 sıfırdan yazma seçildi. Gerekçe: gerçek fark Türkçe 5 dakikada öğrenilen arayüz ve
@@ -954,8 +955,9 @@ Bu incelemenin bulgularından türetildi. Efor: insan ekibi / Claude Code.
     T32 PIN kilitlemesi (D-2.5) aynı depoyu farklı politikayla kullanacak.
   - Tavan bilinçli: sınırsız artan kilit, saldırganın meşru kullanıcıyı kalıcı
     olarak dışarıda bırakmasına izin verirdi.
-  - `auth_prune_attempts()` var ama HENÜZ ÇAĞRILMIYOR; gün sonu cron'una (T34)
-    bağlanacak, yoksa tablo yavaşça büyür.
+  - `auth_prune_attempts()` T34'te gün sonu cron'unun bakım adımına bağlandı:
+    her turda 7 günden eski sayaçlar siliniyor (kilit penceresi en fazla
+    15 dk, daha eskisi yalnızca yer kaplıyor).
 
 ### Faz 3: Kritik açıkların kapatılması
 
@@ -1303,11 +1305,37 @@ G1, G2 ve G4 kapandı. G3 (yazıcı) TODOS E5'e bağlı, aşağıda gerekçesi y
 
 ### Faz 6: Otomasyon ve izleme
 
-- [ ] **T34 (P1, human: ~4sa / CC: ~30dk)** - cron - **E6: Gün sonu raporu** (Excel eki + e-posta), idempotent
-- [ ] **T35 (P1, human: ~3sa / CC: ~25dk)** - cron - **E7: Kritik stok taraması + push bildirim**
+- [x] **T34 (P1, human: ~4sa / CC: ~30dk)** - cron - **E6: Gün sonu raporu** (Excel eki + e-posta), idempotent
+  - `packages/core/src/cron.ts` + `apps/web/src/app/api/cron/route.ts`.
+    Tur: planla → kuyruğu işle → bakım (sayaç budama + invariant denetimi).
+  - **En büyük işlevsel boşluk buydu:** `runQueuedJobs()` T14'te yazılmıştı
+    ama ÇAĞIRANI YOKTU — kuyruğa giren rapor sonsuza kadar QUEUED'da
+    bekliyordu. Elle istenen büyük Excel export'ları da (T14/G1) bu turda
+    işleniyor; ayrı bir işçi yazmak "işçi ölmüş, kimse fark etmemiş" diye
+    ikinci bir sessiz arıza sınıfı açardı.
+  - İdempotent: `dedupeKey = "DAILY_REPORT:2026-09-03"`. Cron iki kez
+    tetiklenirse ikinci çağrı yeni iş ÜRETMİYOR (Bölüm 5).
+  - Tenant listesi migration 0010'daki `cron_tenants()` SECURITY DEFINER
+    fonksiyonundan. Ortam değişkenine yazılsaydı yeni müşterinin raporu
+    SESSİZCE çıkmazdı — G4'ün ta kendisi.
+  - Kimlik: `CRON_SECRET` paylaşılan sırrı, sabit zamanlı karşılaştırma.
+    **Sır tanımsızsa uç KAPALI** — "tanımsızsa doğrulama yapma", değişkeni
+    eklemeyi unutan kurulumu herkese açık bir e-posta ucuna çevirirdi.
+  - Alarm eşiği: invariant kırık ya da bir işin deneme hakkı bitti → 500.
+    İlk SMTP hatası 200, çünkü işin bir hakkı daha var ve her geçici hatada
+    alarm çalmak operatörü alarmı yok saymaya alıştırırdı.
+- [x] **T35 (P1, human: ~3sa / CC: ~25dk)** - cron - **E7: Kritik stok taraması + push bildirim**
+  - Tarama ve e-posta yazıldı (`createLowStockHandler`). **Push YOK:** mobil
+    uygulama (Faz 5) henüz başlamadı, gönderilecek cihaz kaydı yok.
+    Kritik ürün yoksa e-posta GÖNDERİLMİYOR — her sabah gelen "sorun yok"
+    postası, gerçekten sorun olan sabah da okunmamasını sağlardı.
 - [ ] **T36 (P2, human: ~3sa / CC: ~20dk)** - gözlem - Yapısal log + 5 metrik + 5 alarm
   - Kaynak: Bölüm 8
-- [ ] **T37 (P1, human: ~2sa / CC: ~15dk)** - gözlem - Invariant ihlali alarmı (kırmızı)
+- [x] **T37 (P1, human: ~2sa / CC: ~15dk)** - gözlem - Invariant ihlali alarmı (kırmızı)
+  - Her cron turunda `SUM(delta) == current_stock.qty` denetleniyor; kırıksa
+    uç 500 dönüyor. Gövdeye yazıp 200 dönmek, gösterilen stoğun defterle
+    uyuşmadığını kimsenin okumadığı bir JSON alanına gömerdi — kullanıcının
+    fark etmeden yanlış sayıya bakması, sessiz kalabilecek en pahalı hata.
 
 ### Faz 7: Test ve yayın
 
@@ -1642,7 +1670,7 @@ veriyle test edilebilir hale gelir.
     kaçak. `listPrice` detaylara yalnızca yetkili role ya da satış dayanaklı
     sebeplerde konuyor; metin sayısız da anlamlı kalıyor.
 
-- [ ] **T88.1 (P1, human: ~2sa / CC: ~20dk)** - rapor - Kasa açığı gün sonu raporuna binsin
+- [x] **T88.1 (P1, human: ~2sa / CC: ~20dk)** - rapor - Kasa açığı gün sonu raporuna binsin
   - Neden: **Okunmayan kayıt kontrol değildir.** T88 açığı kaydediyor; onu
     takibe çeviren şey görünürlük. T34 gün sonu raporu zaten planda.
   - İçerik: "Bugün 7 harekette liste fiyatının altına inildi, toplam fark
@@ -1651,6 +1679,11 @@ veriyle test edilebilir hale gelir.
   - Tolerans içinde kalan farklar da toplama DAHİL: çalışan tek tek
     sorgulanmıyor ama hiçbir kuruş rapordan düşmüyor.
   - **T88'e bağlı.** T34 yazılmadıysa önce o.
+  - Açık, e-postanın GÖVDESİNDE — Excel ekinin içinde değil. Eki açmayan
+    yönetici (telefondan bakan yönetici) açığı hiç görmezdi.
+  - Sapma MİKTARLA ÇARPILIYOR: `(liste − birim) × adet`. Satır başına
+    sayılsaydı 100 adetlik tek bir indirim, 1 adetlik indirimle aynı
+    görünürdü.
 
 - [x] **T89 (P2, human: ~2g / CC: ~yarım gün)** - hareket - Açılış değerlemesi: `OPENING` sebebine fiyat + ekonomik tarih + "tahmini" işareti
   - Neden: Müşteri 5 yıldır elinde tuttuğu malı sisteme girerken fiyat
@@ -2372,6 +2405,33 @@ aynı), migration drift kontrolü, dört adım CLAUDE.md'deki bitmiş sayılma
     kaldırıldığı için sorun kalmıyor ve T108 farklı gerekçeyle
     değerlendirilir.
   - Kaynak: T109 teşhisi
+
+- [ ] **T111 (P2, human: ~1sa / CC: ~20dk)** - gözlem - Tekrar bekleyen iş, Sistem Sağlığı kartında SAĞLIKLI görünüyor
+  - Ölçüldü (2026-09-03, T34 canlı sürüş): SMTP'siz kurulumda gün sonu
+    raporu bir kez patlayıp `QUEUED`'a dönüyor (`last_error_code` dolu),
+    kart ise "2 iş kuyrukta, işleniyor" diyor. Yani hata KAYITLI ama
+    ekranda YOK.
+  - Uyarı eşiği 1 saat; cron günde bir koştuğu için o satır ~24 saat
+    "işleniyor" olarak duruyor. G4 tam olarak bu: kayıt var, görünürlük yok.
+  - Çözüm: `queueCheck` `last_error_code IS NOT NULL AND status='QUEUED'`
+    satırlarını ayrı sayıp `warn` dönsün — "1 iş bir kez başarısız oldu,
+    tekrar denenecek".
+  - Neden hemen yapılmadı: T34'ün kapsamı cron turu; kartın sorgusunu
+    değiştirmek T25'in davranışını değiştirir ve kendi testini ister.
+  - Kaynak: T34 canlı sürüşü
+
+- [ ] **T112 (P2, human: ~2sa / CC: ~30dk)** - cron - Zamanlayıcının kendisi kurulmadı
+  - `POST /api/cron` hazır ama onu VURAN bir şey yok. Deploy hedefi
+    seçilmeden (T42) hangisi olacağı belli değil: Vercel Cron
+    (`vercel.json`), systemd timer, ya da klasik crontab + curl.
+  - **Bu kurulmadan gün sonu raporu hiç çıkmaz.** `next.config.ts` açılışta
+    `CRON_SECRET` yoksa uyarıyor ama sır tanımlı olup zamanlayıcı yoksa
+    hiçbir yerde ses çıkmıyor — "en son ne zaman koştu" bilgisi hiçbir
+    yerde tutulmuyor.
+  - Ek olarak: turun kendisi de izlenmeli. Zamanlayıcı ölürse bunu
+    anlamanın tek yolu raporun gelmediğini fark etmek, yani G4.
+  - **T42'ye bağlı.**
+  - Kaynak: T34
 
 ---
 
