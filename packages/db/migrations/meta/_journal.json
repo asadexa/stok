@@ -71,6 +71,13 @@
       "when": 1788166493865,
       "tag": "0009_price_ledger",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1788166553865,
+      "tag": "0010_cron_tenants",
+      "breakpoints": true
     }
   ]
 }
