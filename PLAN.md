@@ -1791,7 +1791,7 @@ veriyle test edilebilir hale gelir.
   - **KALAN:** `replacementCost` dört kolu ve `price_index` RLS testleri
     T90'a ait — o iş henüz yapılmadı, testleri de yazılamaz.
 
-- [ ] **T109 (P1, human: ~yarım gün / CC: ~2sa)** - test - **Faz 10 tarayıcı testleri kararsız: sunucu eylemi sonrası sayfa render edilmiyor**
+- [x] **T109 (P1, human: ~yarım gün / CC: ~2sa)** - arayüz - **Sunucu eyleminin sonucu ekrana yansımıyor** (Next 15 yönlendirici hatası + tema düğmesi)
   - `apps/web/e2e/faz10-fiyat.spec.ts` her koşuda 9 senaryodan 1-3'ünde
     kırmızı yanıyor ve KIRILAN TEST HER SEFERİNDE DEĞİŞİYOR — yani gerçek
     bir ürün hatası değil, zamanlamaya bağlı bir takılma.
@@ -1932,20 +1932,22 @@ veriyle test edilebilir hale gelir.
     - *Başarı yolu:* sert gezinmeden sonra 0/12 — arıza yumuşak gezinme
       geçmişi olan sayfalarda yoğunlaşıyor.
 
-  - **SIRADAKİ ADIM, BU SIRAYLA:**
-    1. **Next 16'ya yükselt (T105).** Bu, App Router'ın kendi yönlendirici
-       hatası gibi görünüyor: sunucu her seferinde doğru cevabı üretiyor.
-       Sürüm yükseltmesi denenmeden altyapı değiştirmek erken olur.
-    2. Düzelmezse **Kaydet formunu sunucu eyleminden düz bir POST rotasına
-       çevir** (`POST /hareket/kaydet` → 303). Tarayıcının kendi gezinmesi
-       yönlendiriciye hiç uğramaz, yani arıza sınıfı tamamen kapanır ve
-       ekran JS'siz de çalışır hale gelir (T110). Bedeli: sunucu
-       eylemlerinin hazır getirdiği kaynak (origin) kontrolü elle
-       yazılmalı — CSRF açığı bırakmadan.
+  - **(b) ÇÖZÜLDÜ — NEXT 16 (T105).** İlk sıradaki adım tuttu: arıza
+    Next 15'in kendi yönlendirici hatasıydı, uygulamanın değil. Sunucu her
+    seferinde doğru cevabı üretiyordu. Ölçüm: Next 15'te 3-5/10 asılı →
+    **Next 16'da 0/24**.
+    - İkinci seçenek (Kaydet formunu düz POST rotasına çevirmek)
+      GEREKMEDİ. Yine de not: o yol T110'u da kapatırdı (JS'siz çalışma)
+      ve bedeli sunucu eylemlerinin hazır getirdiği kaynak (origin)
+      kontrolünü elle yazmaktı. T110 ayrı görev olarak açık kalıyor.
 
-  - `faz10-fiyat.spec.ts` üzerindeki `@kararsiz` etiketi DURUYOR ama
-    gerekçesi düzeltildi: testler kırılgan değil, gerçek hatayı yakalıyorlar.
-    T109(b) kapandığında etiket silinip CI kapısına alınacaklar.
+  - `faz10-fiyat.spec.ts` üzerindeki `@kararsiz` etiketi SİLİNDİ; dokuz
+    senaryo CI kapısında (5 → 14 test).
+
+  - **BU İŞİN DERSİ, hatanın kendisinden değerli:** bir testi "kararsız"
+    diye kapı dışına koymadan önce ARIZANIN KENDİSİNİN olasılıksal
+    olabileceği düşünülmeli. Etiket, gerçek bir P1'i aylarca "test sorunu"
+    gibi gösterebilirdi — ve o P1 kullanıcının en sık yaptığı işlemdeydi.
 - [ ] **T91 (P1, human: ~2sa / CC: —)** - araştırma - Üç senaryoyu gerçek kullanıcıda gözlemle
   - Neden: Talep kanıtı zayıf. Üç senaryonun hangisinin gerçekten tıkanmaya
     yol açtığı ayrıştırılmadı ve **bugünkü çözüm hiç sorulmadı** — kullanıcı o
@@ -2388,17 +2390,31 @@ aynı), migration drift kontrolü, dört adım CLAUDE.md'deki bitmiş sayılma
     (3 high + 2 moderate kapandı), lint temiz, typecheck temiz, 546 test
     yeşil, `next build` başarılı, duman testi 4/4.
 
-- [ ] **T105 (P3, human: ~1g / CC: ~2sa)** - altyapı - **Next 16'ya geçiş**
-  - T104 geçişli açıkları `overrides` ile kapattı; bu, kaynağı değil
-    belirtiyi çözüyor. Next 16 `postcss` 8.5.23 ve `sharp` ^0.35.3
-    getiriyor, yani override'lara gerek kalmıyor.
-  - **Neden hemen değil:** major sürüm. `next.config.ts`teki
-    `extensionAlias` ayarı modül çözümlemesine bağlı ve kırılgan —
-    bozulursa typecheck yeşil kalır, derleme patlar (T104 notu).
-  - Kapsam: yükselt, `extensionAlias`ı doğrula, override'ları kaldır,
-    `pnpm audit` hâlâ temiz mi bak.
-  - Doğrula: lint + typecheck + testler + `next build` + duman testi 4/4.
-  - Kaynak: T104 kapanışı
+- [x] **T105 (P3, human: ~1g / CC: ~2sa)** - altyapı - **Next 16'ya geçiş**
+  - **P3 SANILIYORDU, P1 ÇIKTI.** Yükseltme T109(b)'yi kapattı: Next 15'in
+    istemci yönlendiricisi sunucu eyleminin yönlendirmesini turların
+    3-5'inde sessizce düşürüyordu ("Kaydet'e bastım, hiçbir şey olmadı").
+    Aynı ölçüm Next 16'da **0/24**. Faz 10'un dokuz tarayıcı senaryosu da
+    yeşile döndü ve CI kapısına alındı.
+  - **`extensionAlias` KIRILDI, tam da beklendiği gibi.** Next 16'da
+    Turbopack varsayılan ve `webpack()` kancası hiç çalışmıyor; derleme
+    "packages/core/src/index.ts'in hiç export'u yok" diye patladı.
+    Turbopack'te `extensionAlias` karşılığı yok.
+  - Çözüm AYARA değil KAYNAĞA uygulandı: paketlerin içindeki 159 göreli
+    import uzantısız yazıldı (45 dosya). `moduleResolution: "Bundler"`
+    bunu zaten destekliyor; tsx ve vitest de öyle çözüyor. Böylece
+    derleyiciye özel kanca tamamen kalktı — bir sonraki paketleyici
+    değişikliğinde yeniden yazılacak bir hack de kalmadı.
+  - `agentRules: false` eklendi: Next 16 her açılışta
+    `apps/web/AGENTS.md` ve `apps/web/CLAUDE.md` üretiyor. Kök `CLAUDE.md`
+    elle yazılmış; ikinci, otomatik bir kaynak aynı soruya iki cevap verir
+    ve her `next dev` sonrası depo kirli görünürdü.
+  - `postcss`/`sharp` override'ları kaldırıldı (T104). Doğrulandı:
+    `pnpm audit --audit-level=high` temiz; kalan iki `moderate` yalnızca
+    geliştirme bağımlılıklarında (drizzle-kit→esbuild, exceljs→uuid).
+  - Doğrulandı: lint + typecheck + 599 test + `next build` (Turbopack) +
+    `next dev` (Turbopack) + drizzle drift yok + **e2e 14/14** (eskiden 5).
+  - Kaynak: T104 kapanışı, T109 teşhisi
 
 - [ ] **T106 (P2, human: ~1sa / CC: ~15dk)** - tasarım - **56 px kuralı ile kod ayrıştı, biri düzeltilmeli**
   - PLAN Bölüm 11 ve CLAUDE.md "minimum 56 px dokunma hedefi (eldiven var)"

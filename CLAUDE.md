@@ -96,11 +96,16 @@ büyük kısmı veritabanında duruyor.
 ## Nerede kaldık
 
 Faz 0–4 bitti (T1–T25), artı T34/T35/T37/T44/T46/T47/T50/T51/T52/T54/T55/
-T56/T88/T88.1/T89/T93/T94 ve CI. **599 test yeşil.**
+T56/T88/T88.1/T89/T93/T94/T105/T107/T109 ve CI. **599 birim testi + 14
+tarayıcı testi yeşil.**
 
 Cron turu (T34) `POST /api/cron` ucundan çalışıyor: `CRON_SECRET` sırrıyla,
 her tenant için planla → kuyruğu işle → bakım. **Ucu VURAN zamanlayıcı
 henüz yok** (T112, T42'ye bağlı) — kurulmadan gün sonu raporu çıkmaz.
+
+**Next 16 + Turbopack** (T105). Paket içi importlar uzantısız; `next.config.ts`
+içinde `webpack()` kancası YOK, geri koyma. `agentRules: false` bilerek:
+`apps/web/CLAUDE.md` üretilmesini engelliyor.
 
 Sıradaki işler `PLAN.md`'de numaralı duruyor:
 
@@ -109,8 +114,8 @@ Sıradaki işler `PLAN.md`'de numaralı duruyor:
 | **T36** | Yapısal log + metrik + alarm |
 | **T39/T40** | Düşman QA + kaos testi |
 | **T41** | 5 ADR |
-| **T107** | Favicon 404 |
-| **T109** | Panel içindeki her sunucu eylemi bazen asılı kalıyor (teşhis yarım) |
+| **T111** | Tekrar bekleyen iş Sistem Sağlığı'nda sağlıklı görünüyor |
+| **T112** | Cron ucunu vuran zamanlayıcı kurulmadı (T42'ye bağlı) |
 | **T42/T43** | Deploy hattı — kullanıcı "bir sonraki adım" dedi |
 | **T53** | `/api/v1` REST uçları — Faz 5'in (mobil) tamamı buna bağlı, EN SON |
 

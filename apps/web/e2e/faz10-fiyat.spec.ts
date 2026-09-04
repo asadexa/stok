@@ -184,30 +184,22 @@ async function listeFiyati(page: Page): Promise<number> {
   return Number(`${eslesme![1]!.replaceAll('.', '')}.${eslesme![2]}`)
 }
 
-// `@kararsiz` ETİKETİ CI KAPISINDAN ÇIKARIYOR (T109). Dosyayı iş akışından
-// adıyla dışlamak yerine etiket kullanılıyor: dosya adı listesi zamanla
-// sessizce eskir ve YENİ yazılan bir test hiç koşmadan öylece durur. Etiket
-// tersi: varsayılan DAHİL, dışlanan tek tek görünür — hem test başlığında
-// hem iş akışında.
+// `@kararsiz` ETİKETİ KALDIRILDI — bu testler artık CI kapısında (T105/T109).
 //
-// ETİKET YANLIŞ BİR ŞEY İMA EDİYORDU, DÜZELTİLDİ (2026-09-04 ölçümü).
-// Bu testler KIRILGAN DEĞİL: gerçek bir ÜRÜN hatasını yakalıyorlar. Ölçüldü
-// (üretim derlemesi, gerçek tarayıcı, 12 tur): "Kaydet"e basıldığında sunucu
-// eylemi çalışıyor, `Next-Action` POST'u 303 dönüyor — ve istemci
-// yönlendiricisi turların 3-5'inde o yönlendirmeyi SESSİZCE DÜŞÜRÜYOR.
-// Konsolda hata yok, ağda hata yok, `framenavigated` olayı hiç ateşlenmiyor.
-// Kullanıcı için: "Kaydet'e bastım, hiçbir şey olmadı."
+// Etiket bu dosyayı CI'dan çıkarıyordu ve gerekçesi "kararsız testler"di.
+// YANLIŞTI: testler kırılgan değildi, gerçek bir ürün hatasını yakalıyorlardı.
+// Ölçüldü (üretim derlemesi, gerçek tarayıcı): "Kaydet"e basıldığında sunucu
+// eylemi çalışıyor ve 303 dönüyor, ama Next 15'in istemci yönlendiricisi
+// turların 3-5'inde o yönlendirmeyi SESSİZCE düşürüyordu — konsolda hata
+// yok, ağda hata yok, `framenavigated` hiç ateşlenmiyor. Kullanıcı için:
+// "Kaydet'e bastım, hiçbir şey olmadı."
 //
-// ELENEN AÇIKLAMALAR (hepsi ölçüldü):
-//   • Hidratasyon yarışı  → tıklama anında form HER ZAMAN hidrat (fiber var)
-//   • `Link` ön getirme   → kapatınca 3-5/10 yerine 2/12; azaltıyor, çözmüyor
-//   • `loading.tsx`       → varken 3/10, yokken 2/10
-//   • `SessionKeepAlive`  → isteği hiç ateşlenmiyor
+// Next 16'da arıza yok: aynı ölçüm 0/24. Bu dosyanın 9 senaryosu da yeşil.
 //
-// Etiketin BURADA kalmasının tek sebebi: hata düzelene kadar CI'ı kırmızı
-// tutmak, gerçek gerilemeleri gizlerdi. T109 kapandığında etiket SİLİNECEK
-// ve bu testler CI kapısına girecek.
-test.describe('@kararsiz Faz 10 — kasa açığı ve açılış değerlemesi', () => {
+// DERS: bir testi "kararsız" diye kapı dışına koymadan önce arızanın
+// KENDİSİNİN olasılıksal olabileceği düşünülmeli. Bu etiket dört ay
+// boyunca gerçek bir P1'i "test sorunu" gibi gösterebilirdi.
+test.describe('Faz 10 — kasa açığı ve açılış değerlemesi', () => {
   test.beforeEach(async ({ page }) => {
     page.on('pageerror', (err) => {
       throw new Error(`Sayfada işlenmemiş hata: ${err.message}`)
