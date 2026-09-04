@@ -103,6 +103,12 @@ Cron turu (T34) `POST /api/cron` ucundan çalışıyor: `CRON_SECRET` sırrıyla
 her tenant için planla → kuyruğu işle → bakım. **Ucu VURAN zamanlayıcı
 henüz yok** (T112, T42'ye bağlı) — kurulmadan gün sonu raporu çıkmaz.
 
+**T42 üretime hazırlık denetimi yapıldı (deploy YAPILMADI):** 5 BLOCKER,
+4 WARNING, 1 READY. Sonuçlar ve en küçük değişiklik seti PLAN.md →
+"T42 ÜRETİME HAZIRLIK DENETİMİ" ve T114-T119'da. Öne çıkanlar:
+`vercel.json` yok, `/api/v1/health` yok, Vercel Cron GET atıyor ama uç
+POST-only, `assertServerConfig()` Vercel'de hiç koşmuyor.
+
 **Next 16 + Turbopack** (T105). Paket içi importlar uzantısız; `next.config.ts`
 içinde `webpack()` kancası YOK, geri koyma. `agentRules: false` bilerek:
 `apps/web/CLAUDE.md` üretilmesini engelliyor.
@@ -115,6 +121,7 @@ kararını ya başka bir görevi bekliyor:
 | Görev | Neyi bekliyor |
 |---|---|
 | **T42/T43** | Kullanıcı "bir sonraki adım" dedi — deploy hattı |
+| **T114-T119** | T42 denetiminden çıktı; deploy'u bloke ediyorlar |
 | **T112** | T42 (zamanlayıcı kurulmadan gün sonu raporu çıkmaz) |
 | **T106** | Kullanıcı kararı: 56 px kuralı mı kod mu düzelecek |
 | **T108** | Ölçüm: fire girişinde fiyat alanı gerçekten sorun mu |

@@ -1465,6 +1465,10 @@ G1, G2 ve G4 kapandı. G3 (yazıcı) TODOS E5'e bağlı, aşağıda gerekçesi y
     (uygulanmadı)" — kararı verilmiş ama kodu Faz 5'te. Hepsine "kabul
     edildi" demek, okuyanı var olmayan bir özelliğin peşine düşürürdü.
 - [ ] **T42 (P1, human: ~3sa / CC: ~20dk)** - deploy - Vercel + Supabase + EAS pipeline, deploy sonrası kontrol listesi
+  - **Denetim yapıldı (2026-09-04), deploy YAPILMADI.** On alan tarandı:
+    5 BLOCKER, 4 WARNING, 1 READY. Bulgular ve en küçük değişiklik seti
+    T114-T119'da; ayrıntılı tablo "T42 ÜRETİME HAZIRLIK DENETİMİ"
+    bölümünde. T42 bu altısı kapanmadan kapanmaz.
 
 ### Faz 8: Mühendislik incelemesinden gelen görevler (D4-D9)
 
@@ -2664,6 +2668,153 @@ aynı), migration drift kontrolü, dört adım CLAUDE.md'deki bitmiş sayılma
     kiracıya `attempts=1` bir iş eklenince CI'daki iki hata birebir
     yeniden üretildi, düzeltmeden sonra aynı durumda 19/19 yeşil.
   - Kaynak: CI hatası 2026-09-04
+
+---
+
+## T42 ÜRETİME HAZIRLIK DENETİMİ (2026-09-04)
+
+Hiçbir deploy yapılmadan, PLAN Bölüm 9 (deploy sırası, geriye uyumluluk
+kuralı, ilk 5 dakika kontrol listesi) ve T112 kaynak alınarak on alan
+tarandı. Sonuç: **5 BLOCKER, 4 WARNING, 1 READY.**
+
+| # | Alan | Sonuç | Neden |
+|---|---|---|---|
+| 1 | Vercel ayarları | **BLOCKER** | `vercel.json` yok; Root Directory / Install / Build hiçbir yerde yazılı değil |
+| 2 | Supabase bağlantısı + migration akışı | **BLOCKER** | `stok_app` rolünü üretimde kuran ve migration'ı koşturan bir yol YOK |
+| 3 | `DATABASE_URL` / `MIGRATION_DATABASE_URL` ayrımı | **READY** | Ayrım kodda temiz; tek şart migration URL'inin Vercel runtime'ına KONMAMASI |
+| 4 | Production secret/env | **WARNING** | Liste `.env.example`'da tam ama `assertServerConfig()` Vercel'de hiç koşmuyor (T116) |
+| 5 | RLS'in üretim rolüyle zorlanması | **WARNING** | 30+ test yerelde kanıtlıyor; Supabase'de aynı kurulumun sağlandığını doğrulayan hiçbir kontrol yok |
+| 6 | `/api/v1/health` | **BLOCKER** | Uç yok; kontrol listesinin 1. maddesi çalıştırılamaz (T114) |
+| 7 | Vercel Cron + `CRON_SECRET` | **BLOCKER** | Vercel Cron **GET** atıyor, uç POST-only → 405 (T115) |
+| 8 | Geriye uyumlu migration | **WARNING** | `0009` kuralı çiğniyor (`RENAME COLUMN`); ilk deploy'da zararsız, kuralı zorlayan kontrol yok |
+| 9 | Üretim duman testleri | **BLOCKER** | Listenin 1. maddesi imkânsız, 4. maddesi (mobil) hiç yok; uygulanabilir hali yazılmamış |
+| 10 | Rollback | **WARNING** | Vercel Instant Rollback web için hazır geliyor; DB için geri alma yolu yok ve hiçbir yerde yazılı değil (T119) |
+
+**Doğru olduğu doğrulananlar** (denetimin çıktısı bunlar da): `prepare: false`
+pgbouncer için ayarlı (client.ts:39), `secureCookies()` `APP_URL` yokken
+kapalı tarafa düşüyor, `.nvmrc` + `engines` + `packageManager` sabit,
+`CRON_SECRET` 32 karakter altını reddediyor ve sabit zamanlı karşılaştırma
+kullanıyor, cron ucu `runtime = 'nodejs'` + `dynamic = 'force-dynamic'`.
+
+- [ ] **T114 (P1, human: ~1sa / CC: ~20dk)** - deploy - **`/api/v1/health` ucu yok, deploy sonrası kontrol listesi çalıştırılamaz**
+  - PLAN Bölüm 9, deploy sonrası ilk 5 dakikanın **1. maddesi** olarak
+    `/api/v1/health` 200 mü diye soruyor. Böyle bir uç yok:
+    `apps/web/src/app/api` altında yalnızca `arama`, `cron`, `rapor/*` var.
+  - Bugünkü tek sağlık yüzeyi `/saglik` panel sayfası ve `user:manage`
+    istiyor. Yani deploy'un sağ olup olmadığını öğrenmek için önce
+    tarayıcıda yönetici olarak giriş yapmak gerekiyor — bir izleme aracının
+    yapamayacağı şey. Kontrol listesinin amacı tam olarak bunu ortadan
+    kaldırmaktı.
+  - **Yetkisiz olmalı ama SUSKUN.** Sürüm, şema durumu, kiracı sayısı gibi
+    şeyleri yazan bir sağlık ucu, kimliği doğrulanmamış birine altyapı
+    haritası verir. Gövde `{"status":"ok"}` düzeyinde kalmalı; ayrıntı
+    zaten `/saglik` kartında ve orada yetki var.
+  - `systemHealth()` KULLANILAMAZ: `requirePermission(actor, 'user:manage')`
+    ile başlıyor ve kiracı bağlamı istiyor. Sağlık ucunun sorusu farklı:
+    "bu sürüm ayakta ve veritabanına bağlanabiliyor mu". `SELECT 1` yeter.
+  - T53 (`/api/v1` REST uçları) beklenmemeli: o mobilin ön şartı ve mobil
+    en sona bırakıldı. Sağlık ucu tek başına yazılabilir ve `/api/v1`
+    öneki, T53 geldiğinde yolun değişmemesi için baştan doğru seçilmeli.
+  - Doğrula: veritabanını durdur, uç 503 dönsün; ayağa kaldır, 200 dönsün.
+    Yeşil cevap tek başına hiçbir şey ispat etmez.
+  - Kaynak: T42 üretime hazırlık denetimi
+
+- [ ] **T115 (P1, human: ~30dk / CC: ~10dk)** - cron - **Vercel Cron GET atıyor, `POST /api/cron` 405 dönecek**
+  - Vercel Cron zamanlanmış yolu **GET** ile çağırıyor; başka bir metot
+    seçilemiyor. `apps/web/src/app/api/cron/route.ts` yalnızca `POST`
+    export ediyor, yani Next 405 döner ve **tur hiç çalışmaz.** T112
+    kurulsa bile gün sonu raporu çıkmaz — G4'ün ta kendisi, üstelik
+    zamanlayıcı "kuruldu" görünürken.
+  - `POST` seçimi gerekçesiz değildi (route.ts:70): uç yan etkili ve GET
+    olsaydı bir tarayıcı ön-getirmesi turu tetikleyebilirdi. Bu gerekçe
+    hâlâ geçerli, o yüzden **`POST` KALDIRILMAMALI**; yanına, aynı
+    doğrulamayı yapan bir `GET` eklenmeli. Ön-getirme riski `CRON_SECRET`
+    ile zaten kapalı: sırrı olmayan bir GET 401 alır.
+  - Vercel `CRON_SECRET` adlı ortam değişkeni tanımlıysa isteğe
+    `Authorization: Bearer <CRON_SECRET>` başlığını KENDİSİ ekliyor.
+    Yani uçtaki doğrulama olduğu gibi çalışıyor; değişmesi gereken tek şey
+    kabul edilen metot.
+  - **Plan seçimi bu görevin içinde:** `HEALTH_ALARM` dedupe anahtarı saat
+    bazlı (`cron.ts:517`), yani tur en az SAATTE BİR koşmalı. Vercel Hobby
+    planı günde bir cron'a izin veriyor — Hobby'de alarm sınıfı tamamen
+    ölü doğar. Pro planı ya da harici bir zamanlayıcı (systemd timer,
+    cron + curl) gerekiyor; karar T42'de verilmeli.
+  - Doğrula: GET'i geçici olarak kaldır, üretim benzeri bir çağrıda 405
+    gör, geri koy.
+  - Kaynak: T42 üretime hazırlık denetimi
+
+- [ ] **T116 (P2, human: ~1sa / CC: ~20dk)** - deploy - **`assertServerConfig()` Vercel'de HİÇ koşmuyor**
+  - `next.config.ts:159` kontrolü `phase !== PHASE_PRODUCTION_BUILD`
+    koşuluna bağlıyor, yani yalnızca `next dev` ve `next start` açılışında.
+    **Vercel'de `next start` yok:** her istek serverless fonksiyonu doğrudan
+    başlatıyor ve `next.config.ts` çalışma anında hiç yüklenmiyor.
+  - Sonuç, dosyanın kendi yorumunun (satır 35-48) önlemek için yazıldığı
+    arızanın aynısı: eksik `AUTH_SECRET` ile deploy yeşil geçer, ilk giriş
+    denemesinde kullanıcı "SERVER_ERROR" görür. Yorum "kullanıcı testinde
+    bu iki kez oldu" diyor; üretimde üçüncü kez olacak ve bu sefer
+    operatörün konsolunda hiçbir şey yazmayacak.
+  - Faz koşulu YANLIŞ DEĞİL, EKSİK. `next build` gerçekten sırsız bir
+    ortamda koşabilmeli. Eksik olan, çalışma anında da bir kez kontrol
+    eden ikinci bir çağrı noktası (uygulama modülü seviyesinde, örneğin
+    `src/server/` altında bir modül yükleme yan etkisi olarak).
+  - Doğrula: `AUTH_SECRET`'i sil, uygulamanın İLK İSTEKTE ne söylediğine
+    bak — "SERVER_ERROR" değil, ne eksik olduğunu söyleyen bir kayıt.
+  - Kaynak: T42 üretime hazırlık denetimi
+
+- [ ] **T117 (P2, human: ~1sa / CC: ~20dk)** - deploy - **Serverless'ta bağlantı havuzu ayarları yerel varsayımla yazılmış**
+  - `client.ts:31` havuzu `max = 10` ile açıyor ve `idle_timeout`
+    vermiyor. Tek bir uzun ömürlü sunucuda ikisi de doğru. Vercel'de
+    uygulama N tane eşzamanlı fonksiyon örneğine dağılıyor ve her biri
+    kendi havuzunu açıyor: 20 örnek = 200 bağlantı. Supabase pooler'ın
+    istemci sınırı bunun civarında; aşıldığında hata "too many
+    connections" olarak KULLANICIYA düşer.
+  - `idle_timeout` yokluğu ayrı bir sorun: fonksiyon örneği donduruluyor
+    ama bağlantı sunucu tarafında açık kalıyor ve kimse kapatmıyor.
+  - Düzeltme yerel geliştirmeyi bozmamalı: `max` ve `idle_timeout` ortam
+    değişkeninden okunmalı, varsayılanlar bugünküyle aynı kalmalı.
+    Sabit küçük bir `max` yazmak, yerelde tek süreçli demo yolunu
+    yavaşlatırdı.
+  - Doğrula: sınırı 1'e indirip eşzamanlı iki isteğin sıraya girdiğini gör.
+  - Kaynak: T42 üretime hazırlık denetimi
+
+- [ ] **T118 (P3, human: ~30dk / CC: ~10dk)** - deploy - **`bodySizeLimit: '5mb'` Vercel'in 4,5 MB sınırının ÜSTÜNDE**
+  - `next.config.ts:122` sunucu eylemleri için 5 MB'a izin veriyor. Vercel
+    fonksiyonlarının istek gövdesi sınırı 4,5 MB ve platform seviyesinde,
+    yani uygulamanın haberi olmadan reddediyor.
+  - Uygulama kodunda dosya boyutu kontrolü YOK (arandı, bulunamadı). Yani
+    4,6 MB'lık bir içe aktarma dosyası (T23) Türkçe bir hata mesajı değil,
+    platformun ham 413'ünü üretir — deponun anlayamayacağı bir ekran.
+  - Sınırı 4,5 MB'ın altına çekmek TEK BAŞINA yetmez: kullanıcı yine
+    sebebini bilmeden reddedilir. Yükleme formunda boyut kontrolü ve
+    "dosya çok büyük, N satırlık parçalara bölün" mesajı gerekiyor.
+  - Kaynak: T42 üretime hazırlık denetimi
+
+- [ ] **T119 (P1, human: ~2sa / CC: ~40dk)** - deploy - **Üretim runbook'u yok: rol kurulumu, migration ve geri alma yazılı değil**
+  - Üç şey hiçbir yerde yazmıyor ve üçü de bir kişinin kafasında duruyor:
+    1. **`stok_app` rolü Supabase'de nasıl kurulur.** `db/init/01-roles.sql`
+       yalnızca Docker'ın ilk açılışında ve test veritabanı kurulurken
+       koşuyor. `pnpm --filter @stok/db run init` bu boşluğu kapatıyor ama
+       README'de deploy diye bir bölüm bile yok. Rol kurulmazsa uygulama
+       hiç bağlanamaz; daha kötüsü, telaşla `postgres` ile bağlanılırsa
+       tenant izolasyonu SESSİZCE kapanır (D5'in tam olarak uyardığı şey).
+    2. **Migration'ı üretimde ne çalıştırır.** CI'da deploy işi yok,
+       `apps/web/package.json`'da migrate script'i yok. PLAN Bölüm 9
+       "1. DB migration, 2. Web deploy" diyor ama 1. adımı yapan bir şey
+       yok. Vercel build adımında koşturmak YANLIŞ olurdu: build'in
+       veritabanına erişimi olmayabilir ve eşzamanlı iki build aynı
+       migration'ı iki kez dener.
+    3. **Geri alma.** Web tarafı Vercel'in Instant Rollback'i ile hazır
+       geliyor; **veritabanı için hiçbir yol yok.** drizzle-kit `down`
+       migration üretmiyor. Bu, "additive migration" kuralını bir tercih
+       değil ZORUNLULUK yapıyor: şema geri alınamadığı için ileri uyumluluk
+       tek çıkış. `0009` (`RENAME COLUMN unit_cost → unit_price`) bu kuralı
+       çiğniyor; ilk deploy'da zararsız (boş veritabanına hepsi birden
+       koşuyor) ama kuralın çiğnenebildiğini gösteriyor ve bunu yakalayan
+       bir kontrol yok.
+  - Runbook `docs/` altına yazılmalı, README'den bağlanmalı. Deneme yanılma
+    ile bulunacak bir şey değil: yanlış rolle bir kez bağlanmak izolasyonu
+    kapatır ve kimse fark etmez.
+  - Kaynak: T42 üretime hazırlık denetimi
 
 ---
 ---
