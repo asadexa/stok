@@ -1,5 +1,5 @@
 import { UNITS, UNIT_VALUES } from '@stok/shared'
-import { createProduct, listLocations } from '@stok/core'
+import { actorCan, createProduct, listLocations } from '@stok/core'
 import { appDb } from '@stok/db'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
@@ -37,6 +37,20 @@ export default async function NewProductPage({
 }) {
   const actor = await currentActor()
   if (!actor) redirect('/giris')
+  /**
+   * ÇALIŞAN BU EKRANI HİÇ GÖRMEMELİ (T38 tarayıcı turunda bulundu).
+   *
+   * Kardeş ekranda (`urunler/aktar`) bu satır vardı, burada YOKTU: çalışan
+   * adresi elle yazınca ürün oluşturma formunun tamamını görüyordu.
+   * Veri sızıntısı değil — `createProduct` sunucuda `product:create`
+   * arıyor ve kaydetme 403 dönüyordu. Ama form doldurup "Kaydet"e basıp
+   * anlamadığı bir hata almak, çalışan için kırık bir üründür.
+   *
+   * Asıl tehlikesi ise ilerisi: "sayfa render oldu, demek ki yetkisi var"
+   * varsayımıyla yazılacak bir sonraki kod yolu, bu kez gerçekten
+   * sızdırırdı. Ekranlar arası tutarsızlık, o varsayımı davet ediyor.
+   */
+  if (!actorCan(actor, 'product:create')) redirect('/stok')
 
   const params = await searchParams
   const message = messageFrom(params)

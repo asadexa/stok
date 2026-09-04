@@ -1373,7 +1373,34 @@ G1, G2 ve G4 kapandı. G3 (yazıcı) TODOS E5'e bağlı, aşağıda gerekçesi y
 
 ### Faz 7: Test ve yayın
 
-- [ ] **T38 (P1, human: ~6sa / CC: ~45dk)** - test - E2E senaryoları (Playwright): 8 kritik akış
+- [x] **T38 (P1, human: ~6sa / CC: ~45dk)** - test - E2E senaryoları (Playwright): 8 kritik akış
+  - `apps/web/e2e/t38-kritik-akislar.spec.ts` — ürün ekleme, arama, tekil SKU,
+    kullanıcı ekleme/pasifleştirme, toplu CSV aktarma ve iki yetki sınırı.
+    Diğer dosyalarla birlikte CI kapısında **21 tarayıcı testi** (önce 5).
+  - **BİR YETKİ AÇIĞI BULUNDU VE KAPATILDI.** `/urunler/yeni` çalışana
+    kapalı DEĞİLDİ: adresi elle yazan çalışan ürün oluşturma formunun
+    tamamını görüyordu. Kardeş ekranda (`/urunler/aktar`) kontrol vardı,
+    burada yoktu.
+    - Veri sızıntısı DEĞİL: `createProduct` sunucuda `product:create`
+      arıyor ve kaydetme 403 dönüyordu. Ölçüldü — `/urunler/[id]` de
+      güvenli: çalışan alış fiyatını ve "Kaydet" düğmesini görmüyor.
+    - Yine de gerçek bir arıza: çalışan form doldurup anlamadığı bir hata
+      alıyordu. Asıl tehlikesi ilerisi — "sayfa render oldu, demek ki
+      yetkisi var" varsayımıyla yazılacak bir sonraki kod yolu bu kez
+      gerçekten sızdırırdı. Mutasyonla doğrulandı.
+  - **TESTİN KENDİSİNDE BİR TUZAK BULUNDU, yorumuna yazıldı.**
+    `page.click('button[type="submit"]')` sayfadaki İLK gönderme düğmesine
+    basıyor ve o düğme kenar çubuğundaki **"Çıkış yap"**. Yani "Kaydet"
+    sanılan her tıklama kullanıcıyı sistemden atıyordu; testler ürün
+    kaydetme akışı bozukmuş gibi kırmızı yanıyor, oturum çerezleri
+    siliniyordu. Kabuk her sayfada render edildiği için tuzak BÜTÜN panel
+    ekranlarında geçerli. Düğmeler artık adlarıyla seçiliyor.
+  - Türkçe karakter içe aktarma yolunda da sınanıyor (G2): Ç/Ş/İ/Ö'lü CSV
+    satırları "Atlanacak (hatalı) 0" ile geçiyor ve adlar listede bozulmamış
+    görünüyor.
+  - **KAPSANMAYANLAR:** sayım akışı (ekran henüz yok) ve barkod kamerası
+    (mobil, Faz 5). Sekiz akışın altısı burada, biri `demo-yolu`, biri
+    `faz10-fiyat` dosyasında.
 - [x] **T39 (P1, human: ~3sa / CC: ~25dk)** - test - Düşman QA testleri (Bölüm 6, madde 4)
   - `packages/core/src/dusman-qa.test.ts`, 47 test. Miktar, barkod, sebep,
     not, fiyat, idempotency anahtarı ve gövde şekli.
