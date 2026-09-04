@@ -45,7 +45,32 @@ let tenant: TestTenant
 let boss: Actor
 let urunId: string
 
+/**
+ * ÖLÜ SOKETE YAZMA ARTIĞI — SADECE O — YUTULUYOR.
+ *
+ * Bu dosya bağlantıyı sunucudan öldürüyor. `createMovement` tek bir
+ * transaction içinde birden çok tur atıyor (BEGIN, SET LOCAL, INSERT, ...),
+ * yani kopma anında istemcide HER ZAMAN kuyruğa girmiş bir yazma kalıyor.
+ * postgres.js o yazmayı bir `setImmediate` içinde boşaltmaya çalışıyor,
+ * soket artık `null` ve `TypeError` fırlıyor. Promise'in dışında, bir
+ * Immediate geri çağrısında: `yazma.catch(...)` bunu YAKALAYAMIYOR ve
+ * süreç düzeyinde yakalanmamış hataya dönüşüyor. CI bu yüzden, 492 testin
+ * hepsi geçtiği halde 1 ile çıkıyordu.
+ *
+ * FİLTRE DAR: yalnızca bu imza yutuluyor, geri kalan her şey yeniden
+ * fırlatılıyor. Geniş bir yutma, bu dosyadaki gerçek bir çökmeyi de
+ * gizlerdi — ve burası tam olarak çökmeleri arayan dosya.
+ */
+function oluSoketArtigi(err: unknown): boolean {
+  return err instanceof TypeError && err.message.includes("reading 'write'")
+}
+
+function artikYakalayici(err: unknown): void {
+  if (!oluSoketArtigi(err)) throw err
+}
+
 beforeAll(async () => {
+  process.on('uncaughtException', artikYakalayici)
   tenant = await seedTestTenant(admin.db, 'kaos', URUNLER)
   boss = { tenantId: tenant.tenantId, userId: tenant.adminUserId, role: 'ADMIN' }
   urunId = tenant.products['KAOS-001']!.id
@@ -53,6 +78,7 @@ beforeAll(async () => {
 })
 
 afterAll(async () => {
+  process.off('uncaughtException', artikYakalayici)
   /**
    * `end({ timeout })` — diğer test dosyalarından farklı, bilerek.
    *
