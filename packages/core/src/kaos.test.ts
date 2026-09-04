@@ -115,7 +115,8 @@ describe('bağlantı yazmanın ORTASINDA koparsa (T40)', () => {
      * yazıyor hem (trigger yoluyla) projeksiyonu güncelliyor; kopma anı
      * ikisinin arasına düşerse ya ikisi de olacak ya hiçbiri.
      */
-    const [{ pid }] = await app.db.execute<{ pid: number }>(sql`SELECT pg_backend_pid() AS pid`)
+    const pidRows = await app.db.execute<{ pid: number }>(sql`SELECT pg_backend_pid() AS pid`)
+    const pid = pidRows[0]!.pid
 
     // Yazma başlar başlamaz bağlantıyı kopar. Zamanlama kesin değil ve
     // KESİN OLMASI GEREKMİYOR: hangi ana denk gelirse gelsin sonuç

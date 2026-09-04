@@ -118,10 +118,13 @@ async function queueCheck(
   const rows = await withTenant(
     actor.tenantId,
     (tx) =>
-      tx.execute<{ status: string; n: string; oldest: string | null }>(sql`
+      tx.execute<{ status: string; n: string; oldest: string | null; hatali: string }>(sql`
         SELECT status,
                count(*)::text                    AS n,
-               min(created_at)::text             AS oldest
+               min(created_at)::text             AS oldest,
+               -- Bir kez patlamış ama hakkı bitmemiş işler. Durumları
+               -- QUEUED, yani "bekliyor" — ama hata kodu YAZILI.
+               count(*) FILTER (WHERE last_error_code IS NOT NULL)::text AS hatali
           FROM background_jobs
          WHERE status IN ('QUEUED', 'FAILED')
          GROUP BY status
@@ -132,6 +135,7 @@ async function queueCheck(
   const byStatus = new Map([...rows].map((r) => [r.status, r]))
   const failed = Number(byStatus.get('FAILED')?.n ?? 0)
   const queued = Number(byStatus.get('QUEUED')?.n ?? 0)
+  const tekrarBekleyen = Number(byStatus.get('QUEUED')?.hatali ?? 0)
 
   if (failed > 0) {
     return {
@@ -139,6 +143,28 @@ async function queueCheck(
       level: 'error',
       summary: `${failed} arka plan işi kalıcı olarak başarısız`,
       hint: 'Rapor e-postaları gitmemiş olabilir. Ayarları kontrol edin.',
+    }
+  }
+
+  /**
+   * BİR KEZ PATLAMIŞ AMA HAKKI BİTMEMİŞ İŞ — T111.
+   *
+   * Ölçülerek bulundu (T34 canlı sürüşü): SMTP'siz bir kurulumda gün sonu
+   * raporu patlıyor, `QUEUED`'a dönüyor ve `last_error_code` doluyor. Kart
+   * ise "2 iş kuyrukta, işleniyor" diyordu — hata KAYITLI ama ekranda YOK.
+   *
+   * Cron günde bir koştuğu için o satır ~24 saat öyle duruyor ve kimse
+   * bir sorun olduğunu bilmiyor. G4'ün tam tanımı.
+   *
+   * `error` DEĞİL `warn`: işin bir hakkı daha var ve bir sonraki tur
+   * gerçekten düzeltebilir. Kalıcı başarısızlık ayrı ve yukarıda.
+   */
+  if (tekrarBekleyen > 0) {
+    return {
+      key: 'queue',
+      level: 'warn',
+      summary: `${tekrarBekleyen} iş bir kez başarısız oldu, tekrar denenecek`,
+      hint: 'Düzelmezse kalıcı hataya dönecek. E-posta ayarlarını kontrol edin.',
     }
   }
 

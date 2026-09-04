@@ -128,6 +128,28 @@ describe('kuyruk', () => {
     expect(check.hint).toContain('işçisi')
   })
 
+  it('BİR KEZ PATLAMIŞ ama tekrar bekleyen iş UYARI veriyor (T111)', async () => {
+    /**
+     * Ölçülerek bulundu (T34 canlı sürüşü): SMTP'siz kurulumda gün sonu
+     * raporu patlayıp `QUEUED`'a dönüyor, `last_error_code` doluyor — ve
+     * kart "kuyrukta, işleniyor" diyordu. Hata KAYITLI ama ekranda YOK.
+     * Cron günde bir koştuğu için o satır ~24 saat öyle duruyor.
+     */
+    const fresh = await seedTestTenant(admin.db, 'health-queue-retry')
+    const a: Actor = { tenantId: fresh.tenantId, userId: fresh.adminUserId, role: 'ADMIN' }
+    const { job } = await enqueueJob(a, { kind: 'DAILY_REPORT', params: {} }, opts)
+    await admin.db.execute(sql`
+      UPDATE background_jobs
+         SET attempts = 1, last_error_code = 'MAIL_DELIVERY_FAILED'
+       WHERE id = ${job.id}
+    `)
+
+    const check = find(await systemHealth(a, opts), 'queue')
+    // `error` DEĞİL: işin bir hakkı daha var ve bir sonraki tur düzeltebilir.
+    expect(check.level, 'tekrar bekleyen iş sağlıklı görünüyor').toBe('warn')
+    expect(check.summary).toContain('bir kez başarısız')
+  })
+
   it('başarısız iş HATA veriyor ve kuyruk uyarısını bastırıyor', async () => {
     const fresh = await seedTestTenant(admin.db, 'health-queue-failed')
     const a: Actor = { tenantId: fresh.tenantId, userId: fresh.adminUserId, role: 'ADMIN' }

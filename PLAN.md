@@ -2577,7 +2577,7 @@ aynı), migration drift kontrolü, dört adım CLAUDE.md'deki bitmiş sayılma
     değerlendirilir.
   - Kaynak: T109 teşhisi
 
-- [ ] **T111 (P2, human: ~1sa / CC: ~20dk)** - gözlem - Tekrar bekleyen iş, Sistem Sağlığı kartında SAĞLIKLI görünüyor
+- [x] **T111 (P2, human: ~1sa / CC: ~20dk)** - gözlem - Tekrar bekleyen iş, Sistem Sağlığı kartında SAĞLIKLI görünüyor
   - Ölçüldü (2026-09-03, T34 canlı sürüş): SMTP'siz kurulumda gün sonu
     raporu bir kez patlayıp `QUEUED`'a dönüyor (`last_error_code` dolu),
     kart ise "2 iş kuyrukta, işleniyor" diyor. Yani hata KAYITLI ama
@@ -2587,8 +2587,15 @@ aynı), migration drift kontrolü, dört adım CLAUDE.md'deki bitmiş sayılma
   - Çözüm: `queueCheck` `last_error_code IS NOT NULL AND status='QUEUED'`
     satırlarını ayrı sayıp `warn` dönsün — "1 iş bir kez başarısız oldu,
     tekrar denenecek".
-  - Neden hemen yapılmadı: T34'ün kapsamı cron turu; kartın sorgusunu
-    değiştirmek T25'in davranışını değiştirir ve kendi testini ister.
+  - Yapıldı: `queueCheck` artık `last_error_code IS NOT NULL` olan QUEUED
+    satırlarını ayrı sayıyor ve "1 iş bir kez başarısız oldu, tekrar
+    denenecek" diye `warn` dönüyor.
+  - `error` DEĞİL `warn`: işin bir hakkı daha var ve bir sonraki tur
+    gerçekten düzeltebilir. Kalıcı başarısızlık zaten ayrı ve `error`.
+  - Kontrol kalıcı başarısızlığın ÜSTÜNDE değil ALTINDA: `FAILED` varsa o
+    kazanıyor. Tersi olsaydı gerçek bir kalıcı hata, "tekrar denenecek"
+    diyen daha yumuşak bir mesajın arkasına gizlenirdi.
+  - Mutasyonla doğrulandı.
   - Kaynak: T34 canlı sürüşü
 
 - [ ] **T112 (P2, human: ~2sa / CC: ~30dk)** - cron - Zamanlayıcının kendisi kurulmadı
