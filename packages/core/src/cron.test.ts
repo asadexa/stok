@@ -10,7 +10,7 @@ import {
 } from '@stok/db/testing'
 import type { Db } from '@stok/db'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
-import { createInMemoryTransport } from './mail'
+import { type MailTransport, createInMemoryTransport } from './mail'
 import { createMovement } from './movements'
 import {
   dailyReportText,
@@ -89,7 +89,11 @@ describe('gün sonu raporu (E6)', () => {
     const sonuc = await runCron(boss, { mail }, { db: app.db })
 
     expect(sonuc.day).toBe(bugun())
-    expect(sonuc.scheduled.map((s) => s.kind)).toEqual(['DAILY_REPORT', 'LOW_STOCK_SCAN'])
+    expect(sonuc.scheduled.map((s) => s.kind)).toEqual([
+      'DAILY_REPORT',
+      'LOW_STOCK_SCAN',
+      'HEALTH_ALARM',
+    ])
     expect(sonuc.failed, 'hiçbir iş başarısız olmamalı').toBe(0)
 
     const rapor = mail.sent.find((m) => m.subject.startsWith('Gün sonu raporu'))
@@ -378,3 +382,120 @@ function dbThatFailsFor(db: Db, tenantId: string): Db {
     },
   }) as Db
 }
+
+/**
+ * ============================================================================
+ * T36 — SİSTEM SAĞLIĞI ALARMI
+ *
+ * PLAN Bölüm 8'in 1., 3. ve 4. alarmı. Kritik nokta ŞU: bu kontroller
+ * `health.ts`'te zaten vardı ama YALNIZCA biri `/saglik` sayfasını açınca
+ * çalışıyordu. "Sistemin sessizce bozulduğunun en iyi tek sinyali" diye
+ * yazılmış bir alarmın, birinin bakmasını beklemesi kendi içinde çelişki.
+ * ============================================================================
+ */
+describe('sistem sağlığı alarmı (T36)', () => {
+  const MESAI = new Date()
+  MESAI.setHours(10, 0, 0, 0)
+
+  /**
+   * YARIN saat 03:00 ve 10:00.
+   *
+   * BUGÜNÜN saatleri işe yaramıyordu ve bu MUTASYONLA yakalandı: testlerin
+   * hareketleri "şimdi" yazılıyor, yani bugün 03:00 onlardan ÖNCE. Sessizlik
+   * süresi negatif çıkıyor ve alarm hiçbir eşikte çalmıyor — gece kuralını
+   * kaldıran bir mutasyon bile testi yeşil bırakıyordu.
+   *
+   * Yarına geçince son hareket ~13 saat geride kalıyor: gece kuralı varsa
+   * alarm YOK, yoksa VAR. Test artık kuralın kendisini ölçüyor.
+   */
+  const YARIN_GECE = new Date()
+  YARIN_GECE.setDate(YARIN_GECE.getDate() + 1)
+  YARIN_GECE.setHours(3, 0, 0, 0)
+
+  const YARIN_MESAI = new Date()
+  YARIN_MESAI.setDate(YARIN_MESAI.getDate() + 1)
+  YARIN_MESAI.setHours(10, 0, 0, 0)
+
+  beforeEach(async () => {
+    await admin.db.execute(sql`DELETE FROM background_jobs WHERE tenant_id = ${tenant.tenantId}`)
+  })
+
+  async function alarmIsi(mail: MailTransport, now: Date) {
+    await runCron(boss, { mail }, { db: app.db, now: () => now.getTime() })
+    const isler = await listJobs(boss, {}, { db: app.db })
+    return isler.find((j) => j.kind === 'HEALTH_ALARM')
+  }
+
+  it('her şey yolundayken E-POSTA GÖNDERMİYOR', async () => {
+    const mail = createInMemoryTransport()
+    const is = await alarmIsi(mail, MESAI)
+
+    expect(is?.status, 'alarm işi çalışmadı').toBe('SUCCEEDED')
+    // Her saat gelen "her şey yolunda" postası, gerçekten sorun olan saatte
+    // de okunmamasını sağlardı.
+    expect(mail.sent.filter((m) => m.subject.includes('uyarısı'))).toHaveLength(0)
+  })
+
+  it('INVARIANT KIRIKKEN alarm e-postası gidiyor', async () => {
+    const urun = tenant.products['KRT-001']!.id
+    await admin.db.execute(sql`
+      UPDATE current_stock SET qty = qty + 9
+       WHERE tenant_id = ${tenant.tenantId} AND product_id = ${urun}
+    `)
+    try {
+      const mail = createInMemoryTransport()
+      await alarmIsi(mail, MESAI)
+
+      const uyari = mail.sent.find((m) => m.subject.includes('uyarısı'))
+      expect(uyari, 'invariant kırıkken alarm gitmedi').toBeDefined()
+      // Konu satırı TEK BAŞINA anlaşılır olmalı: yönetici telefondan
+      // bakınca e-postayı açmadan ne olduğunu bilsin.
+      expect(uyari!.subject).toContain('AYRIŞMIŞ')
+    } finally {
+      await admin.db.execute(sql`
+        UPDATE current_stock SET qty = qty - 9
+         WHERE tenant_id = ${tenant.tenantId} AND product_id = ${urun}
+      `)
+    }
+  })
+
+  it('MESAİ İÇİNDE sessizlik alarmı ÇALIYOR', async () => {
+    // PLAN Bölüm 8, alarm 1: "sistemin sessizce bozulduğunun en iyi tek
+    // sinyali". Yarın 10:00'da son hareket ~13 saat geride.
+    const mail = createInMemoryTransport()
+    await alarmIsi(mail, YARIN_MESAI)
+
+    const uyari = mail.sent.find((m) => m.subject.includes('hareket kaydedilmedi'))
+    expect(uyari, 'mesai içinde sessizlik alarmı çalmadı').toBeDefined()
+  })
+
+  it('GECE aynı sessizlikte alarm ÇALMIYOR', async () => {
+    // Aynı sessizlik, farklı saat. Gece 03:00'te hareket olmaması normal ve
+    // her gece çalan bir alarm, sabaha kadar susturulmayı öğretir.
+    const mail = createInMemoryTransport()
+    await alarmIsi(mail, YARIN_GECE)
+
+    const uyari = mail.sent.find((m) => m.subject.includes('hareket kaydedilmedi'))
+    expect(uyari, 'gece sessizlik alarmı çaldı').toBeUndefined()
+  })
+
+  it('alarm SAATLİK planlanıyor, günlük değil', async () => {
+    // Günlük olsaydı sabah 08:00'de çalan alarmdan sonra aynı gün bir daha
+    // hiç bakılmazdı — "iki saattir hareket yok" sinyalinin tamamı kaybolurdu.
+    const mail = createInMemoryTransport()
+    const onda = new Date(MESAI)
+    const onbirde = new Date(MESAI)
+    onbirde.setHours(11, 0, 0, 0)
+
+    const bir = await runCron(boss, { mail }, { db: app.db, now: () => onda.getTime() })
+    const iki = await runCron(boss, { mail }, { db: app.db, now: () => onbirde.getTime() })
+
+    const alarmi = (r: typeof bir) => r.scheduled.find((s) => s.kind === 'HEALTH_ALARM')!
+    const raporu = (r: typeof bir) => r.scheduled.find((s) => s.kind === 'DAILY_REPORT')!
+
+    expect(alarmi(bir).duplicate).toBe(false)
+    expect(alarmi(iki).duplicate, 'alarm bir sonraki saatte YENİDEN planlanmalı').toBe(false)
+    // Karşılaştırma: gün sonu raporu aynı gün ikinci kez planlanmıyor.
+    expect(raporu(iki).duplicate, 'gün sonu raporu saatlik olmamalı').toBe(true)
+  })
+})

@@ -78,6 +78,13 @@
       "when": 1788166553865,
       "tag": "0010_cron_tenants",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1788166613865,
+      "tag": "0011_health_alarm_job",
+      "breakpoints": true
     }
   ]
 }

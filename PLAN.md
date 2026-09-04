@@ -1329,7 +1329,41 @@ G1, G2 ve G4 kapandı. G3 (yazıcı) TODOS E5'e bağlı, aşağıda gerekçesi y
     uygulama (Faz 5) henüz başlamadı, gönderilecek cihaz kaydı yok.
     Kritik ürün yoksa e-posta GÖNDERİLMİYOR — her sabah gelen "sorun yok"
     postası, gerçekten sorun olan sabah da okunmamasını sağlardı.
-- [ ] **T36 (P2, human: ~3sa / CC: ~20dk)** - gözlem - Yapısal log + 5 metrik + 5 alarm
+- [x] **T36 (P2, human: ~3sa / CC: ~20dk)** - gözlem - Yapısal log + 5 metrik + 5 alarm
+  - **YAPISAL LOG** (`packages/core/src/observability.ts`): tek satır JSON,
+    sabit alan adları. `createMovement`'ın HEM başarı HEM ret yolunda,
+    gecikmeyle birlikte.
+    - Sarmalayıcı `parseInput`'tan ÖNCE başlıyor: doğrulama hataları da
+      ölçülüyor. Bölüm 8'in iki metriği ("reddedilen hareket oranı",
+      "`BARCODE_UNKNOWN` oranı") YALNIZCA buradan çıkabiliyor — reddedilen
+      hareket hiçbir tabloya yazılmıyor, defterde izi yok.
+    - Kütüphane YOK (pino/winston): katman `console.log` üstünde iki satır,
+      `packages/core` ileride React Native'den de çağrılacak (Node'a bağlı
+      taşıma orada çalışmaz), ve her bağımlılık geçişli açık demek (T104).
+    - **Fiyat ve barkod log'a YAZILMIYOR.** Log satırları çoğu kurulumda
+      üçüncü taraf bir toplayıcıya gidiyor; fiyatı oraya göndermek D7'nin
+      (fiyat gizleme) arkadan dolanılması olurdu. Testle korunuyor.
+  - **ALARM ARTIK KENDİLİĞİNDEN ÇALIYOR** (`HEALTH_ALARM` iş türü,
+    migration 0011). Kontroller `health.ts`'te zaten vardı ama YALNIZCA biri
+    `/saglik` sayfasını açınca çalışıyordu — "sistemin sessizce bozulduğunun
+    en iyi tek sinyali" diye yazılmış bir alarmın birinin bakmasını
+    beklemesi kendi içinde çelişki.
+    - Cron turunda planlanıyor, **SAATLİK** (diğer işler günlük). Günlük
+      olsaydı sabah 08:00'deki alarmdan sonra o gün bir daha bakılmazdı.
+    - `maxAttempts: 1` — tekrar yok: bir sonraki saatte zaten yeni alarm
+      kuyruğa giriyor, iki kopya aynı sorunu iki kez anlatırdı.
+    - Sorun yoksa e-posta GİTMİYOR (E7 ile aynı ilke).
+    - Eşik `error`; tek istisna mesai içindeki sessizlik (`warn`).
+      Mesai penceresi TEK YERDE — mutasyon testinde iki ayrı kuralın
+      birbirini maskelediği görüldü ve biri kaldırıldı.
+  - **KAPSANMAYANLAR, açıkça:** senkron gecikmesi p95, outbox bekleyen
+    kayıt, aktif cihaz sayısı ve outbox alarmı MOBİLE bağlı (Faz 5) — henüz
+    outbox yok, ölçecek şey de yok. "5xx oranı > %1" alarmı istek
+    seviyesinde sayaç istiyor; bu depoda öyle bir katman yok ve uydurmak
+    yerine T112'nin (zamanlayıcı + dış izleme) yanına bırakıldı.
+  - Sekiz koruma mutasyonla doğrulandı: sessizlik/mesai/gece kuralı, saatlik
+    dedupe, invariant alarmı, hata yutmama, ret satırında sebep, fiyat
+    sızıntısı.
   - Kaynak: Bölüm 8
 - [x] **T37 (P1, human: ~2sa / CC: ~15dk)** - gözlem - Invariant ihlali alarmı (kırmızı)
   - Her cron turunda `SUM(delta) == current_stock.qty` denetleniyor; kırıksa

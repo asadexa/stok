@@ -26,6 +26,7 @@ import {
   withTenant,
 } from '@stok/db'
 import { and, desc, eq, gte, isNull, lte, sql } from 'drizzle-orm'
+import { type LogFields, logged } from './observability'
 import {
   type Actor,
   canSeePrices,
@@ -64,6 +65,12 @@ import { formatScaled, multiplyScaled, parseScaled, scaledFromNumber, scaledToNu
 interface CreateMovementOptions {
   /** Test ve cron için: varsayılan uygulama havuzu yerine başka bağlantı. */
   db?: Db
+  /**
+   * Log'a yazılan kanal (T36). Varsayılan 'web'; `/api/v1` mobil isteklerde
+   * 'mobile' geçirecek. Ayrı bir alan çünkü "mobilde reddedilme oranı web'in
+   * iki katı" sorusu ancak kanal ayrıysa sorulabilir.
+   */
+  source?: 'web' | 'mobile'
 }
 
 /** Deadlock ve serileştirme hatalarında kaç kez tekrar denenir. */
@@ -74,9 +81,54 @@ export async function createMovement(
   raw: unknown,
   options: CreateMovementOptions = {},
 ): Promise<CreateMovementResponse> {
+  /**
+   * YAPISAL LOG BURADA, DAHA İÇERİDE DEĞİL (T36).
+   *
+   * Sarmalayıcı `parseInput`'tan ÖNCE başlıyor: doğrulama hataları da
+   * ölçülmek zorunda. PLAN Bölüm 8'in iki metriği ("reddedilen hareket
+   * oranı", "`BARCODE_UNKNOWN` oranı") YALNIZCA buradan çıkabiliyor —
+   * reddedilen hareket hiçbir tabloya yazılmıyor, defterde izi yok.
+   * `writeMovement` içine konsaydı reddedilenlerin çoğu oraya hiç
+   * ulaşmadığı için sayılmazdı ve oran her zaman %0 görünürdü.
+   *
+   * `barcode` LOG'A YAZILMIYOR: ürün kimliği zaten sonuçta var, barkod
+   * ise fişten okunan bir müşteri verisi olabilir.
+   */
+  /**
+   * ALANLAR ÇAĞRI BOYUNCA DOLUYOR, başta değil. `logged` bu nesneyi log
+   * yazarken açıyor, yani `createMovementInner` içinde eklenen alanlar
+   * BAŞARISIZLIK satırında da görünüyor. Girdi baştan çözümlenip alanlar
+   * doldurulsaydı, doğrulamayı iki kez yapmak gerekirdi.
+   */
+  const alanlar: LogFields = {
+    tenantId: actor.tenantId,
+    userId: actor.userId,
+    source: options.source ?? 'web',
+  }
+
+  return logged(
+    'hareket',
+    alanlar,
+    () => createMovementInner(actor, raw, options, alanlar),
+    (result) => ({
+      productId: result.productId,
+      delta: result.delta.toString(),
+      duplicate: result.duplicate,
+    }),
+  )
+}
+
+async function createMovementInner(
+  actor: Actor,
+  raw: unknown,
+  options: CreateMovementOptions,
+  alanlar: LogFields,
+): Promise<CreateMovementResponse> {
   requirePermission(actor, 'movement:create')
 
   const input = parseInput(raw)
+  alanlar.reason = input.reason
+  alanlar.idempotencyKey = input.idempotencyKey
 
   // Reddetmek yerine bayrağı sessizce yok saymak daha kötü olurdu:
   // çalışan "yine de yap" dediğini sanır, sistem başka bir şey yapar.

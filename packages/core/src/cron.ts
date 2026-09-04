@@ -11,6 +11,7 @@ import {
   enqueueJob,
   runQueuedJobs,
 } from './jobs'
+import { systemHealth } from './health'
 import { checkStockInvariant } from './movements'
 import { pruneAttempts } from './rate-limit'
 
@@ -339,6 +340,116 @@ export function createLowStockHandler(mail: MailTransport, options: CronOptions 
 }
 
 // ---------------------------------------------------------------------------
+// SİSTEM SAĞLIĞI ALARMI — T36 (PLAN.md Bölüm 8, alarm 1/3/4)
+// ---------------------------------------------------------------------------
+
+/**
+ * Mesai saati aralığı (yerel saat, kapanış HARİÇ).
+ *
+ * Alarm 1 — "mesai saatinde 2 saattir hiç hareket yok" — PLAN'da "sistemin
+ * sessizce bozulduğunun en iyi tek sinyali" diye geçiyor. Ama mesai
+ * PENCERESİ olmadan işe yaramaz: gece 03:00'te hareket olmaması normaldir ve
+ * her gece çalan bir alarm, sabaha kadar susturulmayı öğretir.
+ *
+ * Sınırlar depo vardiyasına göre; kurulum başına ayar YAPILMADI çünkü tek
+ * müşteri var ve uydurma bir ayar, ilk gerçek ihtiyaçta zaten yanlış çıkar.
+ */
+const MESAI_BASLANGIC = 8
+const MESAI_BITIS = 19
+
+/** Bu kadar süredir hareket yoksa mesai içinde alarm. */
+const SESSIZLIK_SAAT = 2
+
+export interface AlarmResult {
+  /** Gönderildiyse alıcı; gönderilmediyse yok. */
+  deliveredTo?: string
+  /** Alarma sebep olan kontroller. Boşsa her şey yolunda ve mail GİTMEDİ. */
+  fired: string[]
+}
+
+/**
+ * Sağlık kontrollerini alarma çeviren işleyici.
+ *
+ * NEDEN AYRI BİR İŞ, `runCron` içinde düz bir e-posta değil: gönderim
+ * başarısızlığı görünür olmak zorunda (G4). Kuyruk satırı hatayı yazıyor ve
+ * Sistem Sağlığı kartı onu gösteriyor. Düz bir `mail.send()` çağrısında
+ * hata ya yutulur ya da bütün cron turunu düşürürdü.
+ *
+ * SORUN YOKSA E-POSTA GİTMİYOR — kritik stok taramasıyla (E7) aynı ilke.
+ * Her saat gelen "her şey yolunda" postası, gerçekten sorun olan saatte de
+ * okunmamasını sağlardı.
+ *
+ * `SESSIZLIK` yalnızca MESAİ İÇİNDE alarm: gece hareket olmaması normal.
+ * `quietHours` bu yüzden 2 saate indiriliyor; kartın kendi varsayılanı 24
+ * saat ve o, "sabah geldim, dün hiç kayıt yok" sorusunun cevabı — farklı
+ * bir soru, farklı eşik.
+ */
+export function createHealthAlarmHandler(
+  mail: MailTransport,
+  options: CronOptions = {},
+): JobHandler {
+  return async (job: JobRecord): Promise<Record<string, unknown>> => {
+    const now = new Date(options.now?.() ?? Date.now())
+    const saat = now.getHours()
+    const mesaide = saat >= MESAI_BASLANGIC && saat < MESAI_BITIS
+
+    /**
+     * `requestedBy` NULL OLABİLİR (elle tetiklenmemiş bir iş). `systemHealth`
+     * yalnızca yetki kontrolü için `userId` istiyor ve tenant kapsamı zaten
+     * satırdan geliyor; boş dizi güvenli çünkü hiçbir sorgu kullanıcı
+     * kimliğine göre filtrelemiyor. Sahte bir UUID uydurmak, denetim izinde
+     * var olmayan bir kullanıcıya işaret ederdi.
+     */
+    const health = await systemHealth(
+      { tenantId: job.tenantId, userId: job.requestedBy ?? '', role: 'ADMIN' },
+      {
+        db: options.db,
+        now: () => now.getTime(),
+        // Kartın varsayılanı 24 saat ("sabah geldim, dün hiç kayıt yok").
+        // Alarmın sorusu farklı: "ŞU AN bir şey mi bozuldu". Eşik de farklı.
+        quietHours: SESSIZLIK_SAAT,
+      },
+    )
+
+    /**
+     * `warn` DEĞİL `error` eşiği — TEK İSTİSNA sessizlik. Kuyrukta bekleyen
+     * iş (`warn`) her tur alarm çalsaydı, gerçek bir invariant ihlali aynı
+     * gürültünün içinde kaybolurdu.
+     *
+     * MESAİ PENCERESİ TEK YERDE, burada. Eşiği gece için gevşetmek de aynı
+     * işi görürdü ama İKİ kural olurdu ve ikisi birbirini maskelerdi:
+     * mutasyon testinde görüldü — birini kaldırmak testleri yeşil bırakıyor,
+     * çünkü diğeri hâlâ tutuyor. Yani hiçbiri tek başına ispatlanamıyordu ve
+     * biri sessizce ölü koda dönüşebilirdi.
+     */
+    const fired = health.checks
+      .filter((c) => c.level === 'error' || (c.key === 'activity' && c.level === 'warn' && mesaide))
+      .map((c) => c.summary)
+
+    if (fired.length === 0) return { fired: 0, mesaide }
+
+    const to = job.notifyEmail
+    if (!to) throw new AppError('NOT_FOUND', `job ${job.id} has no delivery address`)
+
+    await mail.send({
+      to,
+      // Konu satırı TEK BAŞINA anlaşılır: yönetici telefondan bakınca
+      // e-postayı açmadan ne olduğunu bilsin.
+      subject: `Stok Takip uyarısı: ${fired[0]}`,
+      text: [
+        'Sistem sağlığı kontrolü aşağıdaki sorunları buldu:',
+        '',
+        ...fired.map((f) => `  • ${f}`),
+        '',
+        'Ayrıntı için panelde Sistem Sağlığı ekranına bakın.',
+      ].join('\n'),
+    })
+
+    return { fired: fired.length, deliveredTo: to, mesaide }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // PLANLAMA VE ÇALIŞTIRMA
 // ---------------------------------------------------------------------------
 
@@ -387,15 +498,24 @@ export async function runCron(
 ): Promise<CronResult> {
   const now = new Date(options.now?.() ?? Date.now())
   const day = dayKey(now)
+  const hour = String(now.getHours()).padStart(2, '0')
   const to = await reportRecipient(actor.tenantId, options)
 
   // 1. PLANLA. Dedupe anahtarı günü içeriyor: aynı gün ikinci çağrı yeni
   //    iş üretmiyor, cron'u tekrar tetiklemek zararsız.
   const scheduled: CronResult['scheduled'] = []
-  for (const kind of ['DAILY_REPORT', 'LOW_STOCK_SCAN'] as const) {
+  for (const kind of ['DAILY_REPORT', 'LOW_STOCK_SCAN', 'HEALTH_ALARM'] as const) {
     const { duplicate } = await enqueueJob(
       actor,
-      { kind, params: { day }, notifyEmail: to ?? null, dedupeKey: `${kind}:${day}` },
+      {
+        kind,
+        params: { day },
+        notifyEmail: to ?? null,
+        // ALARM SAATLİK, diğerleri GÜNLÜK. Günlük olsaydı sabah 08:00'de
+        // çalan alarmdan sonra aynı gün bir daha hiç bakılmazdı — "iki
+        // saattir hareket yok" sinyalinin tamamı kaybolurdu.
+        dedupeKey: kind === 'HEALTH_ALARM' ? `${kind}:${day}:${hour}` : `${kind}:${day}`,
+      },
       options,
     )
     scheduled.push({ kind, duplicate })
@@ -408,6 +528,7 @@ export async function runCron(
     {
       DAILY_REPORT: createDailyReportHandler(handlers.mail, options),
       LOW_STOCK_SCAN: createLowStockHandler(handlers.mail, options),
+      HEALTH_ALARM: createHealthAlarmHandler(handlers.mail, options),
     },
     options,
   )
