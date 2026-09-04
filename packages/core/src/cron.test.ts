@@ -21,6 +21,7 @@ import {
   runCronAllTenants,
 } from './cron'
 import { listJobs } from './jobs'
+import { LOGIN_EMAIL_POLICY, recordFailure } from './rate-limit'
 import type { Actor } from './authz'
 import { TEST_DB_NAME } from './test/db-name'
 
@@ -254,10 +255,33 @@ describe('bakım adımı', () => {
     `)
   })
 
-  it('eski kaba kuvvet sayaçları budanıyor', async () => {
+  it('eski kaba kuvvet sayaçları GERÇEKTEN budanıyor', async () => {
+    /**
+     * ESKİ İDDİA `toBeGreaterThanOrEqual(0)` İDİ — yani HER ZAMAN doğru.
+     * Budama tamamen kaldırılsa bile yeşil yanardı (T113 taramasında
+     * bulundu). Şimdi kendi eskittiğimiz bir satırın gittiği sınanıyor.
+     *
+     * `auth_attempts` TENANT KAPSAMLI DEĞİL (kimlik doğrulamadan önce
+     * yazılıyor), o yüzden kendi öznemizle ayrışıyoruz: sayıya değil,
+     * BİZİM satırımızın yok olmasına bakılıyor. Toplam sayım, paylaşılan
+     * veritabanında yabancı satırlara bağımlı olurdu.
+     */
+    const ozne = `budanacak-${randomUUID()}@test.local`
+    const cokEski = Date.now() - 30 * 24 * 60 * 60 * 1000
+    await recordFailure(app.db, 'LOGIN_EMAIL', ozne, LOGIN_EMAIL_POLICY, cokEski)
+
+    const varMi = async () => {
+      const rows = await admin.db.execute<{ n: string }>(sql`
+        SELECT count(*)::text AS n FROM auth_attempts WHERE subject = ${ozne}
+      `)
+      return Number(rows[0]?.n ?? '0') > 0
+    }
+    expect(await varMi(), 'kurulum: sayaç yazılamadı').toBe(true)
+
     const mail = createInMemoryTransport()
-    const sonuc = await runCron(boss, { mail }, { db: app.db })
-    expect(sonuc.prunedAuthAttempts).toBeGreaterThanOrEqual(0)
+    await runCron(boss, { mail }, { db: app.db })
+
+    expect(await varMi(), 'eski sayaç budanmadı — tablo sınırsız büyür').toBe(false)
   })
 })
 

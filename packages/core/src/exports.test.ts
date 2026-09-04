@@ -117,8 +117,20 @@ async function asInline(promise: Promise<Awaited<ReturnType<typeof exportStock>>
   return res
 }
 
+/**
+ * Bu testin KENDİ kiracısındaki iş sayısı — veritabanındaki toplam DEĞİL.
+ *
+ * Test veritabanı yirmi dosyayla paylaşılıyor ve cron katmanı (T34) HER
+ * kiracıya iş açıyor. Global sayım bugün çalışıyor (dosyalar sırayla
+ * koşuyor, yani `before`/`after` arasına başka bir yazan giremiyor) ama
+ * kırılganlığı bir sonraki paralelleştirmeye kadar saklı: sayım yabancı
+ * satırlara bağımlı olduğu anda, kendi davranışı kusursuz bir test yabancı
+ * bir dosya yüzünden düşer. Bu tam olarak T113'ün tarif ettiği sınıf.
+ */
 async function jobCount(): Promise<number> {
-  const rows = await admin.db.execute<{ n: string }>(sql`SELECT count(*)::text AS n FROM background_jobs`)
+  const rows = await admin.db.execute<{ n: string }>(
+    sql`SELECT count(*)::text AS n FROM background_jobs WHERE tenant_id = ${tenant.tenantId}`,
+  )
   return Number([...rows][0]?.n ?? 0)
 }
 

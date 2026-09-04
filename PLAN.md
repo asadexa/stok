@@ -2639,7 +2639,7 @@ aynı), migration drift kontrolü, dört adım CLAUDE.md'deki bitmiş sayılma
   - Kaynak: T34
 
 
-- [ ] **T113 (P2, human: ~2sa / CC: ~40dk)** - test - **Paylaşılan test veritabanında GLOBAL iddia kuran testler taransın**
+- [x] **T113 (P2, human: ~2sa / CC: ~40dk)** - test - **Paylaşılan test veritabanında GLOBAL iddia kuran testler taransın**
   - **CI'DA YAŞANDI (2026-09-04, koşu 33870506493).** `cron.test.ts` iki
     testte kırmızı yandı, yerelde 441/441 yeşildi. Sebep: test
     `runCronAllTenants` sonucundaki **her** kiracıya bakıp "hiçbirinin hakkı
@@ -2762,3 +2762,24 @@ alındı, hepsi PLAN.md T88-T92'ye gerekçesiyle yazıldı. Uygulamaya başlanab
 - Yİ-ÜFE aylık güncellemesini kim yapacak ve bayatlama uyarısı hangi gecikmede çıkacak
 - U2 maliyet yöntemi — Faz 10'u bloke etmiyor ama E8 (kâr raporu) için hâlâ açık
 - Dış ses (Codex) çalışmadı; bu incelemenin bulguları çapraz doğrulanmadı
+  - **TARAMA YAPILDI (2026-09-04).** `packages/core` ve `packages/db`
+    testlerinde paylaşılan veritabanına global iddia kuran her yer bakıldı.
+    Üç sonuç:
+    1. `exports.test.ts` → `jobCount()` bütün tablodaki işleri sayıyordu ve
+       "planlama yan etkisiz" iddiası bu sayıma dayanıyordu. Kendi
+       kiracısına daraltıldı. Mutasyonla gösterildi: global sayımla yabancı
+       bir kiracının tek işi testi düşürüyor, daraltılmışla düşürmüyor.
+    2. `cron.test.ts` → "eski kaba kuvvet sayaçları budanıyor" testi
+       `toBeGreaterThanOrEqual(0)` diyordu, yani HER ZAMAN doğruydu:
+       budama tamamen kaldırılsa bile yeşil yanardı. Kendi öznemizle bir
+       satır eskitip onun gittiği sınanıyor artık. `auth_attempts` tenant
+       kapsamlı olmadığı için ayrışma özneyle yapılıyor, sayımla değil.
+       Mutasyonla doğrulandı.
+    3. Kalan global sorgular BİLEREK global ve gerekçeleri yazıldı:
+       `dusman-qa.test.ts` SQL kaçırma sonrası "tablo hâlâ var mı" diye
+       soruyor (eşik sıfırın üstü, sayım yalnızca artabilir);
+       `rls.test.ts` sayımları `withTenant` içinde, yani RLS zaten
+       daraltıyor — testin ölçtüğü şey tam olarak o.
+  - Kalan risk: dosyalar bugün SIRAYLA koşuyor (`singleFork`). Paralelleştirme
+    günü gelirse bu sınıf yeniden açılır; o gün taramanın tekrarı gerekir.
+

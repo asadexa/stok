@@ -167,6 +167,11 @@ describe('BARKOD — düşman değerler (T39)', () => {
   it('SQL kaçırma denemesinden sonra tablo HÂLÂ DURUYOR', async () => {
     // Parametreli sorgu kullanıldığı için beklenen bu; ama "beklenen" ile
     // "doğrulanmış" arasındaki fark tam olarak bu satır.
+    //
+    // SAYIM BİLEREK GLOBAL (T113 taraması): sorulan şey "tablo hâlâ var mı",
+    // "kaç satır var" değil. `DROP TABLE` geçseydi sorgu satır sayısı değil
+    // HATA döndürürdü. Yabancı satırların artması iddiayı bozamaz — eşik
+    // sıfırın üstü ve sayım yalnızca artabilir.
     const rows = await admin.db.execute<{ n: string }>(
       sql`SELECT count(*)::text AS n FROM stock_movements`,
     )
