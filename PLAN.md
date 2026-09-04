@@ -1374,9 +1374,69 @@ G1, G2 ve G4 kapandı. G3 (yazıcı) TODOS E5'e bağlı, aşağıda gerekçesi y
 ### Faz 7: Test ve yayın
 
 - [ ] **T38 (P1, human: ~6sa / CC: ~45dk)** - test - E2E senaryoları (Playwright): 8 kritik akış
-- [ ] **T39 (P1, human: ~3sa / CC: ~25dk)** - test - Düşman QA testleri (Bölüm 6, madde 4)
-- [ ] **T40 (P1, human: ~3sa / CC: ~25dk)** - test - Kaos testi: senkron ortasında DB kapat
-- [ ] **T41 (P2, human: ~2sa / CC: ~15dk)** - doküman - `docs/ADR/` 5 karar kaydı: ledger, tenant, offline, maliyet, versiyonlama
+- [x] **T39 (P1, human: ~3sa / CC: ~25dk)** - test - Düşman QA testleri (Bölüm 6, madde 4)
+  - `packages/core/src/dusman-qa.test.ts`, 47 test. Miktar, barkod, sebep,
+    not, fiyat, idempotency anahtarı ve gövde şekli.
+  - **Her iddia "stok DEĞİŞMEDİ" diye de kontrol ediyor.** En tehlikeli
+    sonuç 500 değil 200: reddedilmesi gereken bir miktar kabul edilirse
+    depoda yanlış sayı oluşur ve fark sayım gününe kadar görünmez.
+  - Düşman değerler formdan gelen METİN üzerinden üretiliyor (`1e999`,
+    emoji, boşluk, `-0`), çünkü arayüzün gerçek yolu o. Dönüşümün ne
+    ürettiği ayrı bir testle kayıt altında; varsayım gizli kalmasın.
+  - **İKİ ÖLÜ KORUMA BULUNDU VE KALDIRILDI.** `qtySchema.finite()` ve
+    `moneySchema.finite()` mutasyonla kaldırıldığında hiçbir test kırmızı
+    yanmadı: `+Infinity`'yi `.max()`, `-Infinity`'yi `.positive()` /
+    `.nonnegative()`, `NaN`'ı zod'un kendisi zaten reddediyor. İspatlanamayan
+    koruma zararsız değil — biri `.max()`'ı kaldırırken "`.finite()` nasılsa
+    tutuyor" diye düşünebilir.
+  - **BİR TEST YANLIŞ SEBEPLE YEŞİLDİ, mutasyonla yakalandı.** Fiyat
+    testleri "bir AppError fırladı" diyordu; oysa `SALE` sebebinde liste
+    fiyatından sapan her tutar zaten sapma sebebi istiyor (T88). Para
+    şemasının BÜTÜN kontrolleri kaldırıldığında bile testler yeşil
+    yanıyordu — reddeden şey şema değil, komşusuydu. Artık hata kodu tam
+    olarak kontrol ediliyor.
+  - Ters yön de sınanıyor: `0.001` miktar, Türkçe karakterli ve emojili not,
+    okuyucunun eklediği `\r\n`. Düşman testleri kapıyı fazla kapatmış
+    olabilir; gram satan bir depoyu ya da gerçek bir el terminalini
+    kullanılamaz hale getirmek de bir arıza.
+- [x] **T40 (P1, human: ~3sa / CC: ~25dk)** - test - Kaos testi: senkron ortasında DB kapat
+  - `packages/core/src/kaos.test.ts`. Bağlantı `pg_terminate_backend` ile
+    SUNUCUDAN öldürülüyor — istemciden `end()` çağırmak düzgün kapanış olur
+    ve sınamak istediğimiz durumu hiç üretmezdi.
+  - **PLAN'daki cümlenin iki yarısı var, biri bugün sınanamıyor.** Cihaz
+    tarafı (kuyruk korunur, ağ dönünce tamamlanır) mobil outbox'a bağlı —
+    ortada kuyruk yok, sahte bir kuyrukla sınamak var olmayan kodun testi
+    olurdu. Sunucu tarafı sınandı ve ASIL TEHLİKELİ OLAN O: cihaz kuyruğu
+    kaybolursa kullanıcı okutmayı tekrarlar, ama sunucuda YARIM yazma
+    olursa defter ile projeksiyon ayrışır ve kimse fark etmez.
+  - Üç iddia: (1) kopma anında defter ile projeksiyon ayrışmıyor,
+    (2) ya hep ya hiç — yarım satır yok, (3) havuz kopan bağlantıyı
+    değiştirip çalışmaya devam ediyor.
+  - Dördüncüsü mobil outbox'ın (ADR-003) dayandığı garanti: aynı anahtar
+    kopmadan sonra tekrar gönderilirse çift kayıt olmuyor. Outbox henüz
+    yazılmadı ama garantinin KENDİSİ bugün sınanabiliyor. Mutasyonla
+    doğrulandı.
+  - Zamanlama KESİN DEĞİL ve olması gerekmiyor: kopma hangi ana denk
+    gelirse gelsin sonuç aynı olmalı. Zamanlamaya bağlı bir test "bazen
+    yeşil" olurdu; bu depoda o hatanın bedeli T109'da ölçüldü.
+- [x] **T41 (P2, human: ~2sa / CC: ~15dk)** - doküman - `docs/ADR/` 5 karar kaydı: ledger, tenant, offline, maliyet, versiyonlama
+  - ADR'ler `PLAN.md`'yi tekrar ETMİYOR, farklı bir soruyu cevaplıyor.
+    PLAN çalışan bir belge — kararın BUGÜNKÜ halini anlatıyor. ADR tarihli ve
+    değişmez; "bu neden böyle" sorusunu burada olmayan birine anlatıyor
+    (yeni geliştirici, müşterinin bir sonraki tedarikçisi, altı ay sonraki
+    biz).
+  - Her kayıtta **elenen yollar** var. Bir ADR'nin en değerli kısmı seçilen
+    çözüm değil, seçilmeyenlerin neyi bozacağı; onu yazmayan ADR kodun
+    kendisinin söylemediği hiçbir şeyi söylemiyor demektir.
+  - **ADR-004 (maliyet yöntemi) bilerek AÇIK durumda.** Karar müşterinin
+    muhasebecisine ait (U2) ve ertelenebilir olduğu ölçülerek gösterildi:
+    FIFO/ağırlıklı ortalama sorusu kâr raporuna (E8) ait, T88/T89'un
+    cevapladığı "bunu kaça satmalıyım" sorusuna değil. Kayıt ayrıca kararın
+    ÖN ŞARTINI yazıyor: yöntem seçilse bile geçmiş hareketlerde `unit_price`
+    `NULL` olduğu için geriye dönük kâr raporu yine çıkmaz.
+  - Durum etiketleri gerçeği söylüyor: ADR-003 ve ADR-005 "Kabul edildi
+    (uygulanmadı)" — kararı verilmiş ama kodu Faz 5'te. Hepsine "kabul
+    edildi" demek, okuyanı var olmayan bir özelliğin peşine düşürürdü.
 - [ ] **T42 (P1, human: ~3sa / CC: ~20dk)** - deploy - Vercel + Supabase + EAS pipeline, deploy sonrası kontrol listesi
 
 ### Faz 8: Mühendislik incelemesinden gelen görevler (D4-D9)
@@ -2517,7 +2577,7 @@ aynı), migration drift kontrolü, dört adım CLAUDE.md'deki bitmiş sayılma
     değerlendirilir.
   - Kaynak: T109 teşhisi
 
-- [ ] **T111 (P2, human: ~1sa / CC: ~20dk)** - gözlem - Tekrar bekleyen iş, Sistem Sağlığı kartında SAĞLIKLI görünüyor
+- [x] **T111 (P2, human: ~1sa / CC: ~20dk)** - gözlem - Tekrar bekleyen iş, Sistem Sağlığı kartında SAĞLIKLI görünüyor
   - Ölçüldü (2026-09-03, T34 canlı sürüş): SMTP'siz kurulumda gün sonu
     raporu bir kez patlayıp `QUEUED`'a dönüyor (`last_error_code` dolu),
     kart ise "2 iş kuyrukta, işleniyor" diyor. Yani hata KAYITLI ama
@@ -2527,8 +2587,15 @@ aynı), migration drift kontrolü, dört adım CLAUDE.md'deki bitmiş sayılma
   - Çözüm: `queueCheck` `last_error_code IS NOT NULL AND status='QUEUED'`
     satırlarını ayrı sayıp `warn` dönsün — "1 iş bir kez başarısız oldu,
     tekrar denenecek".
-  - Neden hemen yapılmadı: T34'ün kapsamı cron turu; kartın sorgusunu
-    değiştirmek T25'in davranışını değiştirir ve kendi testini ister.
+  - Yapıldı: `queueCheck` artık `last_error_code IS NOT NULL` olan QUEUED
+    satırlarını ayrı sayıyor ve "1 iş bir kez başarısız oldu, tekrar
+    denenecek" diye `warn` dönüyor.
+  - `error` DEĞİL `warn`: işin bir hakkı daha var ve bir sonraki tur
+    gerçekten düzeltebilir. Kalıcı başarısızlık zaten ayrı ve `error`.
+  - Kontrol kalıcı başarısızlığın ÜSTÜNDE değil ALTINDA: `FAILED` varsa o
+    kazanıyor. Tersi olsaydı gerçek bir kalıcı hata, "tekrar denenecek"
+    diyen daha yumuşak bir mesajın arkasına gizlenirdi.
+  - Mutasyonla doğrulandı.
   - Kaynak: T34 canlı sürüşü
 
 - [ ] **T112 (P2, human: ~2sa / CC: ~30dk)** - cron - Zamanlayıcının kendisi kurulmadı

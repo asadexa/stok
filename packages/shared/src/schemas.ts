@@ -51,9 +51,15 @@ const hasValidPrecision = (n: number) => decimalsOf(n) <= MAX_DECIMALS
  * PostgreSQL fazlasını sessizce yuvarlar — 19,999 TL girip 20,00 TL
  * kaydedilmesini kullanıcı ancak raporda fark ederdi.
  */
+/**
+ * `.finite()` YOK — `qtySchema`'daki ile aynı gerekçe ve aynı mutasyon
+ * testiyle bulundu: `+Infinity`'yi `.max()`, `-Infinity`'yi
+ * `.nonnegative()`, `NaN`'ı zod'un kendisi zaten reddediyor. Hiç
+ * ateşlenmeyen bir koruma, kaldırıldığında hiçbir testi kırmıyor ve
+ * komşusunu kaldıran birine yanlış güven veriyor.
+ */
 const moneySchema = z
   .number({ invalid_type_error: 'Tutar sayı olmalı' })
-  .finite()
   .nonnegative()
   .max(99_999_999.99)
   .refine((n) => decimalsOf(n) <= 2, { message: 'En fazla 2 ondalık basamak (kuruş)' })
@@ -62,15 +68,22 @@ const moneySchema = z
  * Miktar. Kullanıcı HER ZAMAN pozitif girer; işareti sebep belirler.
  *
  * Düşman QA testleri (PLAN.md T39) bu şemaya çarpar:
- *   1e999   → Infinity → .finite() reddeder
- *   -5      → .positive() reddeder
- *   0       → .positive() reddeder
+ *   1e999   → Infinity → .max() reddeder (Infinity her sonlu üst sınırdan büyük)
+ *   -1e999  → -Infinity → .positive() reddeder
+ *   NaN     → z.number() reddeder (emoji/harf `Number()`'dan NaN olarak gelir)
+ *   -5, 0   → .positive() reddeder
  *   0.0001  → precision refine reddeder
  *   "12"    → z.number() reddeder (coerce YOK, bilerek)
+ *
+ * `.finite()` YOK, bilerek — ve bir mutasyon testiyle kaldırıldı (T39).
+ * Kaldırıldığında HİÇBİR test kırmızı yanmıyordu: `+Infinity`'yi `.max()`,
+ * `-Infinity`'yi `.positive()`, `NaN`'ı zod'un kendisi zaten reddediyor.
+ * Yani hiç ateşlenmeyen bir koruma duruyordu. Zararsız görünüyor ama
+ * değil: bir gün biri `.max()`'ı kaldırırken "`.finite()` nasılsa tutuyor"
+ * diye düşünebilir. İspatlanamayan koruma, yanlış güven üretiyor.
  */
 export const qtySchema = z
   .number({ invalid_type_error: 'Miktar sayı olmalı' })
-  .finite()
   .positive()
   .max(1_000_000)
   .refine(hasValidPrecision, { message: `En fazla ${MAX_DECIMALS} ondalık basamak` })
