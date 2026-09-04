@@ -189,6 +189,24 @@ async function listeFiyati(page: Page): Promise<number> {
 // sessizce eskir ve YENİ yazılan bir test hiç koşmadan öylece durur. Etiket
 // tersi: varsayılan DAHİL, dışlanan tek tek görünür — hem test başlığında
 // hem iş akışında.
+//
+// ETİKET YANLIŞ BİR ŞEY İMA EDİYORDU, DÜZELTİLDİ (2026-09-04 ölçümü).
+// Bu testler KIRILGAN DEĞİL: gerçek bir ÜRÜN hatasını yakalıyorlar. Ölçüldü
+// (üretim derlemesi, gerçek tarayıcı, 12 tur): "Kaydet"e basıldığında sunucu
+// eylemi çalışıyor, `Next-Action` POST'u 303 dönüyor — ve istemci
+// yönlendiricisi turların 3-5'inde o yönlendirmeyi SESSİZCE DÜŞÜRÜYOR.
+// Konsolda hata yok, ağda hata yok, `framenavigated` olayı hiç ateşlenmiyor.
+// Kullanıcı için: "Kaydet'e bastım, hiçbir şey olmadı."
+//
+// ELENEN AÇIKLAMALAR (hepsi ölçüldü):
+//   • Hidratasyon yarışı  → tıklama anında form HER ZAMAN hidrat (fiber var)
+//   • `Link` ön getirme   → kapatınca 3-5/10 yerine 2/12; azaltıyor, çözmüyor
+//   • `loading.tsx`       → varken 3/10, yokken 2/10
+//   • `SessionKeepAlive`  → isteği hiç ateşlenmiyor
+//
+// Etiketin BURADA kalmasının tek sebebi: hata düzelene kadar CI'ı kırmızı
+// tutmak, gerçek gerilemeleri gizlerdi. T109 kapandığında etiket SİLİNECEK
+// ve bu testler CI kapısına girecek.
 test.describe('@kararsiz Faz 10 — kasa açığı ve açılış değerlemesi', () => {
   test.beforeEach(async ({ page }) => {
     page.on('pageerror', (err) => {

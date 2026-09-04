@@ -1891,6 +1891,61 @@ veriyle test edilebilir hale gelir.
     görünen dört hata yalnızca gerçek tarayıcıda bulundu.
   - Playwright kurulumu bir kez; sonraki tüm arayüz işleri kazançlı çıkıyor.
 
+
+  - ## 2026-09-04 ÖLÇÜMÜ — ARIZA İKİYE AYRILDI, BİRİ KAPANDI
+
+  - **BAŞLIK YANLIŞTI.** Bu bir "kararsız test" değil, KULLANICIYA GÖRÜNEN
+    BİR ÜRÜN HATASI. Testler doğru çalışıyordu; her koşuda farklı testin
+    kırmızı yanması, hatanın kendisinin olasılıksal olmasındandı.
+
+  - **(a) TEMA DÜĞMESİ — ÇÖZÜLDÜ.** Ölçüm (üretim derlemesi, gerçek
+    tarayıcı): 12 tıklamanın 8'inde `<html data-theme>` DEĞİŞMİYOR. Çerez
+    doğru yazılmış, eylem 200 dönmüş, SERT YENİLEMEDE yeni tema geliyor —
+    ekran eski temada kalıyor.
+    - Sebep: `revalidatePath('/', 'layout')` tek başına istemciyi kökten
+      yeniden render ettirmiyor.
+    - Düzeltme: eylem sonunda aynı adrese `redirect()` (`shell.tsx` →
+      `cycleTheme`; adres istemciden gizli alanla geliyor ve açık
+      yönlendirmeye karşı doğrulanıyor).
+    - Ölçüm: öncesi 8/12 ve 5/12 asılı → sonrası **0/12**. Mutasyonla
+      doğrulandı: yönlendirme kaldırılınca `e2e/t109-tema.spec.ts` ilk
+      tıklamada kırmızı yanıyor.
+
+  - **(b) HAREKET KAYDI — AÇIK.** Aynı sınıf, farklı yüzey ve düzeltmesi
+    daha derin. Ölçüm (hata yolu, 12 tur): sunucu eylemi çalışıyor,
+    `Next-Action` POST'u **303 dönüyor**, ve istemci yönlendiricisi turların
+    **3-5'inde o yönlendirmeyi SESSİZCE DÜŞÜRÜYOR** — `framenavigated`
+    olayı hiç ateşlenmiyor, konsolda ve ağda hata yok.
+    - Kullanıcı için: "Kaydet'e bastım, hiçbir şey olmadı."
+    - Çift kayıt riski YOK: idempotency anahtarı okutma anında üretiliyor ve
+      sayfa gezinmediği için ikinci basış aynı anahtarı gönderiyor (D-1.3).
+      Ama kullanıcı sayfayı YENİLERSE yeni anahtar üretilir.
+
+  - **ELENEN AÇIKLAMALAR (hepsi ölçüldü, hiçbiri sebep değil):**
+    - *Hidratasyon yarışı:* tıklama anında Kaydet formu HER ZAMAN hidrat
+      (`__reactFiber$` izi var) — asılan turlarda da.
+    - *`Link` ön getirme:* kapatınca 3-5/10 yerine 2/12. Azaltıyor,
+      ÇÖZMÜYOR — ve gezinme hızını düşürdüğü için geri alındı.
+    - *`loading.tsx`:* varken 3/10, yokken 2/10. Fark yok.
+    - *`SessionKeepAlive`:* isteği hiç ateşlenmiyor (yalnızca sunucu çerezi
+      yazamadığında basılıyor).
+    - *Başarı yolu:* sert gezinmeden sonra 0/12 — arıza yumuşak gezinme
+      geçmişi olan sayfalarda yoğunlaşıyor.
+
+  - **SIRADAKİ ADIM, BU SIRAYLA:**
+    1. **Next 16'ya yükselt (T105).** Bu, App Router'ın kendi yönlendirici
+       hatası gibi görünüyor: sunucu her seferinde doğru cevabı üretiyor.
+       Sürüm yükseltmesi denenmeden altyapı değiştirmek erken olur.
+    2. Düzelmezse **Kaydet formunu sunucu eyleminden düz bir POST rotasına
+       çevir** (`POST /hareket/kaydet` → 303). Tarayıcının kendi gezinmesi
+       yönlendiriciye hiç uğramaz, yani arıza sınıfı tamamen kapanır ve
+       ekran JS'siz de çalışır hale gelir (T110). Bedeli: sunucu
+       eylemlerinin hazır getirdiği kaynak (origin) kontrolü elle
+       yazılmalı — CSRF açığı bırakmadan.
+
+  - `faz10-fiyat.spec.ts` üzerindeki `@kararsiz` etiketi DURUYOR ama
+    gerekçesi düzeltildi: testler kırılgan değil, gerçek hatayı yakalıyorlar.
+    T109(b) kapandığında etiket silinip CI kapısına alınacaklar.
 - [ ] **T91 (P1, human: ~2sa / CC: —)** - araştırma - Üç senaryoyu gerçek kullanıcıda gözlemle
   - Neden: Talep kanıtı zayıf. Üç senaryonun hangisinin gerçekten tıkanmaya
     yol açtığı ayrıştırılmadı ve **bugünkü çözüm hiç sorulmadı** — kullanıcı o
