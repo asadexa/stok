@@ -13,10 +13,10 @@ import {
 import { type Db, products, withTenant } from '@stok/db'
 import { and, eq, inArray } from 'drizzle-orm'
 import ExcelJS from 'exceljs'
-import { type Actor, requirePermission } from './authz.js'
-import type { SheetColumn } from './excel.js'
-import { addBarcode, createProduct, listBarcodes, updateProduct } from './products.js'
-import { issuesOf, validationError } from './validate.js'
+import { type Actor, requirePermission } from './authz'
+import type { SheetColumn } from './excel'
+import { addBarcode, createProduct, listBarcodes, updateProduct } from './products'
+import { issuesOf, validationError } from './validate'
 import { z } from 'zod'
 
 /**
@@ -84,6 +84,7 @@ export interface ParsedRow {
   unit?: Unit
   category?: string | null
   brand?: string | null
+  imageUrl?: string | null
   purchasePrice?: number | null
   salePrice?: number | null
   minStock?: number
@@ -150,6 +151,7 @@ const COLUMN_ALIASES: Record<keyof ParsedRow, string[]> = {
   unit: ['birim', 'unit'],
   category: ['kategori', 'category'],
   brand: ['marka', 'brand'],
+  imageUrl: ['gorsel', 'gorsel url', 'gorsel adresi', 'resim', 'resim url', 'foto', 'fotograf', 'image', 'image url'],
   purchasePrice: ['alis fiyati', 'alis', 'alis fiyat'],
   salePrice: ['satis fiyati', 'satis', 'satis fiyat'],
   minStock: ['kritik seviye', 'kritik stok', 'min stok', 'minimum stok', 'kritik esik'],
@@ -372,6 +374,7 @@ const COLUMN_LABELS: Record<keyof ParsedRow, string> = {
   unit: 'Birim',
   category: 'Kategori',
   brand: 'Marka',
+  imageUrl: 'Görsel URL',
   purchasePrice: 'Alış Fiyatı',
   salePrice: 'Satış Fiyatı',
   minStock: 'Kritik Seviye',
@@ -485,6 +488,19 @@ function evaluateRow(
 
   if (file.columns.includes('category')) data.category = raw.cells.category || null
   if (file.columns.includes('brand')) data.brand = raw.cells.brand || null
+  if (file.columns.includes('imageUrl')) {
+    const url = raw.cells.imageUrl?.trim() ?? ''
+    // ÖNİZLEMEDE DOĞRULANIYOR, kaydederken değil. Adres arayüzde bir
+    // `<img src>` içine giriyor ve bu dosya DIŞARIDAN geliyor; `javascript:`
+    // veya `data:` şeması sayfaya kullanıcı içeriği sokmanın yolu olurdu.
+    // Önizlemede yakalamak, 800 satırlık bir yüklemenin ortasında patlamak
+    // yerine kullanıcıya hangi satırın bozuk olduğunu göstermek demek.
+    if (url !== '' && !/^https?:\/\//i.test(url)) {
+      push('imageUrl', 'Görsel adresi http:// veya https:// ile başlamalı')
+    } else {
+      data.imageUrl = url || null
+    }
+  }
 
   for (const field of ['purchasePrice', 'salePrice', 'minStock'] as const) {
     if (!file.columns.includes(field)) continue
@@ -554,6 +570,7 @@ function checkCreate(data: ParsedRow) {
     ...(data.unit ? { unit: data.unit } : {}),
     ...(data.category ? { category: data.category } : {}),
     ...(data.brand ? { brand: data.brand } : {}),
+    ...(data.imageUrl ? { imageUrl: data.imageUrl } : {}),
     ...(data.purchasePrice != null ? { purchasePrice: data.purchasePrice } : {}),
     ...(data.salePrice != null ? { salePrice: data.salePrice } : {}),
     ...(data.minStock !== undefined ? { minStock: data.minStock } : {}),
@@ -579,6 +596,7 @@ function updatePatch(data: ParsedRow): Record<string, unknown> {
   if (data.unit !== undefined) patch.unit = data.unit
   if (data.category !== undefined) patch.category = data.category
   if (data.brand !== undefined) patch.brand = data.brand
+  if (data.imageUrl !== undefined) patch.imageUrl = data.imageUrl
   if (data.purchasePrice !== undefined) patch.purchasePrice = data.purchasePrice
   if (data.salePrice !== undefined) patch.salePrice = data.salePrice
   if (data.minStock !== undefined) patch.minStock = data.minStock
@@ -688,6 +706,7 @@ function createPayload(data: ParsedRow): Record<string, unknown> {
     ...(data.unit ? { unit: data.unit } : {}),
     ...(data.category ? { category: data.category } : {}),
     ...(data.brand ? { brand: data.brand } : {}),
+    ...(data.imageUrl ? { imageUrl: data.imageUrl } : {}),
     ...(data.purchasePrice != null ? { purchasePrice: data.purchasePrice } : {}),
     ...(data.salePrice != null ? { salePrice: data.salePrice } : {}),
     ...(data.minStock !== undefined ? { minStock: data.minStock } : {}),
@@ -796,6 +815,7 @@ export function templateRows(): Record<string, string | number>[] {
       Barkod: '8690000000011',
       'Barkod Türü': 'Tekli',
       'Koli İçi Adet': 1,
+      'Görsel URL': 'https://ornek-tedarikci.com/gorseller/kal-001.jpg',
     },
     {
       'Stok Kodu': 'KAL-002',

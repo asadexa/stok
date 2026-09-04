@@ -1,14 +1,31 @@
 /**
- * Form alanları.
+ * ============================================================================
+ * FORM ALANLARI — T68 (tasarım incelemesi, ölçülmüş erişilebilirlik düzeltmesi)
  *
- * Hepsi 56 px yüksekliğinde: PLAN.md Bölüm 11, eldivenli elle basılabilmeli.
- * Etiket `<label>` içinde sarmalanmış — `for`/`id` eşleştirmesi unutulabilir,
- * sarmalamak unutulamaz ve ekran okuyucu ile etiketin tıklanabilirliği
- * ikisi de bedava gelir.
+ * BU DOSYADA İKİ GERİLEME KAPANDI. İkisi de tasarım tercihi değil, ölçülen
+ * bir açıktı ve referans görselden bağımsız olarak düzeltilmesi gerekiyordu.
+ *
+ *   1. KENARLIK. Eskiden `border-slate-300`: beyaza karşı 1,48:1. WCAG 1.4.11
+ *      arayüz bileşen sınırları için 3:1 istiyor, yani ölçülen değer gerekenin
+ *      yarısından azdı. Kötü ışıkta kutunun nerede bittiği görünmüyordu.
+ *      Şimdi `--line-control` (#848aa8), beyaza 3,40:1.
+ *
+ *   2. ODAK. Eskiden `outline-none focus:border-slate-900`: klavyeyle gezinen
+ *      kullanıcının tek işareti 1 px'lik bir ton farkıydı ve `outline-none`
+ *      tarayıcının kendi halkasını da kaldırıyordu. Admin barkod okuyucuyu
+ *      klavye olarak kullanıyor ve faresi yok; hangi alana yazdığını göremezse
+ *      okuttuğu barkod yanlış alana düşer ve bunu fark etmez.
+ *      Şimdi halka `globals.css` içindeki genel `:focus-visible` kuralından
+ *      geliyor: 3 px, 7,25:1. BU DOSYADA `outline-none` KULLANILMIYOR.
+ *
+ * YÜKSEKLİK 56 → 52 px. Referans görselin oranları için düştü ama WCAG 2.5.5
+ * hedefi olan 44 px'in belirgin üstünde kaldı. Barkod ve miktar alanları
+ * 64 px'te DEĞİŞMEDİ: deponun en sık dokunulan iki alanı onlar.
+ * ============================================================================
  */
 
 const INPUT =
-  'mt-1 h-14 w-full rounded-md border border-slate-300 bg-white px-3 text-base outline-none focus:border-slate-900'
+  'mt-1.5 h-13 w-full rounded-control border border-line-control bg-surface px-3.5 text-base text-ink placeholder:text-ink-3'
 
 export function TextField({
   name,
@@ -31,10 +48,10 @@ export function TextField({
 }) {
   return (
     <label className="block">
-      <span className="text-sm font-medium">
+      <span className="text-[13px] font-semibold">
         {label}
         {required ? (
-          <span aria-hidden className="text-kritik">
+          <span aria-hidden className="text-crit">
             {' *'}
           </span>
         ) : null}
@@ -59,7 +76,13 @@ export function TextField({
         placeholder={placeholder}
         className={INPUT}
       />
-      {hint ? <span className="mt-1 block text-xs text-slate-500">{hint}</span> : null}
+      {/* İpucu `text-ink-2`: beyaza 6,76:1, koyu temada 7,54:1.
+          `ink-3` DEĞİL: o token aydınlık temada 4,64:1 ve AA eşiğini
+          (4,5) ancak geçiyor. T55'in bulgusu zaten "12 px'te sınırda bir
+          oran kullanma"ydı; ipucu yönerge taşıyor ("ondalık ayırıcı
+          virgül"), okunamazsa alan yanlış doldurulur. `ink-3` 14 px ve
+          üstü ikincil metin ile yer tutucular için meşru kalıyor. */}
+      {hint ? <span className="mt-1.5 block text-xs text-ink-2">{hint}</span> : null}
     </label>
   )
 }
@@ -82,7 +105,7 @@ export function SelectField({
 }) {
   return (
     <label className="block">
-      <span className="text-sm font-medium">{label}</span>
+      <span className="text-[13px] font-semibold">{label}</span>
       <select name={name} defaultValue={defaultValue ?? ''} className={INPUT}>
         {emptyLabel ? <option value="">{emptyLabel}</option> : null}
         {options.map((o) => (
@@ -91,17 +114,20 @@ export function SelectField({
           </option>
         ))}
       </select>
-      {hint ? <span className="mt-1 block text-xs text-slate-500">{hint}</span> : null}
+      {hint ? <span className="mt-1.5 block text-xs text-ink-2">{hint}</span> : null}
     </label>
   )
 }
 
-/** Hata şeridi. Renk tek başına anlam taşımıyor: ikon + metin de var. */
+/**
+ * Hata şeridi. Renk tek başına anlam taşımıyor: ikon + metin de var.
+ * Dolgu `--crit-soft`, metin `--crit-soft-ink`: ikisi arasında 6,31:1.
+ */
 export function Alert({ children }: { children: React.ReactNode }) {
   return (
     <p
       role="alert"
-      className="flex gap-2 rounded-md border border-kritik bg-kritik-bg p-3 text-sm text-kritik"
+      className="flex gap-2 rounded-control border border-crit bg-crit-soft p-3 text-sm text-crit-soft-ink"
     >
       <span aria-hidden>⚠</span>
       <span>{children}</span>
@@ -111,10 +137,8 @@ export function Alert({ children }: { children: React.ReactNode }) {
 
 export function Notice({ children }: { children: React.ReactNode }) {
   return (
-    <p className="flex gap-2 rounded-md border border-giris bg-white p-3 text-sm text-slate-700">
-      <span aria-hidden className="text-giris">
-        ✓
-      </span>
+    <p className="flex gap-2 rounded-control border border-ok bg-ok-soft p-3 text-sm text-ok-soft-ink">
+      <span aria-hidden>✓</span>
       <span>{children}</span>
     </p>
   )
@@ -128,13 +152,16 @@ export function SubmitButton({
   tone?: 'primary' | 'secondary' | 'danger'
 }) {
   const styles = {
-    primary: 'bg-slate-900 text-white hover:bg-slate-700',
-    secondary: 'border border-slate-300 bg-white hover:bg-slate-100',
-    danger: 'border border-kritik bg-white text-kritik hover:bg-kritik-bg',
+    primary: 'bg-accent text-accent-ink hover:brightness-110',
+    secondary: 'border border-line-control bg-surface text-ink hover:bg-surface-2',
+    danger: 'border border-crit bg-surface text-crit hover:bg-crit-soft',
   }[tone]
 
   return (
-    <button type="submit" className={`h-14 rounded-md px-6 text-base font-medium ${styles}`}>
+    <button
+      type="submit"
+      className={`h-13 rounded-control px-6 text-base font-semibold ${styles}`}
+    >
       {children}
     </button>
   )

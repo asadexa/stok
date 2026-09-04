@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { barcodeSchema, createMovementSchema, createProductSchema, qtySchema } from './schemas.js'
+import { barcodeSchema, createMovementSchema, createProductSchema, qtySchema } from './schemas'
 
 /** Geçerli bir temel istek. Testler bunun üstüne tek alan değiştirir. */
 const validMovement = {
@@ -12,6 +12,9 @@ const validMovement = {
 
 describe('miktar doğrulaması: düşman QA (T39)', () => {
   it('1e999 reddedilir (Infinity)', () => {
+    // Çalışma zamanında Infinity oluyor ve şemanın onu reddettiğini
+    // doğruluyoruz; hassasiyet kaybı burada hata değil, senaryonun kendisi.
+    // biome-ignore lint/correctness/noPrecisionLoss: 1e999 TESTİN KONUSU.
     expect(qtySchema.safeParse(1e999).success).toBe(false)
   })
 

@@ -59,6 +59,16 @@ export const JOB_KINDS = {
   DAILY_REPORT: { tr: 'Gün sonu raporu', maxAttempts: 2 },
   /** T35: kritik stok taraması. */
   LOW_STOCK_SCAN: { tr: 'Kritik stok taraması', maxAttempts: 2 },
+  /**
+   * T36: sistem sağlığı alarmı.
+   *
+   * `maxAttempts: 1` — TEKRAR YOK, diğerlerinden farklı olarak. Alarm
+   * SAATLİK planlanıyor; gidememiş bir alarmı bir saat sonra tekrar
+   * denemek, o sırada zaten yeni bir alarm işinin kuyruğa girmiş olması
+   * demek. İki kopya aynı sorunu iki kez anlatırdı ve alarmın güvenilirliği
+   * tam da tekrar eden gürültüden ölür.
+   */
+  HEALTH_ALARM: { tr: 'Sistem sağlığı alarmı', maxAttempts: 1 },
 } as const satisfies Record<string, JobKindMeta>
 
 export type JobKind = keyof typeof JOB_KINDS

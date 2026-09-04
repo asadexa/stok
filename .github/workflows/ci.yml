@@ -25,11 +25,23 @@ on:
     branches: [master]
   pull_request:
 
+# GITHUB_TOKEN yalnızca okuyabilsin. Varsayılan izinler repo ve
+# organizasyon ayarına bağlı ve eski repolarda YAZMA yetkili geliyor;
+# bir action ya da bir bağımlılığın postinstall betiği o tokenı
+# kullanabilir. Bu iş akışı hiçbir şey yazmıyor, daha fazlasına
+# ihtiyacı yok.
+permissions:
+  contents: read
+
 # Aynı dal üstünde arka arkaya push yapılırsa eski koşuyu iptal et:
 # ikinci push'un sonucu zaten birincininkini geçersiz kılıyor.
+#
+# MASTER HARİÇ. Orada iptal edilen koşunun commit'i "durumu bilinmiyor"
+# olarak kalıyor. Bugün zararsız, ama T42 (deploy) yeşil koşuya
+# bağlanacak ve iptal edilmiş bir commit başarısız gibi görünecek.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
 
 jobs:
   test:
@@ -64,19 +76,40 @@ jobs:
       AUTH_SECRET: ci-icin-sabit-anahtar-en-az-32-karakter
 
     steps:
-      - uses: actions/checkout@v4
+      # v5.1.0 — SHA sabit, etiket taşınabilir (T98, T103)
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
 
-      - uses: pnpm/action-setup@v4
+      # v5.0.0 — anotasyonlu etiketin altındaki COMMIT SHA (T98, T103)
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320
 
-      - uses: actions/setup-node@v4
+      # v5.0.0 (T98, T103)
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
         with:
-          node-version: 22
+          # Sürüm .nvmrc'de, iş akışında değil: geliştirme makinesiyle
+          # CI aynı sürümde koşsun ve tek yerden değişsin.
+          node-version-file: .nvmrc
           cache: pnpm
 
       # --frozen-lockfile: pnpm-lock.yaml ile package.json ayrışmışsa
       # sessizce çözmek yerine burada patlasın.
       - name: Bağımlılıklar
         run: pnpm install --frozen-lockfile
+
+      # Linter ÖNCE koşuyor: saniyeler sürüyor ve typecheck.in
+      # yakalayamadığı sınıfı yakalıyor (kullanılmayan bağımlılık,
+      # erişilebilirlik, şüpheli JSX). Kırmızıysa daha pahalı
+      # adımları beklemeye gerek yok.
+      - name: Lint
+        run: pnpm lint
+
+      # `pnpm --filter X <script>` Windows'ta `'<script>' is not recognized`
+      # veriyor, Linux'ta çoğunlukla çalışıyor. Yani hata YALNIZCA Windows'ta
+      # görünüyor. Windows işi bu çağrıların hepsini koşmuyor: README'deki,
+      # hata mesajlarındaki ve dokümandaki komutlar hiç çalıştırılmıyor —
+      # T57'nin on üçüncü örneği zaten öyle bir yerdeydi. Statik tarama
+      # orayı görüyor, koşan bir test görmüyor.
+      - name: pnpm --filter kullanımı
+        run: node scripts/check-pnpm-filter.mjs
 
       - name: Typecheck
         run: pnpm typecheck
@@ -95,8 +128,12 @@ jobs:
             exit 1
           fi
 
-      - name: Testler
-        run: pnpm test
+      # Kapsamla koşuyor, testi İKİ KEZ koşturmamak için. Rakam PR
+      # logunda görünüyor ama EŞİK YOK ve CI'ı kırmıyor: eşik koymak,
+      # kapsamı test yazarak değil test silerek yükseltmeye teşvik eder.
+      # Ölçülmeyen boşluk tartışılmıyor; görünen boşluk tartışılıyor.
+      - name: Testler (kapsamla)
+        run: pnpm test:coverage
 
       # Typecheck web uygulamasının DERLENECEĞİNİ göstermiyor: tsc ile
       # webpack aynı modül çözümlemesini yapmıyor. Monorepo paketleri
@@ -108,5 +145,151 @@ jobs:
       #
       # Veritabanı gerekmiyor: her sayfa `cookies()` okuduğu için dinamik,
       # derleme sırasında hiçbiri sorgu çalıştırmıyor.
+      - name: Web derlemesi
+        run: pnpm --filter @stok/web run build
+
+      # BLOKLAMIYOR (continue-on-error). Hemen düzeltilemeyen bir
+      # transitive açık bütün geliştirmeyi durdurursa ilk çare adımı
+      # kapatmak olur. Görünür olması, bloklaması değil, işi görüyor.
+      - name: Bağımlılık denetimi
+        continue-on-error: true
+        run: pnpm audit --audit-level=high
+
+  # ==========================================================================
+  # T93 — DUMAN TESTİ: kurulumdan girişe giden yol
+  #
+  # Yukarıdaki `test` işi KODUN DOĞRU olduğunu sınıyor. Bu iş ÜRÜNÜN
+  # ÇALIŞTIĞINI sınıyor. İkisi farklı sorular ve dördü de P1 olan T57, T58,
+  # T59, T61 ikincisinde kaldı: dördü de kullanıcı testinde çıktı, dördü de
+  # CI yeşilken vardı.
+  #
+  # SERVİS KONTEYNERİ YOK, ve bu kasıtlı. `test` işi Postgres'i GitHub'a
+  # kurduruyor, yani hazır bir ortamda koşuyor. Burada sınanan şey tam
+  # olarak o hazırlığın kendisi: `pnpm demo` veritabanını kendi kaldırıyor,
+  # `stok_app` rolünü ve eklentiyi açıyor, migration'ları uyguluyor, örnek
+  # veriyi yüklüyor. Servis konteyneri 5433'ü önceden açsaydı demo o adımı
+  # atlar ve sınadığımızı sandığımız yol hiç koşmazdı.
+  #
+  # `.env` DE ELLE YAZILMIYOR. `pnpm demo` onu `.env.example`tan kendisi
+  # üretiyor. Burada ortam değişkeni tanımlamak, T58'i bugüne kadar gizleyen
+  # şeyin — kurulum scriptinin uygulamanın hatasını örtmesinin — aynısını
+  # iş akışı düzeyinde tekrarlamak olurdu.
+  # ==========================================================================
+  smoke:
+    name: demo yolu (kurulumdan girişe)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      # v5.1.0 — SHA sabit, etiket taşınabilir (T98, T103)
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+
+      # v5.0.0 — anotasyonlu etiketin altındaki COMMIT SHA (T98, T103)
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320
+
+      # v5.0.0 (T98, T103)
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          # Sürüm .nvmrc'de, iş akışında değil: geliştirme makinesiyle
+          # CI aynı sürümde koşsun ve tek yerden değişsin.
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      # README'nin ve CLAUDE.md'nin tek komut diye gösterdiği şey bu.
+      # Bağımlılık kurulumu, Docker, roller, migration ve seed dahil hepsi
+      # burada; ayrı bir `pnpm install` adımı bilerek yok, çünkü kullanıcı
+      # da onu ayrıca çalıştırmıyor.
+      - name: Demo kurulumu (kullanıcının çalıştırdığı komut)
+        run: pnpm demo --seed --no-server
+
+      - name: Web derlemesi
+        run: pnpm --filter @stok/web run build
+
+      - name: Playwright tarayıcısı
+        run: pnpm --filter @stok/web exec playwright install --with-deps chromium
+
+      # Sunucuyu Playwright açıp kapatıyor (playwright.config.ts → webServer).
+      # Arka plana atıp `curl` ile beklemek, "açık port hazır demek değil"
+      # hatasını (T59) iş akışında tekrarlamak olurdu.
+      # `@kararsiz` etiketli kapsam DIŞARIDA (T109): Faz 10 arayüz testleri
+      # yazıldı ama koşuların bir kısmında sunucu eylemi sonrası sayfa
+      # render edilmediği için kırmızı yanıyor. Kararsız bir kapı, kısa
+      # sürede kimsenin bakmadığı bir kapıya dönüşür.
+      #
+      # Dosya adıyla dışlamak yerine ETİKET: ad listesi eskidiğinde yeni
+      # yazılan bir test hiç koşmadan öylece kalırdı. Etiketle varsayılan
+      # DAHİL, dışlanan görünür.
+      # AYRI SCRIPT, argüman geçirme YOK. `run test:e2e -- --grep-invert ...`
+      # denendi ve SESSİZCE ÇALIŞMADI: pnpm'in eklediği `--` Playwright'a
+      # konumsal argüman gibi göründü, süzgeç uygulanmadı ve kararsız
+      # kapsam yine koştu. Filtre script'in İÇİNDE olunca geçirilecek bir
+      # argüman kalmıyor.
+      - name: Duman testi
+        run: pnpm --filter @stok/web run test:e2e:ci
+
+      # Kırmızı yandığında ekran görüntüsü ve iz dosyası olmadan uzaktan
+      # teşhis koymak, T61'deki "log yok" durumunun aynısı olur.
+      - name: Hata izleri
+        if: failure()
+        # v5.0.0 (T98, T103)
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        with:
+          name: duman-testi-izleri
+          path: apps/web/test-results/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # ==========================================================================
+  # T96 — WINDOWS
+  #
+  # Proje Windows'ta geliştiriliyor ve CLAUDE.md'de "Windows tuzakları
+  # (yaşandı, tekrar etmesin)" başlıklı ayrı bir bölüm var. `scripts/demo.mjs`
+  # tamamen Windows yüzünden yazıldı (T57). Buna rağmen CI yalnızca ubuntu
+  # üstünde koşuyordu: o tuzakların tekrar etmediğini kimse doğrulamıyordu.
+  #
+  # NE KAPSIYOR: yol ayıracı, kabuk farkları, `next build`in Windows'ta
+  # çözümlemesi, pnpm workspace bağlantıları.
+  #
+  # NE KAPSAMIYOR VE NEDEN: veritabanına dokunan hiçbir şey. GitHub'ın
+  # Windows koşucusunda Linux konteyneri çalışmıyor, yani `postgres:17-alpine`
+  # servis konteyneri de `pnpm demo`nun kaldırdığı Docker da kullanılamıyor.
+  # Bunu Windows'ta yerel bir Postgres kurarak çözmek mümkün ama koşuyu
+  # dakikalarca uzatır; testlerin veritabanı tarafı platformdan bağımsız
+  # olduğu için kazancı düşük.
+  #
+  # `pnpm --filter X <script>` sınıfı bu işle DEĞİL, `test` işindeki statik
+  # taramayla korunuyor: o çağrıların çoğu README ve hata mesajlarının
+  # içinde ve hiçbir iş onları çalıştırmıyor.
+  # ==========================================================================
+  windows:
+    name: Windows (lint + typecheck + derleme)
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+      # v5.1.0 — SHA sabit, etiket taşınabilir (T98, T103)
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+
+      # v5.0.0 — anotasyonlu etiketin altındaki COMMIT SHA (T98, T103)
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320
+
+      # v5.0.0 (T98, T103)
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Bağımlılıklar
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      # Asıl sınav bu: `next build` monorepo paketlerini kaynak TypeScript
+      # olarak tüketiyor ve modül çözümlemesi `next.config.ts`te elle
+      # kuruluyor. Yol ayıracı farkı orada patlarsa yalnızca burada görünür.
       - name: Web derlemesi
         run: pnpm --filter @stok/web run build

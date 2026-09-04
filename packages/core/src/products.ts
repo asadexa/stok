@@ -17,10 +17,10 @@ import {
   withTenant,
 } from '@stok/db'
 import { and, asc, eq, sql } from 'drizzle-orm'
-import { type Actor, requirePermission } from './authz.js'
-import { formatScaled, parseScaled, scaledFromNumber, scaledToNumber } from './numeric.js'
-import { getProduct, type StockRow } from './stock.js'
-import { parseOrThrow } from './validate.js'
+import { type Actor, requirePermission } from './authz'
+import { formatScaled, parseScaled, scaledFromNumber, scaledToNumber } from './numeric'
+import { getProduct, type StockRow } from './stock'
+import { parseOrThrow } from './validate'
 
 /**
  * ============================================================================
@@ -190,6 +190,7 @@ export async function createProduct(
           unit: input.unit,
           category: input.category ?? null,
           brand: input.brand ?? null,
+          imageUrl: input.imageUrl ?? null,
           purchasePrice: money(input.purchasePrice),
           salePrice: money(input.salePrice),
           minStock: qty(input.minStock),
@@ -246,6 +247,7 @@ export async function updateProduct(
   if ('unit' in input) patch.unit = input.unit
   if ('category' in input) patch.category = input.category
   if ('brand' in input) patch.brand = input.brand
+  if ('imageUrl' in input) patch.imageUrl = input.imageUrl
   if ('purchasePrice' in input) patch.purchasePrice = money(input.purchasePrice)
   if ('salePrice' in input) patch.salePrice = money(input.salePrice)
   if ('minStock' in input) patch.minStock = qty(input.minStock)

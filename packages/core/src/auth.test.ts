@@ -10,9 +10,9 @@ import {
   login,
   refreshSession,
   revokeSessions,
-} from './auth.js'
-import type { Actor } from './authz.js'
-import { TEST_DB_NAME } from './test/db-name.js'
+} from './auth'
+import type { Actor } from './authz'
+import { TEST_DB_NAME } from './test/db-name'
 
 /**
  * T13 — kimlik doğrulama.

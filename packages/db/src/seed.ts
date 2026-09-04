@@ -1,11 +1,11 @@
 import { createHash } from 'node:crypto'
 import { config } from 'dotenv'
 import { sql } from 'drizzle-orm'
-import type { MovementReason } from '@stok/shared'
-import { toDelta } from '@stok/shared'
-import { adminDbUnsafe } from './client.js'
-import { hashSecret } from './password.js'
-import { locations, productBarcodes, products, stockMovements, tenants, users } from './schema.js'
+import type { MovementReason, PriceOverrideReason } from '@stok/shared'
+import { reasonPriceBasis, toDelta } from '@stok/shared'
+import { adminDbUnsafe } from './client'
+import { hashSecret } from './password'
+import { locations, productBarcodes, products, stockMovements, tenants, users } from './schema'
 
 config({ path: '../../.env' })
 
@@ -79,6 +79,62 @@ const HIRDAVAT = {
 
 const IN_REASONS: MovementReason[] = ['PURCHASE', 'RETURN_IN', 'OTHER_IN']
 const OUT_REASONS: MovementReason[] = ['SALE', 'SALE', 'SALE', 'DAMAGE', 'USAGE', 'RETURN_OUT']
+
+/**
+ * Bir seed hareketine fiyat alanlarını üretir (T88).
+ *
+ * `reasonPriceBasis` TEK KAYNAK: seed kendi sebep listesini tutsaydı yeni
+ * bir sebep eklendiğinde demo verisi sessizce fiyatsız kalır ve özelliğin
+ * o sebepte çalışmadığı sanılırdı.
+ */
+function seedPrice(
+  reason: MovementReason,
+  purchasePrice: string,
+  salePrice: string,
+): {
+  unitPrice: string | null
+  listPrice: string | null
+  priceSource: string | null
+  priceOverrideReason: string | null
+} {
+  const basis = reasonPriceBasis(reason)
+  // Para el değiştirmedi (fire, kullanım, diğer): fiyat yok.
+  if (basis === null) {
+    return { unitPrice: null, listPrice: null, priceSource: null, priceOverrideReason: null }
+  }
+
+  const list = basis === 'SALE' ? salePrice : purchasePrice
+  if (basis !== 'SALE' || rng() >= OVERRIDE_RATE) {
+    return { unitPrice: list, listPrice: list, priceSource: 'LIST', priceOverrideReason: null }
+  }
+
+  // %2–%12 arası bir indirim. Sabit bir yüzde kullanılsaydı rapordaki
+  // fark sütunu tek bir sayıyı tekrar eder ve gerçek veri gibi durmazdı.
+  const discounted = Number(list) * (1 - (2 + rng() * 10) / 100)
+  return {
+    unitPrice: discounted.toFixed(2),
+    listPrice: list,
+    priceSource: 'MANUAL',
+    priceOverrideReason: pick(SEED_OVERRIDE_REASONS),
+  }
+}
+
+/**
+ * Demo verisinde kasa açığı GERÇEKTEN VAR (T88).
+ *
+ * Her satış liste fiyatından yazılsaydı özellik demoda hiç görünmezdi:
+ * "Sapma Sebebi" sütunu baştan sona boş çıkar, kullanıcı da özelliğin
+ * çalışmadığını sanırdı. Satışların yaklaşık beşte biri listenin altında.
+ */
+const OVERRIDE_RATE = 0.2
+const SEED_OVERRIDE_REASONS: PriceOverrideReason[] = [
+  'TANIDIK',
+  'TANIDIK',
+  'TOPTAN',
+  'KAMPANYA',
+  'YUVARLAMA',
+  'ESKI_STOK',
+]
 
 interface TenantSpec {
   key: string
@@ -265,7 +321,10 @@ async function main() {
           createdAt: openingAt,
           clientCreatedAt: openingAt,
           locationId: p.locationId,
-          unitCost: p.purchasePrice as string,
+          // Devir bir alış değerlemesi: dayanak alış fiyatı, sapma yok.
+          unitPrice: p.purchasePrice as string,
+          listPrice: p.purchasePrice as string,
+          priceSource: 'LIST',
         })
         seq++
 
@@ -308,7 +367,7 @@ async function main() {
             createdAt: at,
             clientCreatedAt: at,
             locationId: p.locationId,
-            unitCost: reason === 'PURCHASE' ? (p.purchasePrice as string) : null,
+            ...seedPrice(reason, p.purchasePrice as string, p.salePrice as string),
           })
           seq++
         }
@@ -340,6 +399,7 @@ async function main() {
               createdAt: at,
               clientCreatedAt: at,
               locationId: p.locationId,
+              ...seedPrice('SALE', p.purchasePrice as string, p.salePrice as string),
             })
             seq++
           }

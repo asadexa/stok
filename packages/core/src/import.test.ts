@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { type TestTenant, seedTestTenant, testAdminDb, testAppDb } from '@stok/db/testing'
 import ExcelJS from 'exceljs'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import type { Actor } from './authz.js'
+import type { Actor } from './authz'
 import {
   IMPORT_ROW_LIMIT,
   type ParsedFile,
@@ -13,10 +13,10 @@ import {
   parseTurkishNumber,
   previewImport,
   templateRows,
-} from './import.js'
-import { getProductDetail, listBarcodes } from './products.js'
-import { listStock } from './stock.js'
-import { TEST_DB_NAME } from './test/db-name.js'
+} from './import'
+import { getProductDetail, listBarcodes } from './products'
+import { listStock } from './stock'
+import { TEST_DB_NAME } from './test/db-name'
 
 /**
  * ============================================================================
@@ -431,5 +431,46 @@ describe('hata raporu ve şablon', () => {
 
   it('varsayılan satır sınırı 2000', () => {
     expect(IMPORT_ROW_LIMIT).toBe(2_000)
+  })
+})
+
+/**
+ * T84 — toplu aktarmada görsel adresi.
+ *
+ * Adres arayüzde bir `<img src>` içine giriyor ve bu dosya DIŞARIDAN geliyor.
+ * Şema kısıtlanmasaydı, hazırladığı Excel'i yükleten biri sayfaya kendi
+ * içeriğini sokabilirdi.
+ */
+describe('T84 - görsel URL sütunu', () => {
+  it('http/https adresi kabul ediliyor', async () => {
+    const sku = uniq('GRS')
+    const result = await preview([
+      'Stok Kodu;Ürün Adı;Barkod;Görsel URL',
+      `${sku};Görselli Ürün;${uniq('869')};https://ornek.com/a.jpg`,
+    ])
+    expect(result.rows[0]?.issues).toEqual([])
+    expect(result.rows[0]?.data?.imageUrl).toBe('https://ornek.com/a.jpg')
+  })
+
+  it('javascript: şeması REDDEDİLİYOR', async () => {
+    const result = await preview([
+      'Stok Kodu;Ürün Adı;Barkod;Görsel URL',
+      `${uniq('GRS')};Kötü Ürün;${uniq('869')};javascript:alert(1)`,
+    ])
+    const row = result.rows[0]
+    expect(row?.issues.some((i) => i.column === 'Görsel URL')).toBe(true)
+    // Sorunlu satır 'error' işaretleniyor ve `data` HİÇ üretilmiyor: kötü
+    // adres onay adımına geçemiyor.
+    expect(row?.action).toBe('error')
+    expect(row?.data).toBeUndefined()
+  })
+
+  it('boş hücre sorun değil, görsel yok demek', async () => {
+    const result = await preview([
+      'Stok Kodu;Ürün Adı;Barkod;Görsel URL',
+      `${uniq('GRS')};Görselsiz;${uniq('869')};`,
+    ])
+    expect(result.rows[0]?.issues).toEqual([])
+    expect(result.rows[0]?.data?.imageUrl).toBeNull()
   })
 })

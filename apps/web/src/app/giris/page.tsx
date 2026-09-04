@@ -1,6 +1,7 @@
 import { AppError, errorText } from '@stok/shared'
 import { redirect } from 'next/navigation'
 import { headers } from 'next/headers'
+import { logServerFault } from '@/server/form'
 import { currentActor, startSession } from '@/server/session'
 
 /**
@@ -18,7 +19,7 @@ import { currentActor, startSession } from '@/server/session'
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ hata?: string; bekle?: string }>
+  searchParams: Promise<{ hata?: string; bekle?: string; bilgi?: string }>
 }) {
   if (await currentActor()) redirect('/panel')
 
@@ -43,6 +44,9 @@ export default async function LoginPage({
       await startSession(email, password, clientIp)
     } catch (err) {
       if (!(err instanceof AppError)) throw err
+      // Sunucu kusuru olan hatalar loga: ekrandaki genel metin operatöre
+      // hiçbir şey söylemiyor, terminaldeki satır teşhisi bitiriyor.
+      logServerFault('giris', err)
       const wait = err.details.retryAfterSeconds
       redirect(`/giris?hata=${err.code}${typeof wait === 'number' ? `&bekle=${wait}` : ''}`)
     }
@@ -54,17 +58,38 @@ export default async function LoginPage({
       <form action={submit} className="w-full max-w-sm space-y-5">
         <div>
           <h1 className="text-2xl font-semibold">Stok Takip</h1>
-          <p className="mt-1 text-sm text-slate-600">Devam etmek için giriş yapın.</p>
+          <p className="mt-1 text-sm text-ink-2">Devam etmek için giriş yapın.</p>
         </div>
 
         {message ? (
           // Renk tek başına anlam taşımıyor: ikon + metin de var.
           <p
             role="alert"
-            className="flex gap-2 rounded-md border border-kritik bg-kritik-bg p-3 text-sm text-kritik"
+            className="flex gap-2 rounded-control border border-kritik bg-kritik-bg p-3 text-sm text-kritik"
           >
             <span aria-hidden>⚠</span>
             <span>{message}</span>
+          </p>
+        ) : null}
+
+        {/*
+          BİLGİ KANALI HATA KANALINDAN AYRI (T75).
+
+          Parola değiştirme başarılı olduğunda tüm oturumlar kapanıyor ve
+          kullanıcı buraya düşüyor. Bunu `hata=` ile taşımak yanlış olurdu:
+          `errorText` tanımadığı kodu "Beklenmeyen bir hata oluştu"ya
+          çeviriyor, yani işlem BAŞARIYLA bittiği hâlde kullanıcı hata
+          görürdü — ve büyük ihtimalle eski parolasıyla girmeyi denerdi.
+        */}
+        {params.bilgi === 'parola' ? (
+          <p className="flex gap-2 rounded-control border border-giris bg-surface p-3 text-sm text-ink-2">
+            <span aria-hidden className="text-giris">
+              ✓
+            </span>
+            <span>
+              Parolanız değiştirildi. Güvenlik için tüm oturumlar kapatıldı;
+              <b> yeni parolanızla</b> giriş yapın.
+            </span>
           </p>
         ) : null}
 
@@ -76,7 +101,7 @@ export default async function LoginPage({
             required
             autoFocus
             autoComplete="username"
-            className="mt-1 h-14 w-full rounded-md border border-slate-300 bg-white px-3 text-base outline-none focus:border-slate-900"
+            className="mt-1 h-14 w-full rounded-control border border-line-control bg-surface px-3 text-base"
           />
         </label>
 
@@ -87,14 +112,14 @@ export default async function LoginPage({
             type="password"
             required
             autoComplete="current-password"
-            className="mt-1 h-14 w-full rounded-md border border-slate-300 bg-white px-3 text-base outline-none focus:border-slate-900"
+            className="mt-1 h-14 w-full rounded-control border border-line-control bg-surface px-3 text-base"
           />
         </label>
 
         {/* 56 px: eldivenli elle basılabilmeli. */}
         <button
           type="submit"
-          className="h-14 w-full rounded-md bg-slate-900 text-base font-medium text-white hover:bg-slate-700"
+          className="h-14 w-full rounded-control bg-accent text-base font-medium text-accent-ink hover:brightness-110"
         >
           Giriş yap
         </button>

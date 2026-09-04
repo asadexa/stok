@@ -8,9 +8,9 @@ import {
 } from '@stok/shared'
 import { type TestTenant, seedTestTenant, testAdminDb, testAppDb } from '@stok/db/testing'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { type Actor, redactPrices, requirePermission } from './authz.js'
-import { createMovement, listMovements } from './movements.js'
-import { TEST_DB_NAME } from './test/db-name.js'
+import { type Actor, redactPrices, requirePermission } from './authz'
+import { createMovement, listMovements } from './movements'
+import { TEST_DB_NAME } from './test/db-name'
 
 /**
  * ============================================================================
@@ -302,34 +302,47 @@ describe('satır 6: hareket geçmişi kapsamı, servis üzerinden', () => {
 describe('satır 5: alış fiyatı ve maliyet gizleme (tehdit S7)', () => {
   beforeAll(async () => {
     const p = tenant.products['M-1']!
-    await createMovement(boss, req(p.barcode, { qty: 2, unitCost: 42.5 }), { db: app.db })
+    await createMovement(boss, req(p.barcode, { qty: 2, unitPrice: 42.5 }), { db: app.db })
   })
 
-  it('admin cevabında unitCost var', async () => {
+  it('admin cevabında unitPrice var', async () => {
     const rows = await listMovements(boss, { productId: tenant.products['M-1']!.id }, { db: app.db })
-    const withCost = rows.find((r) => r.unitCost !== null && r.unitCost !== undefined)
+    const withCost = rows.find((r) => r.unitPrice !== null && r.unitPrice !== undefined)
 
-    expect(withCost?.unitCost).toBe(42.5)
+    expect(withCost?.unitPrice).toBe(42.5)
   })
 
-  it('çalışan cevabında unitCost ALANI HİÇ YOK', async () => {
-    // null bırakmak yetmez: arayüz "fiyat girilmemiş" ile "görmeye
+  it('çalışan cevabında ALIŞ fiyatı ALANI HİÇ YOK, SATIŞ fiyatı var (T88)', async () => {
+    // T88'e kadar kural "sütunu topluca sil"di. Sütun artık iki farklı
+    // şey tutuyor — girişte alış, çıkışta satış — ve kural satır bazına
+    // indi: satış fiyatı ticari sır değil, müşteri zaten biliyor.
+    //
+    // null bırakmak yine yetmez: arayüz "fiyat girilmemiş" ile "görmeye
     // yetkin yok" durumlarını ayırt edemez ve kullanıcıya yanlış bilgi
     // gösterir. Ayrıca değer ağ sekmesinde görünmemeli.
-    await createMovement(staff, req(tenant.products['M-1']!.barcode, { qty: 1, unitCost: 99 }), {
+    await createMovement(staff, req(tenant.products['M-1']!.barcode, { qty: 1, unitPrice: 99 }), {
       db: app.db,
     })
+    await createMovement(
+      staff,
+      req(tenant.products['M-1']!.barcode, { qty: 1, reason: 'SALE', unitPrice: 77 }),
+      { db: app.db },
+    )
     const rows = await listMovements(staff, { productId: tenant.products['M-1']!.id }, { db: app.db })
 
-    expect(rows.length).toBeGreaterThan(0)
-    for (const row of rows) {
-      expect(Object.hasOwn(row, 'unitCost')).toBe(false)
+    const purchases = rows.filter((r) => r.reason === 'PURCHASE')
+    expect(purchases.length).toBeGreaterThan(0)
+    for (const row of purchases) {
+      expect(Object.hasOwn(row, 'unitPrice')).toBe(false)
       // Değer başka bir alana sızmış olabilir; alan adına değil DEĞERE
       // bakıyoruz. Ham JSON içinde '99' aramak flaky'di: satırdaki
       // rastgele UUID'ler bu diziyi kendiliğinden içerebiliyor ve test
       // ayda bir sebepsiz kırmızıya dönüyordu.
       expect(Object.values(row)).not.toContain(99)
     }
+
+    const sale = rows.find((r) => r.reason === 'SALE')
+    expect(sale?.unitPrice).toBe(77)
   })
 
   it('redactPrices üç fiyat alanının hepsini çıkarır', () => {
@@ -338,7 +351,7 @@ describe('satır 5: alış fiyatı ve maliyet gizleme (tehdit S7)', () => {
       name: 'Ürün',
       purchasePrice: 10,
       salePrice: 20,
-      unitCost: 5,
+      unitPrice: 5,
     }
 
     expect(redactPrices(boss, product)).toEqual(product)

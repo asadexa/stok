@@ -2,7 +2,7 @@ import { AppError } from '@stok/shared'
 import { type TestTenant, seedTestTenant, testAdminDb, testAppDb } from '@stok/db/testing'
 import { sql } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { login } from './auth.js'
+import { login } from './auth'
 import {
   LOGIN_EMAIL_POLICY,
   LOGIN_IP_POLICY,
@@ -11,8 +11,8 @@ import {
   pruneAttempts,
   readAttempts,
   recordFailure,
-} from './rate-limit.js'
-import { TEST_DB_NAME } from './test/db-name.js'
+} from './rate-limit'
+import { TEST_DB_NAME } from './test/db-name'
 
 /**
  * ============================================================================

@@ -35,3 +35,12 @@ pnpm-debug.log*
 # Tasarım tuvali çıktısı: 2 MB editör yükü taşıyor, her tohumlamada yeniden üretiliyor.
 design/*.html
 !design/*.dc.html
+
+# Playwright (T93 duman testi)
+test-results/
+playwright-report/
+blob-report/
+.playwright/
+
+# Kapsam raporlari (T101)
+coverage/

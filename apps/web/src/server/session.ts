@@ -3,6 +3,7 @@ import { AppError } from '@stok/shared'
 import { type Actor, TOKEN_TTL, actorFromAccessToken, login, refreshSession } from '@stok/core'
 import { appDb } from '@stok/db'
 import { cookies } from 'next/headers'
+import { cache } from 'react'
 
 /**
  * ============================================================================
@@ -28,6 +29,15 @@ import { cookies } from 'next/headers'
 
 const ACCESS_COOKIE = 'stok_at'
 const REFRESH_COOKIE = 'stok_rt'
+
+interface Session {
+  actor: Actor | null
+  /**
+   * Taze çerez yazılabildi mi. Render sırasında `false` olabilir:
+   * Next.js 15 sayfa render'ında çerez deposunu salt okunur tutuyor.
+   */
+  persisted: boolean
+}
 
 interface CookieOptions {
   httpOnly: true
@@ -59,7 +69,7 @@ interface CookieOptions {
  * kalıyor. Yanlış tarafa düşmek, oturum çerezini düz metin göndermek
  * demek olurdu.
  */
-function secureCookies(): boolean {
+export function secureCookies(): boolean {
   const url = process.env.APP_URL
   if (!url) return true
   try {
@@ -102,8 +112,14 @@ export async function endSession(): Promise<void> {
  *
  * `null` dönüyor, fırlatmıyor: çağıran yer "giriş ekranına yönlendir" ile
  * "403 döndür" arasında kendisi karar versin.
+ *
+ * `cache()` İLE SARMALI VE BU ZORUNLU. Kabuk artık düzende (layout), sayfa
+ * ise kendi sorgusu için aktörü yine istiyor: tek istekte iki çağrı oluyor.
+ * Sarmalanmasaydı access token'ın süresi dolduğu istekte yenileme İKİ KEZ
+ * çalışır, refresh token iki kez döndürülürdü. `cache()` istek başına tek
+ * çalıştırma garantisi veriyor; yan etkisi (çerez yazma) de bir kez oluyor.
  */
-export async function currentActor(): Promise<Actor | null> {
+const resolveSession = cache(async function resolveSession(): Promise<Session> {
   const jar = await cookies()
   const access = jar.get(ACCESS_COOKIE)?.value
 
@@ -114,25 +130,105 @@ export async function currentActor(): Promise<Actor | null> {
       if (err instanceof AppError && err.code === 'TOKEN_EXPIRED') return null
       return null
     })
-    if (actor) return actor
+    if (actor) return { actor, persisted: true }
   }
 
   const refresh = jar.get(REFRESH_COOKIE)?.value
-  if (!refresh) return null
+  if (!refresh) return { actor: null, persisted: true }
 
   const renewed = await refreshSession({ refreshToken: refresh }, { db: appDb() }).catch(
     () => null,
   )
-  if (!renewed) return null
+  if (!renewed) return { actor: null, persisted: true }
+
+  // ÇEREZ YAZMA RENDER SIRASINDA BAŞARISIZ OLABİLİR VE BU NORMALDİR.
+  //
+  // Next.js 15 çerez değiştirmeye yalnızca Server Action ve Route Handler
+  // içinde izin veriyor; bir sayfa render edilirken çerez deposu SALT
+  // OKUNUR ve `set` fırlatıyor.
+  //
+  // Sarmalanmasaydı ne olurdu: access token'ın ömrü 15 dakika. Kullanıcı
+  // giriş yaptıktan 15 dakika sonra HERHANGİ bir sayfayı açtığında bu satır
+  // fırlatır ve ekranda 500 hatası görürdü. Yani kodun tam olarak önlemek
+  // istediği şey ("kullanıcıyı 15 dakikada bir dışarı atma") çok daha kötü
+  // bir biçimde gerçekleşirdi: dışarı atılmak yerine çökme.
+  //
+  // YUTMAK NEDEN GÜVENLİ: `refreshSession` yenileme token'ını DÖNDÜRMÜYOR
+  // (auth.ts) — imzayı ve `tokenVersion`'ı doğrulayıp yeni token üretiyor,
+  // eldeki yenileme token'ı kendi süresi dolana (30 gün) veya oturum iptal
+  // edilene kadar geçerli kalıyor. Yani yazamamak bir şey kaybettirmiyor:
+  // istek kendi taze token'ıyla tamamlanıyor, çerez ise bir sonraki sunucu
+  // eyleminde (form gönderimi, çıkış) veya route handler'da tazeleniyor.
+  //
+  // BEDELİ: çerez tazelenene kadar her render bir yenileme sorgusu yapıyor.
+  // Kalıcı çözüm yenilemeyi render'dan çıkarmak (T87).
+  let persisted = true
+  try {
+    jar.set(ACCESS_COOKIE, renewed.tokens.accessToken, cookieOptions(TOKEN_TTL.accessSeconds))
+    jar.set(REFRESH_COOKIE, renewed.tokens.refreshToken, cookieOptions(TOKEN_TTL.refreshSeconds))
+  } catch {
+    // Salt okunur çerez deposu (render). İstek yine de tamamlanıyor; taze
+    // çerezi istemci `/oturum/yenile` üzerinden yazdıracak (T87).
+    persisted = false
+  }
+
+  return {
+    actor: {
+      tenantId: renewed.user.tenantId,
+      userId: renewed.user.userId,
+      role: renewed.user.role,
+    },
+    persisted,
+  }
+})
+
+/**
+ * İsteğin sahibini çözer. `null` dönüyor, fırlatmıyor: çağıran yer
+ * "giriş ekranına yönlendir" ile "403 döndür" arasında kendisi karar versin.
+ */
+export async function currentActor(): Promise<Actor | null> {
+  return (await resolveSession()).actor
+}
+
+/**
+ * Bu istekte oturum yenilendi ama taze çerez YAZILAMADI mı?
+ *
+ * `true` ise sayfa render sırasında yenileme yaptı ve çerez salt okunurdu.
+ * Kabuk bunu görünce istemciye küçük bir işaret basıyor; istemci de
+ * `POST /oturum/yenile` ile çerezi kalıcılaştırıyor (T87).
+ *
+ * Yapılmasaydı ne olurdu: access çerezi süresi dolmuş hâlde kalır ve SALT
+ * GEZİNEN bir kullanıcı (form göndermeyen) her sayfa açılışında bir yenileme
+ * sorgusu tetiklerdi — kalıcı olarak, çünkü render hiçbir zaman çerezi
+ * yazamıyor. Sunucu eylemi çalıştıran kullanıcıda sorun kendiliğinden
+ * kapanıyordu; salt gezinende kapanmıyordu.
+ */
+export async function sessionNeedsPersist(): Promise<boolean> {
+  const { actor, persisted } = await resolveSession()
+  return actor !== null && !persisted
+}
+
+/**
+ * Taze token'ları çereze yazar. YALNIZCA route handler'dan çağrılır —
+ * çerez yazma orada serbest.
+ *
+ * `currentActor()` zaten yenilemeyi yapıyor; buradaki iş sadece sonucu
+ * kalıcılaştırmak. Ayrı bir yenileme daha yapmıyoruz çünkü `resolveSession`
+ * `cache()` ile sarmalı ve aynı istekte ikinci kez çalışmıyor.
+ */
+export async function persistSession(): Promise<boolean> {
+  const jar = await cookies()
+  const refresh = jar.get(REFRESH_COOKIE)?.value
+  if (!refresh) return false
+
+  const renewed = await refreshSession({ refreshToken: refresh }, { db: appDb() }).catch(
+    () => null,
+  )
+  if (!renewed) return false
 
   jar.set(ACCESS_COOKIE, renewed.tokens.accessToken, cookieOptions(TOKEN_TTL.accessSeconds))
   jar.set(REFRESH_COOKIE, renewed.tokens.refreshToken, cookieOptions(TOKEN_TTL.refreshSeconds))
-
-  return {
-    tenantId: renewed.user.tenantId,
-    userId: renewed.user.userId,
-    role: renewed.user.role,
-  }
+  return true
 }
 
 /** Oturum yoksa fırlatır. Korumalı sayfa ve route'ların ilk satırı. */

@@ -2,9 +2,9 @@ import { randomUUID } from 'node:crypto'
 import { AppError, type MovementReason } from '@stok/shared'
 import { type TestTenant, seedTestTenant, testAdminDb, testAppDb } from '@stok/db/testing'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { checkStockInvariant, createMovement } from './movements.js'
-import type { Actor } from './authz.js'
-import { TEST_DB_NAME } from './test/db-name.js'
+import { checkStockInvariant, createMovement } from './movements'
+import type { Actor } from './authz'
+import { TEST_DB_NAME } from './test/db-name'
 
 /**
  * ============================================================================
@@ -61,7 +61,11 @@ function makeRng(seed: number) {
   }
 }
 
-const IN_REASONS: MovementReason[] = ['PURCHASE', 'RETURN_IN', 'OPENING', 'OTHER_IN']
+// `OPENING` listede DEĞİL: T89 devirde birim fiyat zorunlu kıldı ve bu test
+// fiyatla ilgilenmiyor — amacı 1000 rastgele harekette defter ile
+// projeksiyonun eşit kalması. Fiyat alanı eklemek testin konusunu bulandırır;
+// devrin fiyat kuralı `prices.test.ts`'in işi.
+const IN_REASONS: MovementReason[] = ['PURCHASE', 'RETURN_IN', 'OTHER_IN']
 const OUT_REASONS: MovementReason[] = ['SALE', 'DAMAGE', 'RETURN_OUT', 'USAGE', 'OTHER_OUT']
 
 describe('T11 - invariant', () => {
@@ -133,7 +137,7 @@ describe('T11 - invariant', () => {
         idempotencyKey: randomUUID(),
         barcode: p.barcode,
         qty: 5,
-        reason: 'OPENING',
+        reason: 'PURCHASE',
         clientCreatedAt: new Date().toISOString(),
       },
       { db: app.db },

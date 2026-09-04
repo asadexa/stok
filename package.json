@@ -5,22 +5,26 @@
   "type": "module",
   "packageManager": "pnpm@11.0.8",
   "engines": {
-    "node": ">=22"
+    "node": ">=22 <25"
   },
   "scripts": {
-    "db:up": "docker compose up -d",
     "db:down": "docker compose down",
-    "db:reset": "docker compose down -v && docker compose up -d",
     "db:logs": "docker compose logs -f db",
-    "typecheck": "pnpm -r --if-present typecheck",
-    "test": "pnpm -r --if-present test",
-    "lint": "pnpm -r --if-present lint",
+    "db:reset": "docker compose down -v && docker compose up -d && node scripts/wait-for-db.mjs",
+    "db:up": "docker compose up -d && node scripts/wait-for-db.mjs",
     "demo": "node scripts/demo.mjs",
     "dev": "pnpm --filter @stok/web run dev",
+    "lint": "biome lint .",
+    "lint:fix": "biome lint . --write",
+    "migrate": "pnpm --filter @stok/db run migrate",
     "seed": "pnpm --filter @stok/db run seed",
-    "migrate": "pnpm --filter @stok/db run migrate"
+    "test": "pnpm -r --if-present test",
+    "test:coverage": "pnpm -r --if-present test:coverage",
+    "typecheck": "pnpm -r --if-present typecheck"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.11",
+    "@vitest/coverage-v8": "^3.2.7",
     "typescript": "^5.7.3"
   }
 }

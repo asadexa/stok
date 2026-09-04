@@ -67,10 +67,21 @@ işletmenin tek bir ürününü bile göremezsiniz (veritabanı seviyesinde RLS)
   emülasyonu) kullanmayı bekliyor.
 - **Mobil uygulama yok.** Barkod okutma, offline kuyruk, PIN ile hızlı
   kullanıcı geçişi — hepsi Faz 5.
-- **Arka plan işçisi çalışmıyor.** 20.000 satırın üstündeki bir export
-  kuyruğa girer ama kimse işlemez (cron T34'e bağlı). Örnek veride bu eşiğe
-  ulaşılmıyor.
-- **E-posta gönderilmiyor.** SMTP ayarlanmadı.
+- **Gün sonu raporu kendiliğinden çıkmaz.** Kod hazır (T34) ama demoda
+  zamanlayıcı yok. Elle tetiklemek için `.env` içine `CRON_SECRET` yazın
+  (`openssl rand -base64 32`) ve şunu çalıştırın:
+
+  ```bash
+  curl -X POST -H "Authorization: Bearer $CRON_SECRET" \
+       http://localhost:3000/api/cron
+  ```
+
+  Aynı tur kuyruktaki export işlerini de işler ve stok invariant'ını
+  denetler. Turun cevabı JSON; invariant kırıksa ya da bir işin deneme
+  hakkı bittiyse HTTP 500 döner.
+- **E-posta gönderilmiyor.** SMTP ayarlanmadı, yani yukarıdaki tur çalışır
+  ama rapor teslim edilemez ve iş "başarısız" olarak Sistem Sağlığı
+  kartında görünür — bu bilerek: gönderilemeyen rapor sessiz kalmamalı.
 
 ---
 
@@ -82,10 +93,20 @@ işletmenin tek bir ürününü bile göremezsiniz (veritabanı seviyesinde RLS)
 ```bash
 pnpm install
 docker compose up -d              # veya 5433 portunda kendi Postgres'iniz
+pnpm --filter @stok/db run init   # pg_trgm eklentisi + stok_app rolü
 pnpm --filter @stok/db run migrate
 pnpm --filter @stok/db run seed
 pnpm --filter @stok/web run dev
 ```
+
+**Docker zorunlu değil.** Kendi PostgreSQL kurulumunuz 5433 portunda
+çalışıyorsa `docker compose up -d` adımını atlayın; `init` adımı eklentiyi
+ve rolü oraya da uygular. Docker kullanıyorsanız bu adım zaten uygulanmış
+olanı tekrar uygular — üç ifade de idempotent, zararı yok.
+
+Sunucu, `DATABASE_URL` veya `AUTH_SECRET` eksikse **açılmıyor** ve neyin
+eksik olduğunu konsola yazıyor. Bunlar olmadan uygulama açılıp ilk giriş
+denemesinde düşerdi ve ekranda sadece "SERVER_ERROR" görünürdü.
 
 `--filter` ile çağırırken **`run` kelimesi zorunlu**: pnpm onsuz ilk kelimeyi
 script değil çalıştırılabilir sayıyor ve Windows'ta
@@ -93,6 +114,8 @@ script değil çalıştırılabilir sayıyor ve Windows'ta
 
 | Komut | Ne yapar |
 |---|---|
+| `pnpm db:up` | Veritabanını açar ve **hazır olana kadar bekler** |
+| `pnpm db:reset` | Veriyi silip veritabanını sıfırdan kurar |
 | `pnpm test` | Tüm testler (gerçek PostgreSQL gerekir) |
 | `pnpm typecheck` | Dört paketin tip kontrolü |
 | `pnpm --filter @stok/db run generate` | Şema değişikliğinden migration üretir |

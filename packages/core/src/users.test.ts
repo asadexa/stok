@@ -1,16 +1,18 @@
 import { type TestTenant, seedTestTenant, testAdminDb, testAppDb } from '@stok/db/testing'
 import { AppError } from '@stok/shared'
 import { beforeAll, afterAll, describe, expect, it } from 'vitest'
-import type { Actor } from './authz.js'
-import { login, refreshSession } from './auth.js'
+import type { Actor } from './authz'
+import { login, refreshSession } from './auth'
 import {
+  changeOwnPassword,
   createUser,
+  currentProfile,
   getTenantUser,
   listTenantUsers,
   setUserPassword,
   updateUser,
-} from './users.js'
-import { TEST_DB_NAME } from './test/db-name.js'
+} from './users'
+import { TEST_DB_NAME } from './test/db-name'
 
 /**
  * ============================================================================
@@ -300,5 +302,103 @@ describe('T24 - pasifleştirme ve parola', () => {
     await expect(
       setUserPassword(staff, tenant.adminUserId, { password: 'parola1234' }, opts),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' })
+  })
+})
+
+/**
+ * ============================================================================
+ * T75 — KENDİ PROFİLİ VE PAROLASI
+ *
+ * İki şey sınanıyor ve ikincisi güvenlik:
+ *
+ *   1. Çalışan KENDİ adını okuyabilmeli. `getTenantUser` bunu yapamıyor
+ *      (movement:read:all istiyor), o yüzden ayrı fonksiyon var.
+ *   2. Mevcut parola YANLIŞSA değişiklik olmamalı. Bu, açık kalmış bir
+ *      oturumun başına geçen birinin hesabı ele geçirmesini engelleyen
+ *      tek kontrol.
+ * ============================================================================
+ */
+describe('T75 - kendi profili ve parolası', () => {
+  it('çalışan kendi adını ve e-postasını okuyabiliyor', async () => {
+    // getTenantUser bunu YAPAMIYOR: movement:read:all istiyor.
+    await expect(getTenantUser(staff, staff.userId, opts)).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    })
+
+    const profile = await currentProfile(staff, opts)
+    expect(profile).toMatchObject({ id: tenant.staffUserId, role: 'STAFF' })
+    expect(profile?.email).toBe(tenant.staffEmail)
+  })
+
+  it('profil sorgusu HER ZAMAN oturum sahibini döndürüyor', async () => {
+    // Fonksiyonun hedef parametresi YOK; çağıran yer başkasının kaydına
+    // genişletemiyor. Bu test o sözleşmeyi kilitliyor: ileride bir
+    // `userId` parametresi eklenirse burası kırmızı yanar.
+    const bossProfile = await currentProfile(boss, opts)
+    const staffProfile = await currentProfile(staff, opts)
+    expect(bossProfile?.id).toBe(tenant.adminUserId)
+    expect(staffProfile?.id).toBe(tenant.staffUserId)
+  })
+
+  it('yanlış mevcut parola değişikliği REDDEDİYOR', async () => {
+    const t = await seedTestTenant(admin.db, 'pw-wrong')
+    const who: Actor = { tenantId: t.tenantId, userId: t.staffUserId, role: 'STAFF' }
+
+    await expect(
+      changeOwnPassword(who, { currentPassword: 'bu-parola-yanlis', password: 'yeniparola1' }, opts),
+    ).rejects.toMatchObject({ code: 'INVALID_CREDENTIALS' })
+
+    // ESKİ PAROLA HÂLÂ ÇALIŞMALI: reddedilen istek hiçbir şey değiştirmemeli.
+    await expect(
+      login({ email: t.staffEmail, password: t.password }, opts),
+    ).resolves.toBeTruthy()
+  })
+
+  it('doğru mevcut parolayla değişiyor ve eski parola geçersizleşiyor', async () => {
+    const t = await seedTestTenant(admin.db, 'pw-ok')
+    const who: Actor = { tenantId: t.tenantId, userId: t.staffUserId, role: 'STAFF' }
+
+    await changeOwnPassword(
+      who,
+      { currentPassword: t.password, password: 'yepyeniparola9' },
+      opts,
+    )
+
+    await expect(
+      login({ email: t.staffEmail, password: t.password }, opts),
+    ).rejects.toMatchObject({ code: 'INVALID_CREDENTIALS' })
+
+    await expect(
+      login({ email: t.staffEmail, password: 'yepyeniparola9' }, opts),
+    ).resolves.toBeTruthy()
+  })
+
+  it('parola değişince eski oturumlar geçersizleşiyor', async () => {
+    // Parola değiştirmenin asıl sebebi çoğu zaman "birinin eline geçti"
+    // şüphesi. O an açık kalan diğer oturumlar yaşasaydı, değişiklik
+    // saldırganı dışarı atmazdı.
+    const t = await seedTestTenant(admin.db, 'pw-revoke')
+    const who: Actor = { tenantId: t.tenantId, userId: t.staffUserId, role: 'STAFF' }
+
+    const session = await login({ email: t.staffEmail, password: t.password }, opts)
+
+    await changeOwnPassword(
+      who,
+      { currentPassword: t.password, password: 'baskabirparola7' },
+      opts,
+    )
+
+    await expect(
+      refreshSession({ refreshToken: session.tokens.refreshToken }, opts),
+    ).rejects.toMatchObject({ code: 'TOKEN_INVALID' })
+  })
+
+  it('kısa parola şema tarafından reddediliyor', async () => {
+    const t = await seedTestTenant(admin.db, 'pw-short')
+    const who: Actor = { tenantId: t.tenantId, userId: t.staffUserId, role: 'STAFF' }
+
+    await expect(
+      changeOwnPassword(who, { currentPassword: t.password, password: 'kisa' }, opts),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' })
   })
 })

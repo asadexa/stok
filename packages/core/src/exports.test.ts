@@ -5,7 +5,7 @@ import { type TestTenant, seedTestTenant, testAdminDb, testAppDb } from '@stok/d
 import ExcelJS from 'exceljs'
 import { sql } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import type { Actor } from './authz.js'
+import type { Actor } from './authz'
 import {
   INLINE_ROW_LIMIT,
   QUEUED_ROW_LIMIT,
@@ -13,11 +13,11 @@ import {
   exportMovements,
   exportStock,
   planExport,
-} from './exports.js'
-import { RETRY_DELAY_SECONDS, getJob, listFailedJobs, listJobs, runQueuedJobs } from './jobs.js'
-import { createInMemoryTransport } from './mail.js'
-import { createMovement } from './movements.js'
-import { TEST_DB_NAME } from './test/db-name.js'
+} from './exports'
+import { RETRY_DELAY_SECONDS, getJob, listFailedJobs, listJobs, runQueuedJobs } from './jobs'
+import { createInMemoryTransport } from './mail'
+import { createMovement } from './movements'
+import { TEST_DB_NAME } from './test/db-name'
 
 /**
  * ============================================================================
@@ -56,7 +56,7 @@ beforeAll(async () => {
       barcode: tenant.products['EX-1']!.barcode,
       qty: 40,
       reason: 'PURCHASE',
-      unitCost: 3.5,
+      unitPrice: 3.5,
       clientCreatedAt: new Date().toISOString(),
     },
     { db: app.db },
@@ -117,8 +117,20 @@ async function asInline(promise: Promise<Awaited<ReturnType<typeof exportStock>>
   return res
 }
 
+/**
+ * Bu testin KENDİ kiracısındaki iş sayısı — veritabanındaki toplam DEĞİL.
+ *
+ * Test veritabanı yirmi dosyayla paylaşılıyor ve cron katmanı (T34) HER
+ * kiracıya iş açıyor. Global sayım bugün çalışıyor (dosyalar sırayla
+ * koşuyor, yani `before`/`after` arasına başka bir yazan giremiyor) ama
+ * kırılganlığı bir sonraki paralelleştirmeye kadar saklı: sayım yabancı
+ * satırlara bağımlı olduğu anda, kendi davranışı kusursuz bir test yabancı
+ * bir dosya yüzünden düşer. Bu tam olarak T113'ün tarif ettiği sınıf.
+ */
 async function jobCount(): Promise<number> {
-  const rows = await admin.db.execute<{ n: string }>(sql`SELECT count(*)::text AS n FROM background_jobs`)
+  const rows = await admin.db.execute<{ n: string }>(
+    sql`SELECT count(*)::text AS n FROM background_jobs WHERE tenant_id = ${tenant.tenantId}`,
+  )
   return Number([...rows][0]?.n ?? 0)
 }
 

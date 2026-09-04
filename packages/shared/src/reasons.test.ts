@@ -5,7 +5,7 @@ import {
   reasonsCheckConstraint,
   selectableReasons,
   toDelta,
-} from './reasons.js'
+} from './reasons'
 
 describe('sebep kodları', () => {
   it('her sebebin yönü, Türkçe etiketi ve seçilebilirlik bayrağı var', () => {

@@ -4,6 +4,7 @@
  *
  *   pnpm demo          örnek veri zaten varsa dokunmaz
  *   pnpm demo --seed   veritabanını sıfırlayıp örnek veriyi yeniden yükler
+ *   pnpm demo --no-server  kurulumu yapar, sunucuyu BAŞLATMAZ (CI, betikler)
  *
  * NEDEN NODE, BASH DEĞİL. Önceki sürüm bir `.sh` dosyasıydı ve Windows'ta
  * hiç çalışmıyordu: CMD `./scripts/demo.sh` satırını tanımıyor, Git Bash
@@ -17,10 +18,10 @@
 
 import { spawn, spawnSync } from 'node:child_process'
 import { copyFileSync, existsSync, readFileSync } from 'node:fs'
-import { createConnection } from 'node:net'
 import { dirname, join } from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
+import { composeContainerId, portOpen, waitForDatabase } from './wait-for-db.mjs'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 process.chdir(ROOT)
@@ -42,8 +43,6 @@ function die(message) {
   console.error(`\n${paint('0;31', `✗ ${message}`)}\n`)
   process.exit(1)
 }
-
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 // ---------------------------------------------------------------------------
 // Komut çalıştırma
@@ -87,26 +86,6 @@ const pnpmScript = (pkg, script) => run('pnpm', ['--filter', pkg, 'run', script]
 // Veritabanı yoklaması
 // ---------------------------------------------------------------------------
 
-/**
- * Portu TCP ile yokluyoruz, `pg_isready` ile değil: `pg_isready` Postgres
- * istemci paketiyle geliyor ve Docker kullanan bir Windows makinesinde
- * kurulu olmuyor. Önceki bash sürümü buna güvendiği için o makinelerde
- * "çalışan Postgres yok" deyip Docker yoluna sapıyordu.
- */
-function portOpen(port, host = '127.0.0.1', timeoutMs = 1000) {
-  return new Promise((resolve) => {
-    const socket = createConnection({ port, host })
-    const finish = (value) => {
-      socket.destroy()
-      resolve(value)
-    }
-    socket.setTimeout(timeoutMs)
-    socket.once('connect', () => finish(true))
-    socket.once('timeout', () => finish(false))
-    socket.once('error', () => finish(false))
-  })
-}
-
 /** `.env` dosyasını okur. Değer tırnaklıysa tırnakları soyar. */
 function readEnvFile(path) {
   const values = {}
@@ -126,7 +105,24 @@ function readEnvFile(path) {
 // ---------------------------------------------------------------------------
 
 async function main() {
-  const reseedRequested = process.argv.slice(2).includes('--seed')
+  const flags = process.argv.slice(2)
+  const reseedRequested = flags.includes('--seed')
+
+  // CI ve betikler için: kurulumu yap, sunucuyu başlatma. Sunucu ön planda
+  // kaldığı için bir iş akışı adımı olarak "pnpm demo" asla bitmezdi.
+  const noServer = flags.includes('--no-server')
+
+  // Yazım hatasını SESSİZ GEÇME. "--noserver" yazılsaydı bayrak yok sayılır,
+  // sunucu ön planda açılır ve CI zaman aşımına kadar beklerdi; logda da
+  // hiçbir ipucu olmazdı.
+  const knownFlags = ['--seed', '--no-server']
+  const unknownFlags = flags.filter((f) => !knownFlags.includes(f))
+  if (unknownFlags.length) {
+    die(
+      'Bilinmeyen seçenek: ' + unknownFlags.join(' ') + '\n' +
+        '  Kullanım: pnpm demo [--seed] [--no-server]',
+    )
+  }
 
   // -------------------------------------------------------------------------
   step('Gereksinimler')
@@ -170,35 +166,38 @@ async function main() {
   // Çalışan bir Postgres varsa ona bağlanıyoruz; yoksa Docker ile açıyoruz.
   // Docker'ı zorunlu tutmak, elinde zaten Postgres olan kullanıcıyı gereksiz
   // yere ikinci bir kuruluma sokardı.
-  if (await portOpen(dbPort)) {
-    ok(`localhost:${dbPort} üzerinde çalışan bir Postgres bulundu`)
-  } else if (quiet('docker', ['info'])) {
-    if (!quiet('docker', ['compose', 'up', '-d'])) {
-      die("docker compose başarısız. 'docker compose up -d' çıktısına bakın.")
-    }
+  const alreadyUp = await portOpen(dbPort)
 
-    process.stdout.write('  Hazır olması bekleniyor')
-    let ready = false
-    for (let attempt = 0; attempt < 30; attempt++) {
-      // Konteynerin İÇİNDEN soruyoruz: `pg_isready` orada her zaman var ve
-      // açık bir portun aksine gerçekten hizmet verdiğini söylüyor.
-      if (quiet('docker', ['compose', 'exec', '-T', 'db', 'pg_isready', '-U', 'postgres', '-d', 'stok'])) {
-        ready = true
-        break
-      }
-      process.stdout.write('.')
-      await sleep(1000)
-    }
-    process.stdout.write('\n')
-
-    if (!ready) die("Veritabanı 30 saniyede açılmadı. 'docker compose logs db' ile bakın.")
-    ok('Veritabanı hazır (Docker)')
-  } else {
-    die(`Ne çalışan bir Postgres ne de Docker bulundu.
+  if (!alreadyUp) {
+    if (!quiet('docker', ['info'])) {
+      die(`Ne çalışan bir Postgres ne de Docker bulundu.
   Seçenek 1: Docker Desktop'ı kurup açın, sonra bu komutu tekrar çalıştırın.
   Seçenek 2: Kendi Postgres'inizi ${dbPort} portunda çalıştırın ve .env içindeki
              DATABASE_URL / MIGRATION_DATABASE_URL satırlarını ona göre düzenleyin.`)
+    }
+    if (!quiet('docker', ['compose', 'up', '-d'])) {
+      die("docker compose başarısız. 'docker compose up -d' çıktısına bakın.")
+    }
   }
+
+  // AÇIK PORT "HAZIR" DEMEK DEĞİL, ve bu ayrım bir kullanıcı testini
+  // bitirdi: Docker portu konteyner başlar başlamaz yayınlıyor, arkadaki
+  // Postgres hâlâ `initdb` ile uğraşırken TCP bağlantısı kuruluyor ama
+  // sorgu reddediliyor. Beklemeden migrate'e geçilirse drizzle-kit hatayı
+  // yutuyor ve geriye anlamsız bir "Exit status 1" kalıyor.
+  //
+  // Zaten hazır bir veritabanında döngü ilk denemede dönüyor: bedeli yok.
+  process.stdout.write('  Hazır olması bekleniyor')
+  const ready = await waitForDatabase(dbPort, { onTick: () => process.stdout.write('.') })
+  process.stdout.write('\n')
+  if (!ready) {
+    die(
+      composeContainerId()
+        ? "Veritabanı 60 saniyede açılmadı. 'docker compose logs db' ile bakın."
+        : `localhost:${dbPort} adresindeki Postgres yanıt vermiyor.`,
+    )
+  }
+  ok(alreadyUp ? `localhost:${dbPort} üzerindeki Postgres hazır` : 'Veritabanı hazır (Docker)')
 
   // -------------------------------------------------------------------------
   step('Bağımlılıklar')
@@ -207,6 +206,22 @@ async function main() {
     die('pnpm install başarısız. Elle görmek için: pnpm install')
   }
   ok('Paketler kurulu')
+
+  // -------------------------------------------------------------------------
+  step('Veritabanı kurulumu')
+  // -------------------------------------------------------------------------
+  // `pg_trgm` eklentisi ve `stok_app` rolü. Docker bunları konteyner İLK
+  // KEZ oluşturulurken kendisi uyguluyor, ama kendi Postgres'ini kurmuş
+  // biri için hiçbir yerde uygulanmıyordu ve migration "stok_app rolü yok"
+  // diye düşüyordu. Yani Docker gereksiz yere ZORUNLU haldeydi.
+  //
+  // Her açılışta koşuyor: üç ifade de idempotent. "Kuruldu mu" bayrağı
+  // tutmuyoruz — tutulan her bayrak gerçekle ayrışabilecek ikinci bir
+  // kaynaktır.
+  if (pnpmScript('@stok/db', 'init').status !== 0) {
+    die('Veritabanı kurulumu başarısız.\n  Elle görmek için: pnpm --filter @stok/db run init')
+  }
+  ok('Eklenti ve roller yerinde')
 
   // -------------------------------------------------------------------------
   step("Migration'lar")
@@ -255,6 +270,14 @@ async function main() {
 
   Neyi deneyebilirsiniz ve neyi DENEYEMEZSİNİZ: README.md → "Demo"
 `)
+  if (noServer) {
+    // Kurulum bitti; sunucuyu başlatmak çağıranın işi. CI duman testi (T93)
+    // sunucuyu Playwright üzerinden kendisi açıp kapatıyor. Burada ön planda
+    // bir süreç bırakmak iş akışını zaman aşımına kadar kilitlerdi.
+    console.log(paint('0;34', '▶ Kurulum tamam, sunucu başlatılmadı (--no-server)'))
+    return
+  }
+
   console.log(paint('0;34', '▶ Sunucu başlatılıyor (durdurmak için Ctrl+C)\n'))
 
   // Sunucu ön planda kalıyor ve çıkış kodunu devralıyoruz: `pnpm demo`

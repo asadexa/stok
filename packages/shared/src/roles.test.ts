@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { PERMISSIONS, ROLE_VALUES, can, permissionsOf, rolesCheckConstraint } from './roles.js'
+import { PERMISSIONS, ROLE_VALUES, can, permissionsOf, rolesCheckConstraint } from './roles'
 
 describe('yetki matrisi (PLAN.md Bölüm 4)', () => {
   it('admin her şeyi yapabilir', () => {

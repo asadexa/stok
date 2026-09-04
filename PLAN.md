@@ -857,17 +857,21 @@ apps/mobile       henüz yok (Faz 5)
 servis katmanı `apps/web` içinde düşünülmüştü. Ayrı pakete alındı: tek yazma kapısının
 Next.js olmadan test edilebilmesi gerekiyor ve cron işleri de aynı kapıyı çağıracak.
 
-**Test durumu:** 316 test yeşil (shared 54, db 46, core 216). Entegrasyon testleri gerçek
+**Test durumu:** 546 test yeşil (shared 56, db 53, core 385, web 52). Entegrasyon testleri gerçek
 PostgreSQL'e koşuyor; her paket kendi test veritabanını sıfırdan kuruyor.
 
 **CI:** `.github/workflows/ci.yml` — her push ve PR'da typecheck, migration
 drift kontrolü ve tüm test paketi, `postgres:17` servis konteyneriyle koşuyor.
 T42 (deploy pipeline) hâlâ açık; bu sadece doğrulama tarafı.
+CI incelemesi (2026-08-30) iki P1 boşluk buldu: kurulumdan girişe giden yol
+hiç yürünmüyor (T93) ve `apps/web` sıfır testle sessizce atlanıyor (T94).
+Tamamı Faz 11 altında, T93-T102.
 
-**Açık uçlar (ikisi de T34'e bağlı):**
-- `auth_prune_attempts()` yazıldı ama çağıran yok; `auth_attempts` yavaşça büyür.
-- `runQueuedJobs()` yazıldı ama çağıran cron yok; kuyruğa alınan export işleri
-  bir işçi çalıştırılana kadar QUEUED bekler.
+**Açık uçlar KAPANDI (T34).** `POST /api/cron` her turda kuyruğu işliyor ve
+`auth_prune_attempts()`'i çağırıyor. Kalan koşul kod değil kurulum: zamanlayıcı
+o ucu vurmuyorsa hiçbiri çalışmaz. `CRON_SECRET` tanımsızsa uygulama açılırken
+uyarıyor (`next.config.ts`) — sessiz kalsaydı, raporun hiç çıkmadığı ilk gün
+değil aylar sonra fark edilirdi.
 
 Yeniden kullanılabilecek **sistem** var (ERPNext, InvenTree) ve D1'de bilinçli olarak
 sıfırdan yazma seçildi. Gerekçe: gerçek fark Türkçe 5 dakikada öğrenilen arayüz ve
@@ -951,8 +955,9 @@ Bu incelemenin bulgularından türetildi. Efor: insan ekibi / Claude Code.
     T32 PIN kilitlemesi (D-2.5) aynı depoyu farklı politikayla kullanacak.
   - Tavan bilinçli: sınırsız artan kilit, saldırganın meşru kullanıcıyı kalıcı
     olarak dışarıda bırakmasına izin verirdi.
-  - `auth_prune_attempts()` var ama HENÜZ ÇAĞRILMIYOR; gün sonu cron'una (T34)
-    bağlanacak, yoksa tablo yavaşça büyür.
+  - `auth_prune_attempts()` T34'te gün sonu cron'unun bakım adımına bağlandı:
+    her turda 7 günden eski sayaçlar siliniyor (kilit penceresi en fazla
+    15 dk, daha eskisi yalnızca yer kaplıyor).
 
 ### Faz 3: Kritik açıkların kapatılması
 
@@ -1058,7 +1063,7 @@ G1, G2 ve G4 kapandı. G3 (yazıcı) TODOS E5'e bağlı, aşağıda gerekçesi y
   - Yedi artboard: Kurallar, Renk, Tipografi, Bileşenler + uygulanmış
     Panel / Stok / Hareket ekranları.
 
-- [ ] **T55 (P2, human: ~2sa / CC: ~15dk)** - web - **Ölçülen erişilebilirlik açıklarını kapat**
+- [x] **T55 (P2, human: ~2sa / CC: ~15dk)** - web - **Ölçülen erişilebilirlik açıklarını kapat**
   - T54'teki kontrast hesabının bulguları. Üçü de WCAG eşiğinin ALTINDA
     ve depoda ışık kötü — bu ürün için "sınırda geçer" yeterli değil.
   - `border-slate-300` → `border-slate-500` girdi kenarlığında.
@@ -1074,7 +1079,23 @@ G1, G2 ve G4 kapandı. G3 (yazıcı) TODOS E5'e bağlı, aşağıda gerekçesi y
     elle yazılmış kopyalar (`stok/page.tsx`, `hareket/page.tsx`) da
     aynı değere çekilmeli, yoksa ekranlar ayrışır.
 
-- [ ] **T56 (P3, human: ~4sa / CC: ~30dk)** - web - **Sol kenar çubuğu + yapışkan arama şeridi**
+  - **KAPANIŞ (T104 turu).** Üç maddenin ikisi T68'de kapanmıştı: kenarlık
+    `--line-control` (#848aa8, 3,40:1) ve odak halkası (3 px, 7,25:1,
+    `outline-none` kaldırıldı).
+  - **Üçüncüsü kapanmamış, KÖTÜLEŞMİŞTİ.** 12 px ipucu `text-slate-500`
+    (4,77:1) iken `text-ink-3`e (4,64:1) taşınmıştı. Dosyanın kendi yorumu
+    "12 px'te sınırda geçiyordu" diye kabul ediyor ama yeni değer daha
+    düşük. T55'in bulgusu zaten oranın sınırda olmasıydı; token değişimi
+    onu çözmedi, bir tık aşağı çekti.
+  - Ölçüldü (hex → sRGB → WCAG): `ink-3` aydınlık 4,64:1 / koyu 5,56:1;
+    `ink-2` aydınlık 6,76:1 / koyu 7,54:1.
+  - 12 px içerik taşıyan yedi yer `text-ink-2`ye alındı: iki form ipucu,
+    ayarlar ipucu, "(siz)" işareti, barkod arşiv tarihi, arşiv eylem
+    açıklaması, hareket listesinde stok kodu. Hepsi kullanıcının OKUMASI
+    gereken metin.
+  - `ink-3` kaldırılmadı: 14 px ve üstü ikincil metin ile yer tutucularda
+    (44 kullanım) meşru. Kural token'ın yanına yazıldı.
+- [x] **T56 (P3, human: ~4sa / CC: ~30dk)** - web - **Sol kenar çubuğu + yapışkan arama şeridi**
   - T54'ün referans görselden aldığı TEK yapısal değişiklik. Bugün üst
     şerit + `max-w-6xl` (1152 px) var.
   - Kazanç: menü hedefleri 56 px satıra çıkıyor (bugün `py-2`, yani
@@ -1085,6 +1106,17 @@ G1, G2 ve G4 kapandı. G3 (yazıcı) TODOS E5'e bağlı, aşağıda gerekçesi y
   - P3: kural ihlalini kapatıyor ama mevcut ekranlar çalışıyor. T53 ve
     T34'ten sonra.
 
+  - **KAPANIŞ (T104 turu).** Yapısal kısım T66-T68'de teslim edilmiş:
+    `shell.tsx` içinde 244 px kalıcı `<aside>` (≥1024 px, `lg:sticky`),
+    altında 64 px alt gezinme çubuğu (<1024 px), ve yapışkan üst şeritte
+    her sayfada arama kutusu. Önerdiğim 72 px ikon rayı yerine alt çubuk
+    seçilmiş — dokunmatik için daha iyi.
+  - **56 px hedefi tutmadı ve bu bilinçli.** Menü satırları `h-12` (48 px),
+    form kontrolleri `h-13` (52 px). `field.tsx` gerekçeyi yazıyor:
+    referans görselin oranları için düşürülmüş, WCAG 2.5.5'in 44 px
+    eşiğinin üstünde kalınmış.
+  - **Ama kural metni güncellenmemiş.** PLAN Bölüm 11 ve CLAUDE.md hâlâ
+    "minimum 56 px" diyor. Kod ile kural ayrıştı → T106.
 - [x] **T57 (P1, human: ~2sa / CC: ~20dk)** - altyapı - **Demo yolu her platformda çalışsın**
   - **KULLANICI TESTİNDE ORTAYA ÇIKTI.** Windows'ta demo hiç başlamadı;
     kullanıcı ilk komutta duvara tosladı. İki ayrı hata vardı ve ikisi de
@@ -1123,6 +1155,122 @@ G1, G2 ve G4 kapandı. G3 (yazıcı) TODOS E5'e bağlı, aşağıda gerekçesi y
     olmadan çalışmadığını kimse fark etmiyor. Ortamı hazırlamak
     uygulamanın işi.
 
+- [x] **T59 (P1, human: ~2sa / CC: ~20dk)** - altyapı - **Veritabanı hazır olmadan migration koşmasın**
+  - **KULLANICI TESTİ, İKİNCİ TUR.** `pnpm db:reset` konteyneri başlattı,
+    hemen ardından koşan `migrate` hiçbir şey uygulamadı. drizzle-kit
+    hatayı spinner'ın arkasında yuttuğu için geriye sadece `Exit status 1`
+    kaldı ve kullanıcı yirmi dakika türev hatalarla uğraştı:
+    `relation "current_stock" does not exist`, sonra
+    `function auth_read_attempts(...) does not exist`. Hepsi tek bir
+    sessiz başarısızlığın sonucuydu.
+  - **Kök sebep: AÇIK PORT HAZIR DEMEK DEĞİL.** Docker portu konteyner
+    başlar başlamaz yayınlıyor; `docker-proxy` dinliyor ama arkadaki
+    Postgres hâlâ `initdb` ve `db/init/*.sql` ile uğraşıyor. TCP bağlantısı
+    KURULUYOR, sorgu reddediliyor.
+  - `scripts/wait-for-db.mjs`: Docker varsa konteynerin İÇİNDEN
+    `pg_isready` (tek güvenilir cevap), yerel kurulumda TCP yeter — yerel
+    Postgres portu ancak hazır olunca açıyor.
+  - `db:up` ve `db:reset` artık bekliyor. `demo.mjs` de aynı modülü
+    kullanıyor; eskiden "port açık" görünce beklemeden geçiyordu, yani
+    aynı tuzak orada da vardı.
+
+- [x] **T60 (P1, human: ~1sa / CC: ~15dk)** - web - **Eksik yapılandırmada sunucu açılmasın**
+  - Kullanıcı testinde AYNI HATA İKİ KEZ yaşandı: önce `DATABASE_URL`,
+    sonra `AUTH_SECRET`. İkisinde de uygulama derlendi, açıldı ve ilk
+    giriş denemesinde düştü; ekranda "SERVER_ERROR" yazıyordu. Kurulum
+    hatası, çalışma hatası kılığında görünüyordu.
+  - `next.config.ts` içinde `assertServerConfig()`: eksikleri TEK SEFERDE
+    listeliyor ve ne yapılacağını söylüyor. Tek tek söylemek, kullanıcıyı
+    birini düzeltip diğerini keşfetme turuna sokardı.
+  - **Konsola, giriş ekranına değil.** Kimliği doğrulanmamış bir sayfaya
+    sunucunun neyi eksik olduğunu yazmak gereksiz bilgi verir; operatörün
+    ihtiyacı olan yer zaten konsol.
+  - **Derlemede koşmuyor** (`PHASE_PRODUCTION_BUILD` atlanıyor): `next
+    build` hiçbir yere bağlanmıyor ve gizli anahtarları olmayan bir imaj
+    kurma adımında da çalışabilmeli.
+  - `APP_URL` eksikse uyarı: çerez `secure` bayrağı oradan türüyor ve yoksa
+    açık kalıyor (fail closed). LAN'da düz HTTP kurulumda tarayıcı çerezi
+    saklamıyor, giriş ekranı hiçbir hata göstermeden kendini tekrar ediyor
+    — teşhis edilmesi en zor arıza türü.
+
+- [x] **T61 (P1, human: ~1sa / CC: ~10dk)** - web - **Sunucu kusuru olan hatalar loga yazılsın**
+  - **KULLANICI TESTİ, ÜÇÜNCÜ TUR.** Giriş `SERVER_ERROR` veriyordu ve
+    sunucu günlüğünde HİÇBİR İZ yoktu: terminalde sadece `POST /giris 303`
+    görünüyordu. `AppError` yakalanıp yönlendirmeye çevriliyor, mesajı
+    yolda kayboluyordu.
+  - Oysa `AppError`'ın mesajı teşhisi zaten yazıyordu:
+    "AUTH_SECRET tanımlı değil veya 32 karakterden kısa (üret: openssl
+    rand -base64 32)". Bu satır kimseye ulaşmadığı için teşhis, hatayı
+    fırlatan satırın kaynak kodda elle bulunmasını gerektirdi.
+  - `logServerFault()` — `errorQuery()` ve giriş ekranının catch bloğunda.
+  - **Yalnızca 5xx.** "Parola hatalı" veya "elde yeterli stok yok"
+    kullanıcının yaptığı bir şey, sunucunun kusuru değil; onları da loga
+    yazmak günlüğü gürültüye boğar ve gerçek arızayı görünmez kılar.
+  - **Ekrana değil konsola.** Kullanıcı genel metni görmeye devam ediyor;
+    ayrıntı operatörün terminaline gidiyor. Kimliği doğrulanmamış bir
+    sayfaya sunucunun iç durumunu yazmak gereksiz bilgi verir.
+  - Doğrulandı: T60 guard'ı geçici olarak kapatılıp kısa bir `AUTH_SECRET`
+    ile giriş denendi; ekran yine genel metni gösterdi, terminal sebebi
+    yazdı. Guard geri alındı.
+
+- [x] **T62 (P2, human: ~1sa / CC: ~15dk)** - altyapı - **Depo skill'leri (`.claude/skills/`)**
+  - Kullanıcı "gstack skill'lerini entegre et" dedi. gstack bu ortamda
+    YOK: ne makinede, ne depoda, ne eklenti kataloğunda. PLAN.md'deki
+    GSTACK REVIEW REPORT tablosu o incelemelerin SONUÇLARINI kaydediyor,
+    komutların kendisini değil.
+  - Onun yerine bu projede tekrar tekrar elle uygulanan üç disiplin
+    yazıya döküldü. Bunlar bugüne kadar yalnız oturum bağlamında
+    yaşıyordu; bağlam bitince kayboluyorlardı.
+  - `dogrula` — korumayı geçici kaldır, testin kırmızı yandığını gör,
+    geri koy ve yerinde olduğunu doğrula. Bu projede ~15 kez uygulandı.
+  - `demo-testi` — tarayıcıda sürme (dört kullanıcıya görünen hata
+    yalnız böyle bulundu) ve demo kurulum yolunun platform tuzakları.
+  - `gorev-kaydet` — bulguyu sohbette bırakma, PLAN.md'ye numaralı görev
+    olarak yaz. T52, T53, T55, T57-T61 böyle doğdu.
+  - Gerçek gstack bulunursa bunların yerini alabilir; çakışmıyorlar.
+
+- [x] **T63 (P1, human: ~1sa / CC: ~15dk)** - db - **master'daki kırık smoke testi**
+  - master'a inen `fc3d00f` iki dosya ekledi ve ikisi de sorunluydu.
+  - `packages/db/src/smoke.test.ts` silinmiş `./test-support.js`
+    modülünü import ediyordu (134cb32'de kaldırılmıştı). master'ın test
+    paketi bu haliyle o dosyayı yükleyemeden düşüyordu. Git bunu
+    ÇAKIŞMA OLARAK GÖSTERMİYOR — farklı dosyalar; sessiz anlamsal
+    çakışma.
+  - Dosyanın fikri doğruydu (iskele bozulduğunda diğer testlerin kafa
+    karıştırıcı hataları arasında aramamak), dayandığı temel yoktu.
+    Dört testinden ikisi kaldırılan iskelenin kendi temizlik
+    mekanizmasını sınıyordu; kalan ikisinin karşılığı zaten
+    rls.test.ts'te vardı. Bu yüzden port değil, mevcut iskeleye göre
+    yeniden yazıldı.
+  - `tatus -sb` — yanlış yazılmış bir `git status -sb` komutunun çıktısı
+    yanlışlıkla commit edilmiş. Silindi.
+  - Doğrulandı: yeni smoke testi 4/4 geçiyor; uygulama bağlantısı admin
+    bağlantısıyla değiştirilince RLS testi kırmızı yanıyor, yani gerçekten
+    ikisinin farkını sınıyor.
+
+- [x] **T64 (P2, human: ~1sa / CC: ~15dk)** - altyapı - **Docker zorunlu olmaktan çıksın**
+  - `db/init/*.sql` (pg_trgm eklentisi + `stok_app` rolü) yalnızca İKİ
+    yerde uygulanıyordu: Docker konteyneri ilk kez oluşturulurken
+    (`docker-entrypoint-initdb.d`) ve test veritabanı kurulurken
+    (`testing.ts`).
+  - Sonuç: kendi makinesine PostgreSQL kurmuş biri `pnpm demo`
+    çalıştırdığında demo koşucusu açık portu bulup Docker'ı atlıyor, sonra
+    migration "stok_app rolü yok" diyerek düşüyordu. Yani projenin Docker'a
+    ihtiyacı yokken Docker fiilen ZORUNLUydu.
+  - `packages/db/src/init-db.ts` — aynı SQL dosyalarını MEVCUT
+    veritabanına uyguluyor. `testing.ts` ise onları düşürüp yeniden
+    yarattığı veritabanına uyguluyor; ortak olan SQL dosyalarının kendisi,
+    yani kurulum kodunun tek kopyası orada.
+  - Her açılışta koşuyor. Üç ifade de idempotent
+    (`CREATE EXTENSION IF NOT EXISTS`, rol bloğu `IF NOT EXISTS` korumalı,
+    `GRANT` tekrarlanabilir), o yüzden "kuruldu mu" bayrağı tutulmuyor —
+    tutulan her bayrak gerçekle ayrışabilecek ikinci bir kaynaktır.
+  - Sahip bağlantısıyla (`MIGRATION_DATABASE_URL`): rol yaratmak ve
+    eklenti kurmak uygulama rolünün yetkisi değil, olmamalı da.
+  - Doğrulandı: boş bir veritabanında init öncesi `pg_trgm` yok (0), init
+    sonrası var (1) ve `stok_app` CONNECT yetkisi almış. Arka arkaya iki
+    kez koşturuldu, ikisi de temiz.
+
 ### Faz 4.5: Mobilin ön şartı
 
 - [ ] **T53 (P1, human: ~6sa / CC: ~45dk)** - api - **`/api/v1` REST uçları** (mobil için)
@@ -1157,19 +1305,170 @@ G1, G2 ve G4 kapandı. G3 (yazıcı) TODOS E5'e bağlı, aşağıda gerekçesi y
 
 ### Faz 6: Otomasyon ve izleme
 
-- [ ] **T34 (P1, human: ~4sa / CC: ~30dk)** - cron - **E6: Gün sonu raporu** (Excel eki + e-posta), idempotent
-- [ ] **T35 (P1, human: ~3sa / CC: ~25dk)** - cron - **E7: Kritik stok taraması + push bildirim**
-- [ ] **T36 (P2, human: ~3sa / CC: ~20dk)** - gözlem - Yapısal log + 5 metrik + 5 alarm
+- [x] **T34 (P1, human: ~4sa / CC: ~30dk)** - cron - **E6: Gün sonu raporu** (Excel eki + e-posta), idempotent
+  - `packages/core/src/cron.ts` + `apps/web/src/app/api/cron/route.ts`.
+    Tur: planla → kuyruğu işle → bakım (sayaç budama + invariant denetimi).
+  - **En büyük işlevsel boşluk buydu:** `runQueuedJobs()` T14'te yazılmıştı
+    ama ÇAĞIRANI YOKTU — kuyruğa giren rapor sonsuza kadar QUEUED'da
+    bekliyordu. Elle istenen büyük Excel export'ları da (T14/G1) bu turda
+    işleniyor; ayrı bir işçi yazmak "işçi ölmüş, kimse fark etmemiş" diye
+    ikinci bir sessiz arıza sınıfı açardı.
+  - İdempotent: `dedupeKey = "DAILY_REPORT:2026-09-03"`. Cron iki kez
+    tetiklenirse ikinci çağrı yeni iş ÜRETMİYOR (Bölüm 5).
+  - Tenant listesi migration 0010'daki `cron_tenants()` SECURITY DEFINER
+    fonksiyonundan. Ortam değişkenine yazılsaydı yeni müşterinin raporu
+    SESSİZCE çıkmazdı — G4'ün ta kendisi.
+  - Kimlik: `CRON_SECRET` paylaşılan sırrı, sabit zamanlı karşılaştırma.
+    **Sır tanımsızsa uç KAPALI** — "tanımsızsa doğrulama yapma", değişkeni
+    eklemeyi unutan kurulumu herkese açık bir e-posta ucuna çevirirdi.
+  - Alarm eşiği: invariant kırık ya da bir işin deneme hakkı bitti → 500.
+    İlk SMTP hatası 200, çünkü işin bir hakkı daha var ve her geçici hatada
+    alarm çalmak operatörü alarmı yok saymaya alıştırırdı.
+- [x] **T35 (P1, human: ~3sa / CC: ~25dk)** - cron - **E7: Kritik stok taraması + push bildirim**
+  - Tarama ve e-posta yazıldı (`createLowStockHandler`). **Push YOK:** mobil
+    uygulama (Faz 5) henüz başlamadı, gönderilecek cihaz kaydı yok.
+    Kritik ürün yoksa e-posta GÖNDERİLMİYOR — her sabah gelen "sorun yok"
+    postası, gerçekten sorun olan sabah da okunmamasını sağlardı.
+- [x] **T36 (P2, human: ~3sa / CC: ~20dk)** - gözlem - Yapısal log + 5 metrik + 5 alarm
+  - **YAPISAL LOG** (`packages/core/src/observability.ts`): tek satır JSON,
+    sabit alan adları. `createMovement`'ın HEM başarı HEM ret yolunda,
+    gecikmeyle birlikte.
+    - Sarmalayıcı `parseInput`'tan ÖNCE başlıyor: doğrulama hataları da
+      ölçülüyor. Bölüm 8'in iki metriği ("reddedilen hareket oranı",
+      "`BARCODE_UNKNOWN` oranı") YALNIZCA buradan çıkabiliyor — reddedilen
+      hareket hiçbir tabloya yazılmıyor, defterde izi yok.
+    - Kütüphane YOK (pino/winston): katman `console.log` üstünde iki satır,
+      `packages/core` ileride React Native'den de çağrılacak (Node'a bağlı
+      taşıma orada çalışmaz), ve her bağımlılık geçişli açık demek (T104).
+    - **Fiyat ve barkod log'a YAZILMIYOR.** Log satırları çoğu kurulumda
+      üçüncü taraf bir toplayıcıya gidiyor; fiyatı oraya göndermek D7'nin
+      (fiyat gizleme) arkadan dolanılması olurdu. Testle korunuyor.
+  - **ALARM ARTIK KENDİLİĞİNDEN ÇALIYOR** (`HEALTH_ALARM` iş türü,
+    migration 0011). Kontroller `health.ts`'te zaten vardı ama YALNIZCA biri
+    `/saglik` sayfasını açınca çalışıyordu — "sistemin sessizce bozulduğunun
+    en iyi tek sinyali" diye yazılmış bir alarmın birinin bakmasını
+    beklemesi kendi içinde çelişki.
+    - Cron turunda planlanıyor, **SAATLİK** (diğer işler günlük). Günlük
+      olsaydı sabah 08:00'deki alarmdan sonra o gün bir daha bakılmazdı.
+    - `maxAttempts: 1` — tekrar yok: bir sonraki saatte zaten yeni alarm
+      kuyruğa giriyor, iki kopya aynı sorunu iki kez anlatırdı.
+    - Sorun yoksa e-posta GİTMİYOR (E7 ile aynı ilke).
+    - Eşik `error`; tek istisna mesai içindeki sessizlik (`warn`).
+      Mesai penceresi TEK YERDE — mutasyon testinde iki ayrı kuralın
+      birbirini maskelediği görüldü ve biri kaldırıldı.
+  - **KAPSANMAYANLAR, açıkça:** senkron gecikmesi p95, outbox bekleyen
+    kayıt, aktif cihaz sayısı ve outbox alarmı MOBİLE bağlı (Faz 5) — henüz
+    outbox yok, ölçecek şey de yok. "5xx oranı > %1" alarmı istek
+    seviyesinde sayaç istiyor; bu depoda öyle bir katman yok ve uydurmak
+    yerine T112'nin (zamanlayıcı + dış izleme) yanına bırakıldı.
+  - Sekiz koruma mutasyonla doğrulandı: sessizlik/mesai/gece kuralı, saatlik
+    dedupe, invariant alarmı, hata yutmama, ret satırında sebep, fiyat
+    sızıntısı.
   - Kaynak: Bölüm 8
-- [ ] **T37 (P1, human: ~2sa / CC: ~15dk)** - gözlem - Invariant ihlali alarmı (kırmızı)
+- [x] **T37 (P1, human: ~2sa / CC: ~15dk)** - gözlem - Invariant ihlali alarmı (kırmızı)
+  - Her cron turunda `SUM(delta) == current_stock.qty` denetleniyor; kırıksa
+    uç 500 dönüyor. Gövdeye yazıp 200 dönmek, gösterilen stoğun defterle
+    uyuşmadığını kimsenin okumadığı bir JSON alanına gömerdi — kullanıcının
+    fark etmeden yanlış sayıya bakması, sessiz kalabilecek en pahalı hata.
 
 ### Faz 7: Test ve yayın
 
-- [ ] **T38 (P1, human: ~6sa / CC: ~45dk)** - test - E2E senaryoları (Playwright): 8 kritik akış
-- [ ] **T39 (P1, human: ~3sa / CC: ~25dk)** - test - Düşman QA testleri (Bölüm 6, madde 4)
-- [ ] **T40 (P1, human: ~3sa / CC: ~25dk)** - test - Kaos testi: senkron ortasında DB kapat
-- [ ] **T41 (P2, human: ~2sa / CC: ~15dk)** - doküman - `docs/ADR/` 5 karar kaydı: ledger, tenant, offline, maliyet, versiyonlama
+- [x] **T38 (P1, human: ~6sa / CC: ~45dk)** - test - E2E senaryoları (Playwright): 8 kritik akış
+  - `apps/web/e2e/t38-kritik-akislar.spec.ts` — ürün ekleme, arama, tekil SKU,
+    kullanıcı ekleme/pasifleştirme, toplu CSV aktarma ve iki yetki sınırı.
+    Diğer dosyalarla birlikte CI kapısında **21 tarayıcı testi** (önce 5).
+  - **BİR YETKİ AÇIĞI BULUNDU VE KAPATILDI.** `/urunler/yeni` çalışana
+    kapalı DEĞİLDİ: adresi elle yazan çalışan ürün oluşturma formunun
+    tamamını görüyordu. Kardeş ekranda (`/urunler/aktar`) kontrol vardı,
+    burada yoktu.
+    - Veri sızıntısı DEĞİL: `createProduct` sunucuda `product:create`
+      arıyor ve kaydetme 403 dönüyordu. Ölçüldü — `/urunler/[id]` de
+      güvenli: çalışan alış fiyatını ve "Kaydet" düğmesini görmüyor.
+    - Yine de gerçek bir arıza: çalışan form doldurup anlamadığı bir hata
+      alıyordu. Asıl tehlikesi ilerisi — "sayfa render oldu, demek ki
+      yetkisi var" varsayımıyla yazılacak bir sonraki kod yolu bu kez
+      gerçekten sızdırırdı. Mutasyonla doğrulandı.
+  - **TESTİN KENDİSİNDE BİR TUZAK BULUNDU, yorumuna yazıldı.**
+    `page.click('button[type="submit"]')` sayfadaki İLK gönderme düğmesine
+    basıyor ve o düğme kenar çubuğundaki **"Çıkış yap"**. Yani "Kaydet"
+    sanılan her tıklama kullanıcıyı sistemden atıyordu; testler ürün
+    kaydetme akışı bozukmuş gibi kırmızı yanıyor, oturum çerezleri
+    siliniyordu. Kabuk her sayfada render edildiği için tuzak BÜTÜN panel
+    ekranlarında geçerli. Düğmeler artık adlarıyla seçiliyor.
+  - Türkçe karakter içe aktarma yolunda da sınanıyor (G2): Ç/Ş/İ/Ö'lü CSV
+    satırları "Atlanacak (hatalı) 0" ile geçiyor ve adlar listede bozulmamış
+    görünüyor.
+  - **KAPSANMAYANLAR:** sayım akışı (ekran henüz yok) ve barkod kamerası
+    (mobil, Faz 5). Sekiz akışın altısı burada, biri `demo-yolu`, biri
+    `faz10-fiyat` dosyasında.
+- [x] **T39 (P1, human: ~3sa / CC: ~25dk)** - test - Düşman QA testleri (Bölüm 6, madde 4)
+  - `packages/core/src/dusman-qa.test.ts`, 47 test. Miktar, barkod, sebep,
+    not, fiyat, idempotency anahtarı ve gövde şekli.
+  - **Her iddia "stok DEĞİŞMEDİ" diye de kontrol ediyor.** En tehlikeli
+    sonuç 500 değil 200: reddedilmesi gereken bir miktar kabul edilirse
+    depoda yanlış sayı oluşur ve fark sayım gününe kadar görünmez.
+  - Düşman değerler formdan gelen METİN üzerinden üretiliyor (`1e999`,
+    emoji, boşluk, `-0`), çünkü arayüzün gerçek yolu o. Dönüşümün ne
+    ürettiği ayrı bir testle kayıt altında; varsayım gizli kalmasın.
+  - **İKİ ÖLÜ KORUMA BULUNDU VE KALDIRILDI.** `qtySchema.finite()` ve
+    `moneySchema.finite()` mutasyonla kaldırıldığında hiçbir test kırmızı
+    yanmadı: `+Infinity`'yi `.max()`, `-Infinity`'yi `.positive()` /
+    `.nonnegative()`, `NaN`'ı zod'un kendisi zaten reddediyor. İspatlanamayan
+    koruma zararsız değil — biri `.max()`'ı kaldırırken "`.finite()` nasılsa
+    tutuyor" diye düşünebilir.
+  - **BİR TEST YANLIŞ SEBEPLE YEŞİLDİ, mutasyonla yakalandı.** Fiyat
+    testleri "bir AppError fırladı" diyordu; oysa `SALE` sebebinde liste
+    fiyatından sapan her tutar zaten sapma sebebi istiyor (T88). Para
+    şemasının BÜTÜN kontrolleri kaldırıldığında bile testler yeşil
+    yanıyordu — reddeden şey şema değil, komşusuydu. Artık hata kodu tam
+    olarak kontrol ediliyor.
+  - Ters yön de sınanıyor: `0.001` miktar, Türkçe karakterli ve emojili not,
+    okuyucunun eklediği `\r\n`. Düşman testleri kapıyı fazla kapatmış
+    olabilir; gram satan bir depoyu ya da gerçek bir el terminalini
+    kullanılamaz hale getirmek de bir arıza.
+- [x] **T40 (P1, human: ~3sa / CC: ~25dk)** - test - Kaos testi: senkron ortasında DB kapat
+  - `packages/core/src/kaos.test.ts`. Bağlantı `pg_terminate_backend` ile
+    SUNUCUDAN öldürülüyor — istemciden `end()` çağırmak düzgün kapanış olur
+    ve sınamak istediğimiz durumu hiç üretmezdi.
+  - **PLAN'daki cümlenin iki yarısı var, biri bugün sınanamıyor.** Cihaz
+    tarafı (kuyruk korunur, ağ dönünce tamamlanır) mobil outbox'a bağlı —
+    ortada kuyruk yok, sahte bir kuyrukla sınamak var olmayan kodun testi
+    olurdu. Sunucu tarafı sınandı ve ASIL TEHLİKELİ OLAN O: cihaz kuyruğu
+    kaybolursa kullanıcı okutmayı tekrarlar, ama sunucuda YARIM yazma
+    olursa defter ile projeksiyon ayrışır ve kimse fark etmez.
+  - Üç iddia: (1) kopma anında defter ile projeksiyon ayrışmıyor,
+    (2) ya hep ya hiç — yarım satır yok, (3) havuz kopan bağlantıyı
+    değiştirip çalışmaya devam ediyor.
+  - Dördüncüsü mobil outbox'ın (ADR-003) dayandığı garanti: aynı anahtar
+    kopmadan sonra tekrar gönderilirse çift kayıt olmuyor. Outbox henüz
+    yazılmadı ama garantinin KENDİSİ bugün sınanabiliyor. Mutasyonla
+    doğrulandı.
+  - Zamanlama KESİN DEĞİL ve olması gerekmiyor: kopma hangi ana denk
+    gelirse gelsin sonuç aynı olmalı. Zamanlamaya bağlı bir test "bazen
+    yeşil" olurdu; bu depoda o hatanın bedeli T109'da ölçüldü.
+- [x] **T41 (P2, human: ~2sa / CC: ~15dk)** - doküman - `docs/ADR/` 5 karar kaydı: ledger, tenant, offline, maliyet, versiyonlama
+  - ADR'ler `PLAN.md`'yi tekrar ETMİYOR, farklı bir soruyu cevaplıyor.
+    PLAN çalışan bir belge — kararın BUGÜNKÜ halini anlatıyor. ADR tarihli ve
+    değişmez; "bu neden böyle" sorusunu burada olmayan birine anlatıyor
+    (yeni geliştirici, müşterinin bir sonraki tedarikçisi, altı ay sonraki
+    biz).
+  - Her kayıtta **elenen yollar** var. Bir ADR'nin en değerli kısmı seçilen
+    çözüm değil, seçilmeyenlerin neyi bozacağı; onu yazmayan ADR kodun
+    kendisinin söylemediği hiçbir şeyi söylemiyor demektir.
+  - **ADR-004 (maliyet yöntemi) bilerek AÇIK durumda.** Karar müşterinin
+    muhasebecisine ait (U2) ve ertelenebilir olduğu ölçülerek gösterildi:
+    FIFO/ağırlıklı ortalama sorusu kâr raporuna (E8) ait, T88/T89'un
+    cevapladığı "bunu kaça satmalıyım" sorusuna değil. Kayıt ayrıca kararın
+    ÖN ŞARTINI yazıyor: yöntem seçilse bile geçmiş hareketlerde `unit_price`
+    `NULL` olduğu için geriye dönük kâr raporu yine çıkmaz.
+  - Durum etiketleri gerçeği söylüyor: ADR-003 ve ADR-005 "Kabul edildi
+    (uygulanmadı)" — kararı verilmiş ama kodu Faz 5'te. Hepsine "kabul
+    edildi" demek, okuyanı var olmayan bir özelliğin peşine düşürürdü.
 - [ ] **T42 (P1, human: ~3sa / CC: ~20dk)** - deploy - Vercel + Supabase + EAS pipeline, deploy sonrası kontrol listesi
+  - **Denetim yapıldı (2026-09-04), deploy YAPILMADI.** On alan tarandı:
+    5 BLOCKER, 4 WARNING, 1 READY. Bulgular ve en küçük değişiklik seti
+    T114-T119'da; ayrıntılı tablo "T42 ÜRETİME HAZIRLIK DENETİMİ"
+    bölümünde. T42 bu altısı kapanmadan kapanmaz.
 
 ### Faz 8: Mühendislik incelemesinden gelen görevler (D4-D9)
 
@@ -1178,8 +1477,27 @@ G1, G2 ve G4 kapandı. G3 (yazıcı) TODOS E5'e bağlı, aşağıda gerekçesi y
   - Doğrula: bir güncelleme yayınla, geri al, cihazda doğrula
 - [x] **T44 (P1, human: ~2sa / CC: ~15dk)** - shared - `packages/shared/reasons.ts` tek kaynak: zod enum, Türkçe etiket eşlemesi, DB CHECK constraint senkron testi
   - Kaynak: D-2.3, D-2.4. Üç yerde ayrı yazılırsa drift kaçınılmaz
-- [ ] **T45 (P1, human: ~1sa / CC: ~10dk)** - güvenlik - ESLint kuralı: route handler içinde doğrudan `db` kullanımı yasak, sadece `withTenant()`
+- [x] **T45 (P1, human: ~1sa / CC: ~10dk)** - güvenlik - Lint kuralı: uygulama katmanında RLS'i atlayan bağlantı yasak
   - Kaynak: D5. RLS'i insan disiplinine bırakmamak için makine zorlaması
+  - **GÖREVİN İFADESİ DÜZELTİLDİ.** "Route handler içinde doğrudan `db`
+    kullanımı yasak" diye yazılmıştı ama mevcut mimaride `appDb()` ZATEN
+    her sayfa ve route'ta çağrılıyor — handle alınıp core servisine
+    parametre geçiliyor, sorguyu core çalıştırıyor. O ifadeyi harfiyen
+    uygulamak çalışan mimariyi yasaklardı.
+  - Korunması gereken gerçek değişmez iki tane ve ikisi de ölçüldü:
+    `apps/web` bugün SIFIR doğrudan sorgu çalıştırıyor, ve `adminDbUnsafe`
+    uygulama kodunda hiç geçmiyor.
+  - Kural Biome `noRestrictedImports` ile, iki katmanlı:
+    - `packages/core` → `adminDbUnsafe` yasak
+    - `apps/**` → `adminDbUnsafe` + `withTenant` yasak
+  - **Neden `withTenant` de yasak:** web'de ona ihtiyaç duyulması, sorgunun
+    yanlış katmanda yazıldığının işareti. Sorgular core'a ait.
+  - **Neden ESLint değil Biome:** depo T95'te Biome'a geçti; ikinci bir
+    linter ikinci bir kaynak olurdu. Ayrıca editörde anında uyarı veriyor.
+  - `adminDbUnsafe`'in kendi yorumu zaten "Uygulama kodundan ASLA" diyordu;
+    eksik olan tek şey bunu zorlayan makineydi.
+  - Doğrulandı: üç ihlal (web'de iki, core'da bir) bilerek eklendi, lint
+    üçünü de yakaladı; geri alındı, lint tekrar temiz.
 - [x] **T46 (P1, human: ~3sa / CC: ~25dk)** - test - **RLS çapraz tenant test seti** (4 test): A→B okuma engelli, A→B yazma engelli, `SET LOCAL` yapılmadan 0 satır, uygulama rolü BYPASSRLS taşımıyor
   - Kaynak: Bölüm 3 test boşluğu. Test edilmeyen güvenlik kontrolü, varlığı bilinmeyen kontroldür
 - [x] **T47 (P1, human: ~3sa / CC: ~25dk)** - test - Rol matrisi sunucu tarafı testleri (11 satırın her biri)
@@ -1228,6 +1546,1277 @@ Ayrıca karar gerektirmeyen 9 düzeltme plana işlendi: `current_stock` tanımı
 sözleşmesi, sebep kodları tek kaynak, İngilizce enum değerleri, PIN kilitleme,
 Türkçe arama normalizasyonu, büyük Excel raporu arka plan işi.
 
+### Faz 9: Arayüz yeniden tasarımı (tasarım incelemesi 2026-08-25)
+
+> **Numaralandırma notu:** Tasarım kararları **TD** öneki taşıyor (TD1-TD6).
+> Bu, "MÜHENDİSLİK İNCELEMESİ KARARLARI (D4-D9)" bölümündeki D-kararlarından
+> ayrıdır ve onlarla karıştırılmamalıdır.
+
+`/plan-design-review` bulgularından türetildi. Karar TD1 = referans görselin tam
+adaptasyonu; TD2 = Kategoriler + Raporlar + Ayarlar eklenir; TD3 = her rota için
+yükleme iskeleti; TTD2 = mobilde alt gezinme çubuğu; TTD3 = `design/` tuvali yeniden yazılır.
+
+Ölçülmüş tasarım sistemi ve tüm mockup'lar:
+https://claude.ai/code/artifact/5579f41a-2794-4146-862b-114c9469c7a8
+
+- [x] **T65 (P1, human: ~4sa / CC: ~30dk)** - arayüz - globals.css: 28 token × 2 tema (açık/koyu) + Outfit/IBM Plex yazı tipleri + tabular-nums yardımcıları
+  - Neden: Bugün 4 token ve tek tema var; color-scheme:light sabit. Tipografi kararı hiç verilmemiş, sistem yazı tipi kullanılıyor.
+- [x] **T66 (P1, human: ~6sa / CC: ~45dk)** - arayüz - shell.tsx: 244px kenar çubuğu + üst şerit (arama, bildirim, tema, avatar, kiracı)
+  - Neden: Bugün üst şerit gezinme + max-w-6xl. Tasarım tuvali bu değişikliği onaylamıştı ama koda hiç uygulanmadı.
+- [x] **T67 (P1, human: ~3sa / CC: ~25dk)** - arayüz - bottom-nav.tsx: 1024px altında 64px alt gezinme çubuğu, 4 sekme + Daha fazla (karar TD4)
+  - Neden: Kod tabanında toplam 2 kırılma noktası var; 244px çubuk 375px telefonda ekranın üçte ikisini yer.
+- [x] **T68 (P1, human: ~2sa / CC: ~15dk)** - erişilebilirlik - field.tsx: 3px odak halkası (7,25:1) + kontrol kenarlığı --line-control (3,40:1)
+  - Neden: outline-none focus:border-slate-900 klavye kullanıcısının tek işaretini 1px ton farkına indiriyor. border-slate-300 beyaza karşı 1,48:1, WCAG 1.4.11 üç kat fazlasını istiyor.
+- [x] **T69 (P1, human: ~1g / CC: ~40dk)** - arayüz - 11 rotaya loading.tsx (içerik şeklinde iskelet) + error.tsx + global-error.tsx (karar TD3)
+  - Neden: apps/web/src altında tek bir loading.tsx veya error.tsx yok. Her sayfa async server component; geçişte eski sayfa donmuş halde bekliyor ve kullanıcı tekrar basıyor.
+- [x] **T70 (P2, human: ~5sa / CC: ~35dk)** - arayüz - Yeni bileşenler: badge.tsx, kpi-card.tsx, product-cell.tsx, empty-state.tsx
+  - Neden: Durum rozeti ve KPI kartı bugün sayfaların içine gömülü; boş durumlar her sayfada elle yazılmış, Kural 09 yapısal olarak zorlanmıyor.
+- [x] **T71 (P2, human: ~6sa / CC: ~45dk)** - arayüz - panel/page.tsx: 4 KPI + alan grafiği + kritik ray + kategori halkası
+  - Neden: Bugün 2 özet kartı var, grafik yok. Referans görselin panel düzeni bu turda uygulanıyor.
+- [x] **T72 (P2, human: ~4sa / CC: ~30dk)** - arayüz - stok/page.tsx: SKU sütunu, ürün jetonu, durum rozeti, 44px satır
+  - Neden: products.sku zaten var ama arayüzde hiç gösterilmiyor. Durum bugün sadece renkle kodlanıyor.
+- [x] **T73 (P2, human: ~4sa / CC: ~30dk)** - özellik - kategoriler/page.tsx: GROUP BY category + ürün sayısı + toplam değer (karar TD2)
+  - Neden: Görselde Kategoriler menüsü var; products.category bugün sadece filtre olarak kullanılıyor, kendi ekranı yok.
+- [x] **T74 (P2, human: ~5sa / CC: ~35dk)** - özellik - raporlar/page.tsx: var olan export API üstüne arayüz (rapor tipi, filtre, kuyruk durumu) (karar TD2)
+  - Neden: /api/rapor/* dört endpoint ile çalışıyor ama ekranı yok; kullanıcı raporun var olduğunu bilmiyor.
+- [x] **T75 (P2, human: ~5sa / CC: ~35dk)** - özellik - ayarlar/page.tsx: profil, parola, toplu kritik eşik, tema tercihi (karar TD2)
+  - Neden: Kritik eşik bugün ürün ürün giriliyor. Tema tercihinin saklanacağı bir yer yok.
+- [x] **T76 (P2, human: ~1g / CC: ~50dk)** - arayüz - Kalan 8 ekranı yeni bileşenlere geçir (giris, hareket, hareketler, kullanicilar, saglik, urunler/*, not-found)
+  - Neden: Yeni tasarım sistemi tüm ekranlarda tutarlı olmazsa iki dil aynı üründe çarpışır.
+- [x] **T77 (P2, human: ~1g / CC: ~45dk)** - belgeleme - design/*.dc.html tuvalini yeni sisteme göre yeniden yaz (karar TD5)
+  - Neden: Tuvalin dokuz kuralının üçü artık geçersiz. İki çelişen tasarım sistemi aynı depoda duruyor; üç ay sonra bakan biri yanlış kurala uyar.
+- [ ] **T78 (P3, human: ~1g / CC: ~40dk)** - performans - Aylık stok DEĞERİ özet tablosu — **U2 KARARINA BAĞLI, BEKLİYOR**
+  - Neden: Bu görev "panel grafiğinin veri kaynağı" diye açılmıştı. Panel grafiği T71'de
+    yazıldı ve stok DEĞERİ değil hareket HACMİ gösteriyor: hacim `stock_movements.created_at`
+    üstünde indexli, pencere 14 günle sınırlı ve tarayıcıda ölçüldüğünde hızlı. Yani özet
+    tablosu bugün hiçbir sorguyu hızlandırmıyor.
+  - **Asıl engel U2:** geçmişe dönük stok değeri bir maliyet yöntemi kararı gerektiriyor
+    (ağırlıklı ortalama mı FIFO mu). Karar verilmeden hesaplanacak her seri yanlış olur.
+    Bu yüzden özet tablosu ŞİMDİ yazılmıyor: kullanılmayan şema hazırlık değil bakım
+    borcudur (mühendislik incelemesi D4 ile aynı gerekçe) ve özellik geldiğinde tasarımı
+    büyük ihtimalle U2'nin cevabına göre değişecek.
+  - **Tetikleyici:** U2 cevaplandığı gün. Ondan önce açılmamalı.
+- [x] **T79 (P3, human: ~2sa / CC: ~15dk)** - erişilebilirlik - Atlama bağlantısı (skip link) + hareket onay şeridine aria-live
+  - Neden: Klavye kullanıcısı her sayfada 9 menü satırını geçmek zorunda. Kayıt onayı ("446 → 496") ekran okuyucuya hiç duyurulmuyor.
+
+- [x] **T87 (P1, human: ~1g / CC: ~1sa)** - auth - Oturum yenilemeyi render'dan çıkar
+  - Neden: `currentActor()` süresi dolmuş access token'ı render sırasında yeniliyor ve
+    çerez yazmaya çalışıyor. Next.js 15 bunu Server Component render'ında yasaklıyor;
+    sonuç, giriş yaptıktan 15 dakika sonra HER sayfada 500 hatasıydı. Çökme try/catch
+    ile kapatıldı (yenileme token'ı döndürülmediği için yutmak güvenli), ama çerez
+    tazelenene kadar her render bir yenileme sorgusu yapıyor. Kalıcı çözüm: yenilemeyi
+    bir route handler'a veya Node çalışma zamanlı middleware'e taşımak.
+
+**Faz 9 tamamlandı (T65-T87), T78 hariç.**
+
+T78 kapsamı düzeltildi ve U2'ye bağlandı: panel grafiği stok değeri değil hareket
+hacmi gösteriyor (hacim indexli ve ucuz), yani özet tablosu bugün hiçbir sorguyu
+hızlandırmıyor. Değerin zaman serisi maliyet yöntemi kararına bağlı.
+
+**Faz 9 temel katmanı + TD2 ekranları tamamlandı (T65-T75).**
+
+TD2 ile menü 6 → 9 satıra çıktı. Üç yeni ekranın hiçbiri YENİ VERİ MODELİ
+gerektirmedi; üçü de var olanı görünür kıldı:
+
+- **Kategoriler** — `products.category` bugüne kadar yalnızca stok tablosunda bir
+  filtreydi. Ekran kategori bazında ürün sayısı, kritik sayısı, toplam adet ve
+  stok değeri veriyor. Kategori ayrı tablo DEĞİL, serbest metin: "Kalem" ile
+  "kalem" ayrı görünüyor ve bu bilinçli — normalizasyon, kullanıcının yazdığını
+  sessizce değiştirip gizli bir eşleme kuralı yaratırdı.
+- **Raporlar** — `/api/rapor/*` dört uçla zaten çalışıyordu ama ekranı yoktu;
+  raporun var olduğunu yalnızca ilgili tablonun köşesine bakan biliyordu.
+  Buradakiler filtresiz (tüm stok, tüm hareketler); filtre gerekiyorsa her kart
+  ilgili tabloya yönlendiriyor.
+- **Ayarlar** — kapsam üç şey: hesap bilgisi, tema, parola. İşletme ayarı ve
+  bildirim tercihi GİRMEDİ çünkü arkalarında veri modeli yok; koymak, açılınca
+  hiçbir şey yapmayan anahtarlar dizmek olurdu.
+
+Yolda kapatılan bir güvenlik açığı: `setUserPassword` kendi parolanı mevcut
+parolayı SORMADAN değiştirmene izin veriyordu. Yönetici sıfırlaması için doğru,
+kendi hesabı için değil — depoda ekran açık bırakılıyor ve başında kimse olmayan
+bir oturum parolanın değiştirilmesine yetmemeli. `changeOwnPassword` mevcut
+parolayı doğruluyor; 6 test bunu kilitliyor. Doğrulama: 462 test geçiyor
+(shared 56, db 53, core 353), `next build` 17 rota, açık ve koyu tema tarayıcıda
+ölçüldü (`--focus` 7,25:1, `--line-control` 3,40:1), alt gezinme çubuğu 375 px'te
+94×63 px hedeflerle çalışıyor, iskelet ekran kalıcı kabuğun içinde render ediliyor.
+
+**Yol boyunca bulunan ve düzeltilen, plan dışı KUSURLAR:**
+
+0. `apps/web/src/server/session.ts` — **giriş sonrası 15. dakikada her sayfa 500
+   veriyordu.** Süresi dolmuş access token'ın sessiz yenilemesi render sırasında
+   çerez yazmaya çalışıyor; Next.js 15 buna izin vermiyor. Kodun önlemek istediği
+   şey ("kullanıcıyı 15 dakikada bir dışarı atma") çökmeye dönüşmüştü. Çökme
+   kapatıldı, kalıcı çözüm T87.
+
+1. `packages/db/src/testing.ts` — migration klasörü `new URL(...).pathname` ile
+   çözülüyordu. Windows'ta bu `/C:/stok/...` üretiyor (sürücü harfinden önce eğik
+   çizgi) ve drizzle `meta/_journal.json` dosyasını bulamıyor. Sonuç: **db ve core
+   test paketleri Windows'ta hiç çalışmamış.** `fileURLToPath` ile düzeltildi;
+   406 test ilk kez bu platformda koştu.
+2. `apps/web/src/server/session.ts` — `currentActor()` `cache()` ile sarmalandı.
+   Kabuk düzene taşınınca istek başına iki çağrı oluyor; sarmalanmasaydı süresi
+   dolmuş access token'da yenileme iki kez çalışır ve refresh token iki kez
+   döndürülürdü.
+
+**T68 ve T69 tasarımdan bağımsız hatalardır.** T68 ölçülmüş bir erişilebilirlik
+gerilemesi (`outline-none`, kenarlık 1,48:1), T69 ise bugün var olan ve kullanıcıya
+"tıkladım mı" sorusu sorduran bir eksiklik. Tasarım kararı ne olursa olsun kapanmalıydı.
+
+
+#### Faz 9b: Referans görselden gelen özellikler (karar TD6)
+
+Görseldeki özellikler tek tek değerlendirildi. Üçü girdi, biri kapsam dışı kaldı.
+
+| Karar | Özellik | Sonuç |
+|---|---|---|
+| **TD6.1** | Bildirim zili + sesli/titreşimli geri bildirim | **Dahil** — E4 ve E7 zaten v1 kapsamındaydı, yapılmamıştı (T80, T81) |
+| **TD6.2** | Ürün fotoğrafı | **Dahil** — şema + yükleme + toplu aktarma (T82-T84) |
+| **TD6.3** | Ctrl+K genel arama | **Dahil** — Kural 05'in işlevsel gereği (T85, T86) |
+| **TD6.4** | Tedarikçiler / Siparişler | **Çıkar** — "KAPSAM DIŞI → Faz 2" kararı teyit edildi |
+| — | Kiracı değiştirici | **Uygulanamaz** — `users.tenantId` notNull tek FK, bir kullanıcı tek işletmeye ait. Kontrol hesap menüsü olarak yorumlandı |
+
+- [x] **T80 (P2, human: ~4sa / CC: ~30dk)** - özellik - Bildirim zili: kritik ürün + başarısız arka plan işi sayısı + açılır liste (E7 web karşılığı)
+  - Neden: PLAN.md E7 v1 kapsamında ama yapılmadı. Referans görselde zil var; sayı bağlanmazsa boş süs kalır.
+- [x] **T81 (P2, human: ~4sa / CC: ~25dk)** - arayüz - Barkod kaydında sesli + titreşimli geri bildirim + sessiz mod tercihi (E4 web karşılığı)
+  - Neden: PLAN.md E4 v1 kapsamında: "çalışan ekrana bakmaz, dinler, hız 2 katına çıkar". Web hareket ekranında hiç yok.
+- [x] **T82 (P2, human: ~2sa / CC: ~20dk)** - şema - products.image_url sütunu + migration + depolama yapılandırması
+  - Neden: Referans görselde her ürünün fotoğrafı var; products tablosunda görsel sütunu yok. T83 ve T84 buna bağlı.
+- [x] **T83 (P2, human: ~2g / CC: ~1,5sa)** - özellik - Ürün görseli yükleme + boyutlandırma + baş harf karesi ZORUNLU geri düşüş
+  - Neden: Fotoğrafsız ürün bozuk görünmemeli: 800 kalemlik katalogda çoğu satır uzun süre fotoğrafsız kalacak.
+- [x] **T84 (P2, human: ~4sa / CC: ~30dk)** - özellik - Toplu aktarmada görsel URL sütunu + önizlemede görsel doğrulama
+  - Neden: Elle fotoğraf çekmeden tedarikçi kataloğundan eşleştirme yolu; fotoğrafın gerçekten dolmasının tek pratik yolu.
+- [x] **T85 (P2, human: ~1g / CC: ~50dk)** - özellik - Birleşik arama endpoint: ürün + barkod + hareket, Türkçe normalizasyonla
+  - Neden: Bugün arama sadece /stok içinde. Tasarım Kural 05 "arama hep görünür, hep odaklı" diyor; barkod okuyucu odak bulamazsa okutma sessizce kayboluyor.
+- [x] **T86 (P2, human: ~1g / CC: ~45dk)** - arayüz - Ctrl+K komut paleti: barkod tam eşleşme → Giriş/Çıkış, SKU/ad → ürün, sonuç yok → yeni ürün ekle
+  - Neden: PLAN.md boş durum tablosu zaten "arama sonuç yok → Yeni ürün olarak ekle" diyor; palet bunu her ekrandan erişilebilir kılıyor.
+
+**T83'de baş harf karesi zorunlu geri düşüş.** Fotoğraf isteğe bağlı bir alan;
+fotoğrafsız ürün bozuk değil, sade görünmeli. **T84 bu kararın diğer yarısı:**
+800 kalemlik katalogda fotoğrafın elle çekilerek dolması gerçekçi değil, toplu
+aktarmadaki URL sütunu doldurmanın tek pratik yolu.
+
+
+### Faz 10: Fiyat defteri (office-hours 2026-08-30)
+
+Tasarım belgesi: `docs/designs/fiyat-defteri.md` (ONAYLANDI).
+
+Kullanıcıdan gelen üç istek — eski ürünü değerleme, enflasyona karşı korunma,
+gerçek satış fiyatını kaydetme — tek eksikliğin üç yüzü çıktı: **defter "kaç
+tane"yi kaydediyor, "kaça"yı kaydetmiyor.**
+
+**Ölçülen bulgu:** `stock_movements.unit_cost` sütunu var, `createMovement`
+kabul ediyor (`packages/core/src/movements.ts:168`), Excel'e çıkıyor, rol
+bazlı gizleniyor — ama **arayüz bu alanı hiç sormuyor**
+(`apps/web/src/app/(panel)/hareket/page.tsx:92`). Uygulamadan girilen her
+hareketin `unit_cost` değeri `NULL`; yalnızca `seed.ts` dolduruyor. Şemadaki
+"maliyet takibi bu veriyi bugünden topluyor" yorumu bugün doğru değil.
+
+**U2 üzerindeki etkisi:** Bu üç görev U2'yi (maliyet yöntemi) çözmeyi
+GEREKTİRMİYOR. FIFO / ağırlıklı ortalama "sattığımda hangi geçmiş maliyeti
+düşeyim" sorusudur ve **kâr raporuna** (E8) aittir. Buradaki soru "bunu kaça
+satmalıyım" — ileriye bakan bir soru, geçmiş maliyet eşleştirmesi gerektirmez.
+U2 açık kalabilir; dahası T88 tarihli fiyat toplamaya başlayınca U2 gerçek
+veriyle test edilebilir hale gelir.
+
+- [x] **T88 (P1, human: ~2g / CC: ~2sa)** - hareket - Kasa açığı kontrolü: liste fiyatı dondurulur, sapma zorunlu sebeple açıklanır
+  - **Neden (2026-08-30 düzeltmesi):** Bu bir kâr marjı özelliği DEĞİL, kasa
+    mutabakatı kontrolü. Senaryo: kırtasiyede çalışan A4 satıyor, fiş liste
+    fiyatından 110 ₺ yazıyor, müşteri tanıdık diye 100 ₺ alınıyor, kasada
+    10 ₺ açık kalıyor. Amaç açığı engellemek değil, GİZLENEMEZ yapmak.
+  - `unit_cost` → `unit_price` yeniden adlandırılıyor: sütun artık çıkışta
+    satış hasılatı tutacak, ona "maliyet" demek kalıcı bir yalan olur. Yöne
+    göre anlam türetmek bu depoda kurulu örüntü — `delta`'nın işareti de
+    `reason`'dan türetiliyor.
+  - **`list_price` harekete DONDURULUYOR.** Bu olmadan kontrol çürür:
+    `products.sale_price` sonradan 110 → 120 olursa, geçmişteki 10 ₺'lik açık
+    geriye dönük 20 ₺'ye dönüşür. Defter append-only olduğu için o günkü liste
+    fiyatı da hareketle birlikte donmalı.
+  - **Kural DB seviyesinde:** iki sütun aynı satırda olduğu için
+    `CHECK (unit_price IS NULL OR list_price IS NULL OR unit_price = list_price
+    OR price_override_reason IS NOT NULL)`. Epsilon YOK — bkz. tolerans notu. Deponun felsefesi bu —
+    `movements_delta_nonzero_ck` ve `movements_reason_ck` zaten böyle.
+  - **Sebep serbest metin DEĞİL, listeden.** Takip toplanabilirlik demek;
+    serbest metin "bu ay tanıdık indirimine kaç lira gitti" sorusunu
+    cevaplayamaz. `MOVEMENT_REASONS` örüntüsünün aynısı (kod tek kaynak,
+    Türkçe etiketler orada, DB CHECK listeden üretilir):
+    `TANIDIK`, `TOPTAN`, `KAMPANYA`, `HASARLI`, `ESKI_STOK`, `YUVARLAMA`,
+    `YONETICI_ONAYLI`, `DIGER` (Diğer'de serbest metin zorunlu).
+  - **`YUVARLAMA` LİSTEDE ama otomatik DEĞİL.** Yuvarlamak da satıcının
+    kararıdır ve seçilerek işaretlenir.
+  - **TOLERANS YOK (D6 iptal, 2026-08-30).** Tolerans "çalışan fiyatı elle
+    yazarken kazara yuvarlar" varsayımına dayanıyordu. O varsayım yanlış:
+    fiyat elle yazılmıyor, barkoddan ya da fiş OCR'ından geliyor. Otorite
+    sistemde olduğu için KAZARA sapma diye bir şey yok; her sapma satıcının
+    bilinçli kararı ve bilinçli kararın toleransı olmaz.
+    Sonuç: CHECK'te epsilon yok, `tenants` tablosuna ayar sütunu eklenmiyor,
+    `/ayarlar` ekranına tolerans alanı girmiyor. Üç iş birden düştü.
+  - **`list_price` OTORİTESİ SUNUCUDA (karar D4, mühendislik incelemesi).**
+    `createMovement` bu alanı `products.sale_price`'tan KENDİ okuyor; istemci
+    gönderse bile yok sayılıyor. Aksi halde isteği kendi üreten biri
+    `list_price = unit_price` yazıp sebep zorunluluğunu tamamen atlar ve
+    kontrolün "gizlenemez" iddiası çöker.
+  - **`client_list_price` AYRI kaydediliyor.** İstemcinin barkod/OCR anında
+    GÖRDÜĞÜ fiyat. Sunucununkiyle farklıysa hareket işaretleniyor ve T88.1
+    raporunda görünüyor. Çevrimdışı gecikmeli senkronda (Faz 5 / T28) satış
+    günü ile senkron günü arasında fiyat değişmişse, fark sessiz kalmak
+    yerine görünür oluyor. Bugün web'de ikisi hep eşit; alan Faz 5 için
+    değil, UYUŞMAZLIĞI GÖRÜNÜR KILMAK için var.
+  - **`price_source` alanı** (`price_estimated` boolean'ın yerine):
+    `LIST` / `MANUAL` / `RECEIPT` / `INDEXED` / `ESTIMATED`. Kullanıcı ileride
+    muhasebe uygulaması entegre edip fiş okutacak ve fiyat oradan gelecek;
+    kaynak bugünden kayıtlı olmazsa o gün ikinci bir migration gerekir.
+  - **Yetki: D7'DEN SAPILDI (2026-08-31, uygulama sırasında).** D7 çalışanın
+    gördüğü fiyatı `saleUnitPrice` diye AYRI bir alanda döndürmeyi söylüyordu;
+    tasarım belgesi (`docs/designs/fiyat-defteri.md`, ONAYLANDI) ise aynı
+    alanın SATIR BAZINDA gizlenmesini söylüyor ve mevcut testin "girişlerde
+    yok, satışlarda var" olarak güncellenmesini istiyor. **İki onaylı belge
+    burada çelişiyordu.** Tasarım belgesindeki yol uygulandı:
+    `unitPrice` / `listPrice` / `priceOverrideReason` satır bazında
+    çıkarılıyor, ayrım `reasonPriceBasis(reason) === 'SALE'`.
+    D7'nin haklı itirazı — "`m.unitCost == null` eksik alanı da yakalar ve
+    `—` basar, çalışan 'girilmemiş' ile 'yetkim yok'u ayırt edemez" —
+    ekranda ÜÇ AYRI DURUM basılarak kapatıldı ve tarayıcıda doğrulandı:
+    alan yok → `gizli`, `null` → `—`, dolu → tutar. Sütun BAŞLIĞI da
+    cevaptan türüyor (`Satış fiyatı` / `Birim fiyat`), rolden değil.
+    Ayrım `reason === 'SALE'` yerine `priceBasis` üzerinden: müşteri
+    iadesinde (`RETURN_IN`) de ödenen tutar satış fiyatıdır.
+    `PURCHASE` ve `OPENING` fiyatları çalışana kapalı (tehdit S7).
+    **Kalan risk:** presence kontrolü (`'unitPrice' in row`) `== null`
+    kontrolünden farklı ve bunu bilmeyen bir tüketici sessizce yanlış
+    yazar. Bugün tek tüketici var ve doğru yazılmış.
+    **T53 notu (ZORUNLU):** `/api/v1` sözleşmesinde "alanın YOKLUĞU yetki
+    yokluğudur, `null` girilmemiş demektir" açıkça yazılmalı; mobil bu
+    ayrımı kaçırırsa çalışana "fiyat girilmemiş" gösterir.
+  - **Sapma sebebi ZORUNLULUĞU hata metninde alış fiyatını SIZDIRMIYOR**
+    (tarayıcı testinde yakalandı, 2026-08-31). Hata detayları Türkçe metne,
+    oradan adres çubuğuna ve ağ sekmesine düşüyor; alış fiyatından sapan bir
+    GİRİŞ yazan çalışan "Liste fiyatı 80,00 ₺" uyarısından listeden
+    gizlediğimiz sayıyı öğrenirdi — yanlış fiyat yazarak sorgulanabilir bir
+    kaçak. `listPrice` detaylara yalnızca yetkili role ya da satış dayanaklı
+    sebeplerde konuyor; metin sayısız da anlamlı kalıyor.
+
+- [x] **T88.1 (P1, human: ~2sa / CC: ~20dk)** - rapor - Kasa açığı gün sonu raporuna binsin
+  - Neden: **Okunmayan kayıt kontrol değildir.** T88 açığı kaydediyor; onu
+    takibe çeviren şey görünürlük. T34 gün sonu raporu zaten planda.
+  - İçerik: "Bugün 7 harekette liste fiyatının altına inildi, toplam fark
+    84 ₺. En çok: Ahmet (5 hareket, 60 ₺)." Kullanıcı bazında toplanır —
+    hareket zaten `user_id` taşıyor.
+  - Tolerans içinde kalan farklar da toplama DAHİL: çalışan tek tek
+    sorgulanmıyor ama hiçbir kuruş rapordan düşmüyor.
+  - **T88'e bağlı.** T34 yazılmadıysa önce o.
+  - Açık, e-postanın GÖVDESİNDE — Excel ekinin içinde değil. Eki açmayan
+    yönetici (telefondan bakan yönetici) açığı hiç görmezdi.
+  - Sapma MİKTARLA ÇARPILIYOR: `(liste − birim) × adet`. Satır başına
+    sayılsaydı 100 adetlik tek bir indirim, 1 adetlik indirimle aynı
+    görünürdü.
+
+- [x] **T89 (P2, human: ~2g / CC: ~yarım gün)** - hareket - Açılış değerlemesi: `OPENING` sebebine fiyat + ekonomik tarih + "tahmini" işareti
+  - Neden: Müşteri 5 yıldır elinde tuttuğu malı sisteme girerken fiyat
+    alanında tıkanıyor — eski fatura yok, bugünkü fiyat da doğru değil.
+  - **Kritik alan fiyat değil TARİH.** Tarihsiz fiyat enflasyona göre
+    düzeltilemez. `OPENING` hareketinin `created_at`'i bugün, malın ekonomik
+    tarihi 5 yıl önce; ikisi ayrı sütun olmak zorunda (`price_date`).
+    T90 bu sütun olmadan çalışamaz.
+  - İki yol da formda: fatura varsa tutar + fatura tarihi (sistem bugüne
+    taşır); fatura yoksa bugünkü yenileme bedeli + `price_estimated = true`.
+  - **UYGULANDI 2026-08-31.** `price_estimated` boolean'ı YERİNE
+    `price_source = 'ESTIMATED'` yazılıyor: ayrı bir bayrak, fiyat kaynağını
+    iki yerden okunur hale getirir ve "fişten okundu ama tahmini" gibi
+    anlamsız bir durumu temsil edilebilir kılardı.
+  - **GEÇMİŞ TARİH T88'DE KAÇAK AÇABİLİRDİ — kapatıldı.** Geçmiş tarihli
+    fiyat liste fiyatıyla karşılaştırılmıyor (aradaki fark indirim değil
+    enflasyon). Serbest bırakılsaydı kasa açığı kontrolü TEK ALANLA
+    atlanırdı: çalışan fiyat tarihine dünü yazar, karşılaştırma düşer,
+    10 ₺'lik açık sebepsiz kaydedilirdi. Bu yüzden geçmiş tarih yalnızca
+    satış dayanağı OLMAYAN sebeplerde kabul ediliyor; satış ve müşteri
+    iadesinde fiyatın anı işlemin anıdır. Testi `prices.test.ts` içinde ve
+    koruma kaldırılıp kırmızı yandığı görülerek doğrulandı.
+  - **"Bugün" SUNUCU YEREL saatinden okunuyor, `toISOString()` ile DEĞİL.**
+    UTC'ye çevirmek Türkiye'de (UTC+3) her gece 00:00–03:00 arasında dünü
+    döndürürdü: o pencerede girilen "bugün" tarihli fiyat geçmiş sayılır,
+    liste karşılaştırması sessizce düşer ve kasa açığı kontrolü her gece
+    üç saat kapalı kalırdı. Mutasyon testi bunu ilk turda YAKALAYAMADI —
+    testin kendisi de `toISOString()` kullanıyordu ve iki taraf aynı yanlış
+    günü hesaplıyordu; test yerel saate çevrilince koruma kanıtlanabildi.
+  - **Tarayıcı turunda bulunan hata (düzeltildi):** hata dönüşünde MİKTAR
+    korunmuyordu. Kullanıcı 5 yazıp "birim fiyat zorunlu" hatası alıyor,
+    fiyatı dolduruyor ve stoğa 5 yerine 1 giriyordu — ikinci gönderim
+    BAŞARILI olduğu için hiçbir uyarı çıkmıyordu, yani hata mesajı sessiz
+    bir YANLIŞ KAYIT üretiyordu. Alanları elle taşımak yerine
+    `preserveFields()` yardımcısı yazıldı (`apps/web/src/server/form.ts`,
+    testli). **Kalan risk:** sayfanın verdiği alan adı listesi birim testli
+    değil, yalnızca tarayıcıda doğrulandı; listeye yeni bir alan eklenmesi
+    unutulursa aynı sessiz sıfırlama geri gelir.
+
+- [ ] **T90 (P2, human: ~1 hafta / CC: ~2-3g)** - fiyat - Yenileme maliyeti: satış anında "bugün yerine koymak kaça mal olur"
+  - Neden: Bugünkü maliyetten giren mal 6 ay sonra aynı rakamdan satılırsa
+    yerine yenisi konamıyor. **Enflasyon ürünü değil parayı değersizleştiriyor
+    — hesaplanacak sayı yenileme maliyetidir**, "eskimiş maliyeti düzeltmek"
+    değil.
+  - Kaynak sırası: (1) son `PURCHASE` hareketinin `unit_price`'ı, `price_date`
+    90 günden yeniyse — **en iyi kaynak budur, endeks değil**; (2) yoksa
+    bilinen son fiyat × (bugünkü Yİ-ÜFE ÷ o tarihteki Yİ-ÜFE);
+    (3) hiçbiri yoksa `products.purchase_price`.
+  - **HESAP SQL'DE (karar D5, mühendislik incelemesi).** `replacementCost` bir
+    sorgu; `numeric` çarpma/bölme PostgreSQL'de tam ondalık yapılıyor, TS'e
+    yalnızca 2 basamaklı sonuç dönüyor. Gerekçe: `numeric.ts` miktara özel
+    (`QTY_SCALE = 3`, `NUMERIC(14,3)` tavanı) ama para `numeric(12,2)` —
+    yardımcılar yeniden kullanılamıyor. Kayan nokta ise deponun miktarda
+    yasakladığı şeyin aynısı: endeks oranı 4 ondalıklı ve sonuç hem satış
+    uyarısı hem rapor toplamı besliyor. İkinci bir ölçekli-bigint seti
+    yazmak yerine zaten tam olan aracı kullanıyoruz.
+  - **`price_index` RLS deseni (karar D6, mühendislik incelemesi).** Tablo
+    tenant kapsamlı değil ama `rls.test.ts:247` public şemadaki HER tabloda
+    RLS+FORCE istiyor ve `:271` politikanın tanımlı olmasını istiyor —
+    politikasız FORCE RLS "her şeyi reddet" demek ve üretimde 500 olarak
+    görünür. Desen: `ENABLE` + `FORCE ROW LEVEL SECURITY` +
+    `CREATE POLICY ... FOR SELECT USING (true)` +
+    `REVOKE INSERT, UPDATE, DELETE ON price_index FROM stok_app`.
+    `rls.test.ts` politika listesine `price_index` eklenir.
+    `USING (true)`'nun neden güvenli olduğu (ulusal açık veri, her tenant
+    aynı satırları okur) migration yorumuna yazılır ki kimse bu deseni bir
+    tenant tablosuna kopyalamasın. `auth_attempts` deseni (REVOKE ALL +
+    SECURITY DEFINER) seçilmedi: o veri kimlik doğrulamadan ÖNCE yazıldığı
+    ve tenant'a bağlanamadığı için kapalıydı, endeks ise açık veri.
+  - **Uyarı, engel değil.** Eski stoğu elden çıkarmak için maliyetin altına
+    satmak meşru bir karardır.
+  - **Arayüzde açıkça yazmalı:** bu bir karar destek aracıdır, VUK mükerrer
+    298/A kapsamındaki resmî enflasyon düzeltmesinin yerine geçmez. Aksi halde
+    müşteri vergi uyumu sanar.
+  - **KISMİ İNDEKS (karar D9, mühendislik incelemesi).** Mevcut dört indeksin
+    hiçbirinde `reason` yok; "son PURCHASE" araması en yeniden geriye tarayıp
+    alışı arıyor. Kırtasiyede bir kalem ayda bir alınıp günde onlarca kez
+    satıldığı için aradaki yüzlerce satış satırı taranır — her satış ekranı
+    açılışında. Migration ile birlikte:
+    `CREATE INDEX ... ON stock_movements (tenant_id, product_id, created_at DESC)
+    WHERE reason = 'PURCHASE'`.
+    Kısmi indeks yalnızca eşleşen satırda güncellendiği için SATIŞ YAZMA
+    YOLUNA SIFIR MALİYET getiriyor; "indeks yazmayı yavaşlatır" itirazı bu
+    durumda geçerli değil.
+  - **T88'e bağlı:** düzeltilecek fiyat verisi T88 toplamaya başlamadan yok.
+  - **Doğrulanmadan başlanmasın:** Yİ-ÜFE'nin resmî endeks olduğu bilgi
+    birikiminden söylendi, TÜİK'ten teyit EDİLMEDİ.
+
+- [~] **T92 (P1, human: ~2g / CC: ~1sa)** - test - Faz 10 test kapsamı: sunucu testleri + T38'in öne çekilmesi
+  - **SUNUCU TARAFI TAMAM (2026-08-31).** `packages/core/src/prices.test.ts`,
+    29 test. Kapsanan yollar: liste fiyatı sunucudan okunuyor; istemcinin
+    gönderdiği liste fiyatı sapmayı sıfırlayamıyor; fiyat yoksa CHECK
+    geçiyor; eşitse sebep istenmiyor; farklı+sebepli kabul; farklı+sebepsiz
+    RED; listede olmayan sebep hem zod hem DB CHECK ile red; "Diğer"de
+    açıklama zorunlu; `client_list_price` ayrı saklanıyor ve uyuşmazlık
+    görünür; giriş=alış / çıkış=satış dayanağı; liste fiyatı harekete
+    donuyor (ürün zamlansa da geçmiş değişmiyor); D7 yetki ayrımı; devirde
+    fiyat zorunlu; ileri tarihli ve satışta geçmiş tarihli `price_date`
+    reddi; alış fiyatının hata metninden sızmaması.
+    **On üç korumanın her biri tek tek kaldırılıp kırmızı yandığı görülerek
+    doğrulandı** — biri (saat dilimi) ilk turda yakalanmadı, testin kendisi
+    de aynı hatayı yapıyordu; düzeltildi.
+  - **T38 / ARAYÜZ AKIŞLARI: YAZILDI, CI'YA BAĞLANMADI.**
+    `apps/web/e2e/faz10-fiyat.spec.ts`, 9 senaryo. Bekleyen tek şey T109.
+  - **KALAN:** `replacementCost` dört kolu ve `price_index` RLS testleri
+    T90'a ait — o iş henüz yapılmadı, testleri de yazılamaz.
+
+- [x] **T109 (P1, human: ~yarım gün / CC: ~2sa)** - arayüz - **Sunucu eyleminin sonucu ekrana yansımıyor** (Next 15 yönlendirici hatası + tema düğmesi)
+  - `apps/web/e2e/faz10-fiyat.spec.ts` her koşuda 9 senaryodan 1-3'ünde
+    kırmızı yanıyor ve KIRILAN TEST HER SEFERİNDE DEĞİŞİYOR — yani gerçek
+    bir ürün hatası değil, zamanlamaya bağlı bir takılma.
+  - **Ölçülenler (hepsi eleme amaçlı yapıldı, hiçbiri sebep değil):**
+    - Adres sunucu eyleminden sonra DOĞRU hata koduna dönüyor (`hata=...`),
+      yani sunucu isteği alıp 303 veriyor.
+    - Takılan anda `pg_stat_activity`: tek bağlantı, bekleyen kilit yok,
+      "idle in transaction" yok. Veritabanı temiz.
+    - `auth_attempts` BOŞ: kaba kuvvet koruması (T51) devreye girmiyor.
+    - Giriş ~350 ms, sayfa yüklemeleri ~180 ms. Yavaşlık yok.
+    - Gönderim süresi İKİ MODLU: ya ~110 ms ya 25 sn+ (90 sn'de de bitmiyor).
+      Arada değer yok — yani yavaşlama değil, TAKILMA.
+    - Hidratasyon beklendi (`networkidle`, ardından React'in kendi
+      `__reactFiber$` izi) — düzelmedi.
+    - Her teste ayrı ürün verildi (testler birbirinin stoğunu bozmasın) —
+      düzelmedi.
+    - Mevcut duman testi (`demo-yolu.spec.ts`) 3 koşuda 3 kez YEŞİL; o
+      dosya form GÖNDERMİYOR, yalnızca okuyor.
+  - **2026-09-03 ÖLÇÜMÜ — SUNUCU TEMİZ, İSTEMCİ GEZİNMİYOR.** Takılan
+    gönderimde ağ izi alındı:
+    - `POST /hareket` sunucuya ULAŞIYOR ve **303 dönüyor** — yani sunucu
+      eylemi çalıştı, doğrulama yapıldı, yönlendirme üretildi.
+    - Tarayıcı bu 303'ü İZLEMİYOR: adres çubuğu ilk haliyle kalıyor
+      (`/hareket?barkod=…`, hata parametresi yok), `<main>` hâlâ gönderim
+      ÖNCESİ formu gösteriyor (~838 karakter metin — iskelet değil, çünkü
+      iskeletin metni yok), hata şeridi hiç oluşmuyor.
+    - Yani kullanıcının gördüğü şey: **"Kaydet"e basıyor, hiçbir şey
+      olmuyor.** Sessiz. Tekrar basmak çift kayıt üretmiyor (idempotency
+      anahtarı okutma anında üretiliyor, D-1.3) — bu tasarım kararı
+      burada kurtarıcı oldu.
+    - Sıklık ölçüldü: 8 gönderimde 4'e kadar çıkıyor; oran koşudan koşuya
+      değişiyor (önceki turda 5'te 1).
+  - **2026-09-03 İKİNCİ TUR — KAPSAM SANILANDAN BÜYÜK.** Takılma hareket
+    formuna ya da `redirect()`'e ÖZGÜ DEĞİL:
+
+    | Form | Nerede | Takılan |
+    |---|---|---|
+    | Giriş | kök düzen, kabuk YOK | **0/12** |
+    | Tema düğmesi | panel kabuğu içinde, `revalidatePath` | **7/12** |
+    | Hareket kaydı | panel kabuğu içinde, `redirect` | 3–6/12 |
+
+    Yani **panel kabuğundaki HER sunucu eylemi** etkileniyor: çıkış yap,
+    tema, ürün kaydetme, kullanıcı yönetimi, içe aktarma… hepsi. Bu, hatayı
+    "Kaydet bazen çalışmıyor"dan "panelde hiçbir yazma işlemi güvenilir
+    değil"e çıkarıyor.
+  - **KOLAY TEKRAR ÜRETİM (kullanıcı 30 saniyede doğrulayabilir):** panele
+    gir, üst şeritteki TEMA düğmesine arka arkaya bas. Ekran temasının
+    değişmediği tıklamalar bu hatadır. Seed verisi, barkod, form doldurma
+    gerekmiyor. **Bunu kendi tarayıcında dene** — Playwright'a özgü olup
+    olmadığı sorusunu tek başına cevaplıyor.
+  - **ELENEN HİPOTEZLER (hepsi A/B ölçüldü, hiçbiri sebep değil):**
+    - `loading.tsx` (Suspense sınırı): yerinde 3/10, kaldırılmış 2/10.
+    - Hidratasyon zamanlaması: tıklamadan önce React'in `__reactFiber$`
+      izi beklenip 2 sn daha beklendi → 3/10. Değişmedi.
+    - Bağlantı ön-yükleme (`prefetch`): kapalıyken 6/16, açıkken 6/16.
+    - `SessionKeepAlive` (T87, `/oturum/yenile`): ölçümde o istek HİÇ
+      atılmıyor (`needsPersist` false), yani zaten devrede değil.
+  - **JS AÇIK/KAPALI KARŞILAŞTIRMASI YAPILAMADI** ve sebebi ayrı bir
+    bulgu: JavaScript kapalıyken form ZATEN render edilmiyor (T110).
+    Yani kaçağın "istemci yönlendiricisinde" olduğu, JS'siz yolu
+    çalıştırarak değil, yalnızca ağ iziyle gösterilebildi.
+  - **BU KULLANICIYI ETKİLER.** Tarayıcı otomasyonuna özgü olduğunu
+    gösteren bir kanıt YOK; istek gerçek bir tıklamayla gidiyor ve sunucu
+    normal cevap veriyor. Bir sonraki adım Next sürümünü/`loading.tsx`
+    sınırını değiştirip oranın düşüp düşmediğini ölçmek — `/hareket`
+    altında Suspense sınırı var ve şüphe oraya işaret ediyor.
+  - **SIRADAKİ ADIM:** kabuk bileşenlerini teker teker çıkarıp tema
+    düğmesiyle ölçmek (`CommandPalette`, `AlertBell`, `ThemeToggle`,
+    `SidebarNav`). Tema düğmesi ölçümü ucuz — seed verisi ve form
+    doldurma gerektirmiyor, bir tıklama ve `<html data-theme>` kontrolü.
+    Panel düzeninin kendisi (`alertSummary` sorgusu, `currentActor`
+    önbelleği) de aday.
+  - Çözülene kadar bu dosya CI kapısına BAĞLANMAMALI: kararsız bir kapı,
+    kısa sürede kimsenin bakmadığı bir kapıya dönüşür.
+  - Kaynak: T92
+  - **Zorunlu regresyon testleri (kural gereği, tartışmasız).** `unit_cost` →
+    `unit_price` mevcut davranışı değiştiriyor; kırılacağı ölçülen yerler:
+    `role-matrix.test.ts:308,315,319,326`, `excel.test.ts:146`,
+    `exports.test.ts:59`, `movements.test.ts:121`, `stock.test.ts:61-69`,
+    `schema-sync.test.ts`, `rls.test.ts:247,271`.
+  - **Sunucu tarafı (22 yol, mevcut yüzeyle yazılabilir):** list_price sunucudan
+    okunuyor mu; fiyat yoksa CHECK geçiyor mu; eşitse sebep istemiyor mu;
+    farklı+sebepli kabul, farklı+sebepsiz RED (kontrolün kalbi); listede
+    olmayan sebep DB CHECK reddi; `client_list_price` uyuşmazlığı işaretleniyor
+    mu; giriş=maliyet / çıkış=hasılat anlamı; D7 yetki üçlüsü (çalışanda
+    `unitPrice` HİÇ yok / SALE'de `saleUnitPrice` var / PURCHASE+OPENING'de
+    ikisi de yok); OPENING'de fiyat zorunlu; gelecek tarihli `price_date` reddi;
+    `replacementCost` dört kolu (yeni alış / endeksli / endekste ay yok / hiç
+    fiyat yok) — **D5 gereği numeric tamlığı burada ispatlanır**; endeks bayat
+    uyarısı; `price_index` RLS'te SELECT var INSERT yok (D6).
+  - **T38 ÖNE ÇEKİLİYOR (karar D8).** Beş kullanıcı akışının test yüzeyi YOK:
+    liste fiyatı ön-dolu geliyor mu, fark rozeti çıkıyor mu, **sebep seçmeden
+    gönderim engelleniyor mu**, "Diğer"de serbest metin zorunlu oluyor mu,
+    yenileme maliyeti uyarısı görünüyor mu. Sunucu bunları kanıtlayamaz:
+    form sebebi zorunlu yapmayı unutsa bile sunucu testleri yeşil yanar ve
+    kasadaki kişi anlamadığı bir hata ekranıyla kalır. Bu depoda kullanıcıya
+    görünen dört hata yalnızca gerçek tarayıcıda bulundu.
+  - Playwright kurulumu bir kez; sonraki tüm arayüz işleri kazançlı çıkıyor.
+
+
+  - ## 2026-09-04 ÖLÇÜMÜ — ARIZA İKİYE AYRILDI, BİRİ KAPANDI
+
+  - **BAŞLIK YANLIŞTI.** Bu bir "kararsız test" değil, KULLANICIYA GÖRÜNEN
+    BİR ÜRÜN HATASI. Testler doğru çalışıyordu; her koşuda farklı testin
+    kırmızı yanması, hatanın kendisinin olasılıksal olmasındandı.
+
+  - **(a) TEMA DÜĞMESİ — ÇÖZÜLDÜ.** Ölçüm (üretim derlemesi, gerçek
+    tarayıcı): 12 tıklamanın 8'inde `<html data-theme>` DEĞİŞMİYOR. Çerez
+    doğru yazılmış, eylem 200 dönmüş, SERT YENİLEMEDE yeni tema geliyor —
+    ekran eski temada kalıyor.
+    - Sebep: `revalidatePath('/', 'layout')` tek başına istemciyi kökten
+      yeniden render ettirmiyor.
+    - Düzeltme: eylem sonunda aynı adrese `redirect()` (`shell.tsx` →
+      `cycleTheme`; adres istemciden gizli alanla geliyor ve açık
+      yönlendirmeye karşı doğrulanıyor).
+    - Ölçüm: öncesi 8/12 ve 5/12 asılı → sonrası **0/12**. Mutasyonla
+      doğrulandı: yönlendirme kaldırılınca `e2e/t109-tema.spec.ts` ilk
+      tıklamada kırmızı yanıyor.
+
+  - **(b) HAREKET KAYDI — AÇIK.** Aynı sınıf, farklı yüzey ve düzeltmesi
+    daha derin. Ölçüm (hata yolu, 12 tur): sunucu eylemi çalışıyor,
+    `Next-Action` POST'u **303 dönüyor**, ve istemci yönlendiricisi turların
+    **3-5'inde o yönlendirmeyi SESSİZCE DÜŞÜRÜYOR** — `framenavigated`
+    olayı hiç ateşlenmiyor, konsolda ve ağda hata yok.
+    - Kullanıcı için: "Kaydet'e bastım, hiçbir şey olmadı."
+    - Çift kayıt riski YOK: idempotency anahtarı okutma anında üretiliyor ve
+      sayfa gezinmediği için ikinci basış aynı anahtarı gönderiyor (D-1.3).
+      Ama kullanıcı sayfayı YENİLERSE yeni anahtar üretilir.
+
+  - **ELENEN AÇIKLAMALAR (hepsi ölçüldü, hiçbiri sebep değil):**
+    - *Hidratasyon yarışı:* tıklama anında Kaydet formu HER ZAMAN hidrat
+      (`__reactFiber$` izi var) — asılan turlarda da.
+    - *`Link` ön getirme:* kapatınca 3-5/10 yerine 2/12. Azaltıyor,
+      ÇÖZMÜYOR — ve gezinme hızını düşürdüğü için geri alındı.
+    - *`loading.tsx`:* varken 3/10, yokken 2/10. Fark yok.
+    - *`SessionKeepAlive`:* isteği hiç ateşlenmiyor (yalnızca sunucu çerezi
+      yazamadığında basılıyor).
+    - *Başarı yolu:* sert gezinmeden sonra 0/12 — arıza yumuşak gezinme
+      geçmişi olan sayfalarda yoğunlaşıyor.
+
+  - **(b) ÇÖZÜLDÜ — NEXT 16 (T105).** İlk sıradaki adım tuttu: arıza
+    Next 15'in kendi yönlendirici hatasıydı, uygulamanın değil. Sunucu her
+    seferinde doğru cevabı üretiyordu. Ölçüm: Next 15'te 3-5/10 asılı →
+    **Next 16'da 0/24**.
+    - İkinci seçenek (Kaydet formunu düz POST rotasına çevirmek)
+      GEREKMEDİ. Yine de not: o yol T110'u da kapatırdı (JS'siz çalışma)
+      ve bedeli sunucu eylemlerinin hazır getirdiği kaynak (origin)
+      kontrolünü elle yazmaktı. T110 ayrı görev olarak açık kalıyor.
+
+  - `faz10-fiyat.spec.ts` üzerindeki `@kararsiz` etiketi SİLİNDİ; dokuz
+    senaryo CI kapısında (5 → 14 test).
+
+  - **BU İŞİN DERSİ, hatanın kendisinden değerli:** bir testi "kararsız"
+    diye kapı dışına koymadan önce ARIZANIN KENDİSİNİN olasılıksal
+    olabileceği düşünülmeli. Etiket, gerçek bir P1'i aylarca "test sorunu"
+    gibi gösterebilirdi — ve o P1 kullanıcının en sık yaptığı işlemdeydi.
+- [ ] **T91 (P1, human: ~2sa / CC: —)** - araştırma - Üç senaryoyu gerçek kullanıcıda gözlemle
+  - Neden: Talep kanıtı zayıf. Üç senaryonun hangisinin gerçekten tıkanmaya
+    yol açtığı ayrıştırılmadı ve **bugünkü çözüm hiç sorulmadı** — kullanıcı o
+    10 ₺ farkı bugün ne yapıyor bilmiyoruz. Bugün yaptığı şey rakiptir; yeni
+    alan onu yenmek zorunda.
+  - **(1) CEVAPLANDI 2026-08-30:** bugünkü çözüm YOK. Fiş liste fiyatını
+    yazıyor, kasadan eksik para çıkıyor, fark hiçbir yere kaydedilmiyor.
+    Status quo "kasa açık veriyor ve kimse nedenini yazmıyor" — T88'in
+    yenmesi gereken şey bu. Kalan iki soru duruyor.
+  - Öğrenilecek iki şey: (2) 5 yıllık
+    ürünün eski faturası var mıydı — varsa T90'ın pahalı endeks yarısı hiç
+    gerekmeyebilir; (3) enflasyon zararını satarken mi sonradan mı fark etti —
+    satarken ise uyarı doğru yerde, sonradan ise asıl ihtiyaç rapor.
+  - **T90 başlamadan önce yapılmalı**, T88 buna bakmadan yazılabilir.
+
+**Açık kalan sorular (belgede tam listesi):** Yİ-ÜFE verisi elle mi otomatik
+mi; `DAMAGE`/`USAGE` çıkışlarında fiyat ne olmalı (öneri: NULL, para el
+değiştirmedi); "yeterince yeni alış" eşiği 90 gün mü; `unit_cost` yeniden
+adlandırması onaylanıyor mu.
+
+
+### Faz 11: CI incelemesi (2026-08-30)
+
+CI'ın çekirdeği sağlam: gerçek PostgreSQL 17 (sürüm `docker-compose.yml` ile
+aynı), migration drift kontrolü, dört adım CLAUDE.md'deki bitmiş sayılma
+ölçütüyle birebir. İnceleme bunları değil, **neyin hiç sınanmadığını** buldu.
+
+- [x] **T93 (P1, human: ~4sa / CC: ~40dk)** - altyapı - **Duman testi: temiz checkout'tan girişe giden yol CI'da yürünsün**
+  - **CI bugüne kadar kullanıcıya görünen tek bir hata yakalamadı.** T57, T58,
+    T59, T61 — dördü de P1, dördü de kullanıcı testinde çıktı, dördü de CI
+    yeşilken vardı. Ortak noktaları tek cümlede toplanıyor: hepsi temiz
+    checkout'tan çalışan uygulamaya giden yolda. CI o yolu hiç yürümüyordu;
+    `pnpm install` ile başlayıp `next build` ile bitiyordu.
+  - **DÜZELTME: ilk yazımdaki "curl yeterli" YANLIŞTI.** Giriş bir Server
+    Action (`giris/page.tsx` içinde `'use server'`); çağırmak için derlemeye
+    göre değişen bir `Next-Action` kimliği gerekiyor, `curl` ile
+    sürdürülebilir şekilde tetiklenemez. Asıl kanıt falsifikasyondan geldi:
+    T58 geri getirildiğinde `GET /giris` **200 dönmeye devam etti** ve
+    oturumsuz yönlendirme de çalıştı; yalnızca giriş denemesi düştü. Yani
+    curl ile GET probe'u yapan bir duman testi, var olma sebebi olan hatayı
+    kaçırırdı.
+  - **Yapılan:**
+    - `scripts/demo.mjs` → `--no-server`. Bilinmeyen bayrak artık exit 1:
+      `--noserver` yazım hatası sessiz geçseydi sunucu ön planda açılır ve
+      iş akışı zaman aşımına kadar beklerdi, logda da ipucu olmazdı.
+    - `apps/web/playwright.config.ts` + `e2e/demo-yolu.spec.ts` (4 senaryo).
+      Sunucuyu Playwright açıp kapatıyor; arka plana atıp `curl` ile beklemek
+      "açık port hazır demek değil" hatasını (T59) iş akışında tekrarlardı.
+    - `.github/workflows/ci.yml` → `smoke` işi. **Servis konteyneri YOK ve
+      `.env` elle yazılmıyor:** ikisi de olsaydı `pnpm demo`'nun kurduğu şey
+      atlanır ve sınadığımızı sandığımız yol hiç koşmazdı.
+    - `apps/web/tsconfig.json` → `e2e` ve `playwright.config.ts` kapsama
+      alındı. Kapsam dışıyken bozuk bir spec ancak CI'da çalışırken patlardı.
+  - **Falsifikasyonla doğrulandı (`dogrula` yordamı):**
+    - **T58 geri getirildi** (kök `.env` yüklemesi kaldırıldı, açılış
+      kontrolü etkisizleştirildi ki sunucu T58'deki gibi AÇILSIN): testler 3
+      ve 4 kırmızı, 1 ve 2 yeşil kaldı, `Exit status 1`.
+    - **Çalışana `price:read` verildi:** yalnızca 4. test kırmızı,
+      `Expected: 0, Received: 1` — "Stoktaki değer" kartı göründü. Test,
+      matrisin kendisini değil **rotanın matrisi çağırdığını** ölçüyor
+      (tehdit S7).
+    - **Panel oturum koruması kaldırılamadı:** `next build` tip kontrolünde
+      reddediyor, çünkü `actor` null olabiliyor. O koruma testten önce TİP
+      SİSTEMİ tarafından tutuluyor; bu yolla falsifiye edilemedi ve
+      edilmesine gerek de yok.
+    - Üç koruma da geri kondu; `git status` ve grep ile teyit edildi.
+  - **Yeşil:** `pnpm typecheck` (4 paket), `pnpm test` (494 test),
+    `next build`, duman testi 4/4.
+  - **GERÇEK KOŞUDA DOĞRULANDI** (run 33318396877, PR #1): `smoke` işi
+    1m33s'te yeşil. Runner'da `docker compose` kalktı, Playwright
+    `--with-deps chromium` kuruldu, dört senaryo 5.8 sn'de geçti.
+    Aynı koşuda `typecheck + test` de yeşil: migration drift kontrolü,
+    testler ve web derlemesi 25 Ağustos'tan beri İLK KEZ çalıştı
+    (typecheck ilk kapı olduğu için hepsi bloke duruyordu).
+  - Kaynak: CI incelemesi 2026-08-30
+
+- [x] **T94 (P1, human: ~1,5g / CC: ~2sa)** - web - **`apps/web` test yüzeyi: rota yetki kontrolleri ve oturum**
+  - **7584 satır kod, sıfır test.** Projenin en büyük paketi bu ve `pnpm test`
+    onu SESSİZCE atlıyor: `apps/web/package.json` içinde `test` scripti yok,
+    `pnpm -r --if-present test` uyarı bile vermiyor.
+  - **Somut arıza:** `packages/core/role-matrix.test.ts` yetki matrisini test
+    ediyor, ama bir rotanın o matrisi ÇAĞIRDIĞINI kimse test etmiyor. Yetki
+    kontrolü unutulmuş bir rota typecheck'ten geçer, testten geçer, CI yeşil
+    yanar, çalışan Excel indirir. Tehdit S6/S7'nin gerçekten zorlandığı katman
+    burası ve tamamen kapsamsız.
+  - **Öncelik sırası:** beş API rotası (`arama`, `rapor/hareket`, `rapor/stok`,
+    `rapor/sablon`, `rapor/aktarim-hatalari`) ve `server/session.ts`. Ekran
+    testleri T92'deki Playwright işine bağlı, burada tekrarlanmıyor.
+  - Alternatif: rotaları `packages/core`'a ince kabuk yapıp orada test etmek.
+    Kabuk inceldikçe test değeri düşer, ama "kabuk gerçekten ince mi" sorusu
+    yine bir test istiyor. Bu yüzden rota testi yazılıyor.
+  - Doğrula: bir rotadan yetki kontrolünü geçici olarak kaldır, testin kırmızı
+    yandığını gör, geri koy.
+  - **KAPSAM DÜZELTMESİ.** "7584 satır" rakamı sayfa bileşenlerini de
+    içeriyordu ve onlar T92'nin Playwright işine ait. Gerçekten test
+    edilebilir sunucu mantığı ~830 satır: `server/` (648) ve beş rota (184).
+    Rotalar ince; yetki kontrolü core'da, rota `requireActor()` çağırıp
+    aktörü core'a geçiriyor.
+  - **YAPILDI (rota katmanı):** `apps/web` artık `pnpm test`'e dahil.
+    vitest koşumu kuruldu; sahtelenen TEK sınır `next/headers` (çerez
+    kavanozu) ve `server-only`. Veritabanı, core'un yetki mantığı ve rota
+    kodu gerçek koşuyor — core sahtelenseydi test "sahtenin sahteyi
+    çağırdığını" doğrulamış olurdu.
+    `src/app/api/route-authz.test.ts`, 14 test, üç arıza sınıfı:
+    oturumsuz erişim, hata sözleşmesi yerine ham 500, çalışanın yetkisiz
+    uca ulaşması.
+  - **YOL BOYUNCA ÖĞRENİLEN:** `rapor/sablon` bilerek her oturumlu
+    kullanıcıya açık (rotanın kendi gerekçesi: içerik kişiye özel değil,
+    ama sütun adları iç yapıyı anlattığı için oturum isteniyor). Test bu
+    kararı değiştirmiyor, sessizce değişirse haber veriyor.
+  - **FALSİFİKASYONLA DOĞRULANDI (`dogrula`):** `rapor/sablon`'dan
+    `await requireActor()` **ve** import'u silindi. Sonuç: `tsc --noEmit`
+    TEMİZ, `next build` geçiyor, 494 core/db/shared testi yeşil — yalnızca
+    bu test kırmızı (`rapor/sablon oturumsuz 200 döndü`). Yani uç oturumsuz
+    herkese açılırdı ve bu testten başka hiçbir şey haber vermezdi.
+    O rota özellikle savunmasız çünkü `requireActor()` sonucunu
+    KULLANMIYOR; tip sistemi orada yardım edemiyor.
+  - **YAPILDI (oturum katmanı), `src/server/session.test.ts` 17 test:**
+    `secureCookies()` dört durumu (https, düz http, `APP_URL` yok, adres
+    çözümlenemiyor); çerez seçenekleri (`httpOnly`, `sameSite: lax`, iki
+    farklı ömür); çıkışta İKİ çerezin de silinmesi (yenileme çerezi kalsaydı
+    bir sonraki istek oturumu sessizce geri getirirdi); sessiz yenileme yolu;
+    salt okunur çerez deposunda çökmeme (T87 / 4b008e2).
+  - **`secureCookies()` bu dosyanın en önemli testi.** Yanlış hesaplanınca
+    ortaya çıkan arıza SESSİZ: LAN'da düz HTTP ile servis edilen kurulumda
+    tarayıcı `Secure` çerezi saklamaz ve giriş ekranı hiçbir hata
+    göstermeden kendini tekrar eder.
+  - **YAPILDI (form katmanı), `src/server/form.test.ts` 21 test:**
+    `rethrowControlFlow` (Next yönlendirmesi yutulursa BÜTÜN form
+    gönderimleri sessizce hiçbir yere gitmez); `HIDDEN_DETAIL_KEYS` sızıntısı
+    (iç kimlikler adres çubuğuna düşmemeli); beklenmeyen hatanın mesajının
+    kullanıcıya gitmemesi; `logServerFault`'un yalnızca 5xx yazması (T61);
+    `optional` (girilmedi) ile `nullable` (temizlendi) ayrımı — karışsaydı
+    bir kez girilen alış fiyatı bir daha boşaltılamazdı; Türkçe ondalık
+    virgülü; sayıya çevrilemeyen metnin sessizce 0 OLMAMASI.
+  - **FALSİFİKASYONLA DOĞRULANDI (`dogrula`), üç ayrı koruma:**
+    - `rapor/sablon`'dan `requireActor()` VE import'u silindi: typecheck
+      temiz, build geçer, 494 diğer test yeşil — yalnızca rota testi
+      kırmızı. O rota özellikle savunmasız çünkü `requireActor()` sonucunu
+      kullanmıyor, tip sistemi yardım edemiyor.
+    - `secureCookies()` kodun yorumunun uyardığı yanlış implementasyona
+      (`NODE_ENV` tabanlı) çevrildi: `Secure` açık olması gereken üç durum
+      kırmızı. Düz http durumu tesadüfen doğru kaldı — dört durumun birden
+      sınanmasının sebebi bu.
+    - `rethrowControlFlow`'un `throw err` satırı kaldırıldı: iki test
+      kırmızı. `session.ts`'teki `try/catch` kaldırıldığında da iki test,
+      kullanıcının ekranında 500 üretecek tam o istisnayla düştü.
+    - Üç koruma da geri kondu, grep ile teyit edildi.
+  - **KAPSAM DIŞI BIRAKILAN:** `server/theme.ts` (108 satır). Tema çerezi
+    okuma/yazma; en kötü arızası yanlış tema gösterilmesi. Sessiz veri
+    kaybı veya yetki sızıntısı üretmiyor, o yüzden bu görevin kapsamına
+    alınmadı. Sayfa bileşenleri T92'nin Playwright işinde.
+  - **Yeşil:** typecheck (4 paket), test 546 (shared 56, db 53, core 385,
+    web 52), web derlemesi, migration drift yok.
+  - Kaynak: CI incelemesi 2026-08-30
+
+- [x] **T95 (P2, human: ~2sa / CC: ~20dk)** - altyapı - **Linter kur ya da sahte `pnpm lint` scriptini kaldır**
+  - Kök `package.json` içinde `"lint": "pnpm -r --if-present lint"` duruyor.
+    Hiçbir pakette `lint` scripti yok, depoda hiç linter kurulu değil. Komut
+    çalışır, 0 döner, hiçbir şey yapmaz.
+  - **Neden önemli:** yeşil yanan boş komut, kırmızıdan kötüdür. Biri "lint
+    geçiyor" diye rapor eder ve kontrolün hiç var olmadığını kimse bilmez.
+  - Öneri: Biome (tek bağımlılık, formatter + linter, hızlı). ESLint yerine
+    seçilme sebebi eklenti zincirinin bakım yükü.
+  - Alternatif: scripti silmek. Kabul edilebilir, ama **T45** (route handler'da
+    doğrudan `db` kullanımını yasaklayan kural, D5'in makine zorlaması) bir
+    linter olmadan hiç yazılamaz.
+  - Doğrula: kasten kural ihlali içeren bir dosya ekle, `pnpm lint` kırmızı
+    yansın, sonra sil.
+  - **YAPILDI:** Biome 2.5.11 kuruldu, `biome.json` yapılandırıldı, kök
+    `lint` scripti gerçek hâline getirildi (`biome lint .`) ve CI'da
+    typecheck'ten ÖNCE koşuyor — saniyeler sürüyor ve tip sisteminin
+    yakalayamadığı sınıfı yakalıyor.
+  - **174 tanı → 0.** Yol, kuralları körlemesine kapatmak değildi:
+    - `noNonNullAssertion` **kapalı** (174 tanının 128'i). `tsconfig`'de
+      `noUncheckedIndexedAccess` açık; testte `!` kullanmak o ayarın
+      doğrudan sonucu, stil hatası değil.
+    - `noAutofocus` **kapalı**. PLAN.md Bölüm 11: "Barkod okuyucu = klavye
+      emülasyonu, arama kutusu sayfa açılınca otomatik odaklanmalı."
+      Kural bu üründe yanlış; bilinçli bir ürün kararına karşı çıkıyor.
+    - `useSemanticElements` **kapalı**. `<search>` öğesi yeni ve tarayıcı
+      desteği eşit değil; `<form role="search">` yaygın ve güvenilir kalıp.
+    - `.claude/` hariç tutuldu: vendor gstack kopyası, depoya ait değil.
+  - **GERÇEK İYİLEŞTİRME:** 18 dekoratif SVG ikona `aria-hidden="true"`
+    eklendi (5 dosya). İkonlar metnin yanında duruyor (PLAN.md: renk +
+    ikon + metin); ekran okuyucu için doğru davranış onları atlamak, başlık
+    eklemek aynı bilgiyi iki kez okutur.
+  - **İKİ GERÇEK DÜZELTME:** `nav-items.tsx` string birleştirme → şablon
+    dizesi; `aktar/page.tsx`'te cümle noktalaması açık bir JSX ifadesine
+    alındı (`{";"}`) — JSX artığı bir noktalı virgülle karışmasın.
+  - **ALTI GEREKÇELİ BASTIRMA.** Gerekçesiz bastırma kuralı hiç açmamakla
+    aynı şey; her biri NEDEN'i yazıyor. En önemli ikisi kuralın YANILDIĞI
+    yerler: `save-feedback.tsx`'te `signature` bağımlılığı efekt gövdesinde
+    kullanılmıyor ama olay da bu — yeniden tetikleme anahtarı, kaldırılsa
+    ikinci kayıtta ses duyulmazdı (T79/T81). `command-palette.tsx`'te arka
+    plana tıklama klavye kullanıcısını dışarıda bırakmıyor: `Escape` zaten
+    dinleniyor ve kapsayıcı `role="dialog"` taşıyor.
+  - **YOL BOYUNCA ÇIKANLAR:**
+    - `badge.tsx`'teki dört ikonda `aria-hidden` ZATEN VARDI, yayılmış
+      (`{...common}`) prop'tan geliyordu. Biome bunu çözemediği için yanlış
+      pozitif veriyor; dosya başına gerekçeli bastırma kondu.
+    - `movements.test.ts`'te hiçbir kuralı bastırmayan ÖLÜ bir
+      `biome-ignore` vardı, kaldırıldı.
+    - `biome-ignore` satırı hedefin HEMEN üstünde olmalı. Açıklama
+      satırları onu aşağı itince bastırma tutmuyor ve Biome hem ihlali hem
+      "kullanılmayan bastırma" uyarısını veriyor. Açıklama önce,
+      `biome-ignore` en sonda.
+  - **T45 AÇILDI.** Route handler'da doğrudan `db` kullanımını yasaklayan
+    kural (D5'in makine zorlaması) artık yazılabilir; linter olmadan
+    imkânsızdı.
+  - **FALSİFİKASYONLA DOĞRULANDI (`dogrula`):** `a == b` içeren geçici bir
+    dosya eklendi, `pnpm lint` `noDoubleEquals` ile **exit 1** verdi, dosya
+    silindi. Eski script de sıfırla dönüyordu — fark tam olarak bu.
+  - **Yeşil:** lint (146 dosya, 0 tanı), typecheck (4 paket), test 546,
+    web derlemesi, migration drift yok.
+  - Kaynak: CI incelemesi 2026-08-30
+
+- [x] **T96 (P2, human: ~2sa / CC: ~30dk)** - altyapı - **Windows CI işi**
+  - Proje Windows'ta geliştiriliyor ve CLAUDE.md'de "Windows tuzakları
+    (yaşandı, tekrar etmesin)" başlıklı ayrı bir bölüm var. `scripts/demo.mjs`
+    tamamen Windows yüzünden yazıldı (T57). Ama CI yalnızca `ubuntu-latest`
+    üstünde koşuyor: o tuzakların tekrar etmediğini kimse doğrulamıyor.
+  - **Somut arıza:** `pnpm --filter X <script>` Windows'ta
+    `'migrate' is not recognized` veriyor. T57'de on iki çağrıya `run` eklendi.
+    On üçüncüsü eklendiğinde CI susacak ve hatayı yine kullanıcı bulacak.
+  - **Kapsam:** typecheck + web derlemesi + T93 duman testi. Tüm test paketini
+    Windows'ta koşturmak gerekmiyor; oradaki riskler platformdan bağımsız ve
+    koşu süresini iki katına çıkarır.
+  - Alternatif: ayrı bir job. Matrix seçiliyor çünkü adımlar aynı; ikinci bir
+    job ikinci bir kaynak olur ve zamanla ayrışır.
+  - Doğrula: bir `pnpm --filter X run <script>` çağrısından `run` kelimesini
+    kaldır, Windows işinin kırmızı yandığını gör.
+  - **YAPILDI, İKİ PARÇA:**
+    - **Statik tarama** (`scripts/check-pnpm-filter.mjs`, CI'da her
+      platformda koşuyor): `pnpm --filter X <script>` kullanımını
+      yasaklıyor. Dokümantasyon yer tutucuları (`<script>`) hariç
+      tutuluyor — yoksa koruma kendi varlık sebebini açıklayan metni
+      suçlar ve ilk çare onu kapatmak olurdu.
+    - **Windows işi** (`windows-latest`): lint + typecheck + web derlemesi.
+  - **KORUMA HEMEN BİR HATA BULDU.** `packages/db/src/testing.ts:62`,
+    kullanıcıya gösterilen hata mesajının içinde: "komutu paket dizininden
+    çalıştır" derken filtreden sonra doğrudan script adını yazıyordu, arada
+    `run` yok. Yani mesaj Windows kullanıcısına ÇALIŞMAYAN bir komut
+    öneriyordu. T57'nin on üçüncü
+    örneği, tam da öngörülen yerden çıktı. Düzeltildi.
+  - **NEDEN İKİ PARÇA.** Windows işi bu çağrıların çoğunu KOŞMUYOR:
+    README'deki, hata mesajlarındaki ve dokümandaki komutlar hiç
+    çalıştırılmıyor — bulunan hata da tam olarak öyle bir yerdeydi. Statik
+    tarama orayı görüyor, koşan bir test görmüyor.
+  - **WINDOWS İŞİ NE KAPSAMIYOR VE NEDEN:** veritabanına dokunan hiçbir şey.
+    GitHub'ın Windows koşucusunda Linux konteyneri çalışmıyor; ne
+    `postgres:17-alpine` servis konteyneri ne de `pnpm demo`nun kaldırdığı
+    Docker kullanılabiliyor. Windows'a yerel Postgres kurmak mümkün ama
+    koşuyu dakikalarca uzatır ve testlerin veritabanı tarafı platformdan
+    bağımsız olduğu için kazancı düşük.
+  - **FALSİFİKASYONLA DOĞRULANDI (`dogrula`):** `package.json`a geçici
+    olarak filtreden sonra doğrudan script adı yazan bir kayıt eklendi,
+    geri alındı. Temiz hâlde 180 dosya tarayıp 0 dönüyor.
+  - **Korumanın kendi kısıtı:** bozuk biçimi ANLATMAK için birebir
+    alıntılayan metin de yakalanıyor. Kaçış kapısı EKLENMEDİ; kaçış
+    kapısı zamanla istismar edilir ve koruma anlamını yitirir. Bunun
+    yerine belgeler biçimi üretmeden anlatıyor.
+  - Yan not: linter, yeni yazılan bu betikte kullanılmayan bir import
+    yakaladı. T95 daha ilk gününde işini yaptı.
+  - **Yeşil:** tarama temiz, lint (0 tanı), typecheck (4 paket).
+  - Kaynak: CI incelemesi 2026-08-30
+
+- [x] **T97 (P2, human: ~10dk / CC: ~5dk)** - güvenlik - **CI `permissions:` bloğu**
+  - İş akışında `permissions:` yok. `GITHUB_TOKEN`'ın varsayılan izinleri
+    repo ve organizasyon ayarına bağlı; eski repolarda yazma yetkili geliyor.
+    Bir action ya da bir bağımlılığın postinstall'ı o tokenı kullanabilir.
+  - Düzeltme tek satır: `permissions:` altında `contents: read`. İş akışı
+    hiçbir şey yazmıyor, daha fazlasına ihtiyacı yok.
+  - Doğrula: koşu logundaki "GITHUB_TOKEN Permissions" bloğunda yalnızca
+    `contents: read` görünsün.
+  - **Yapıldı:** iş akışının başına `permissions:` / `contents: read`.
+    Bu iş akışı hiçbir şey yazmıyor, daha fazlasına ihtiyacı yok.
+  - Kaynak: CI incelemesi 2026-08-30
+
+- [x] **T98 (P3, human: ~30dk / CC: ~10dk)** - güvenlik - **Action'ları commit SHA'sına sabitle**
+  - `actions/checkout@v4`, `pnpm/action-setup@v4`, `actions/setup-node@v4`
+    hareketli etiketler ve etiket sahibi tarafından taşınabilir. Ele geçirilen
+    bir action CI ortamındaki her değişkeni okuyabilir.
+  - **Bugün P3 çünkü** CI'daki `MIGRATION_DATABASE_URL` ve `AUTH_SECRET`
+    zaten sabit ve iş akışında açıkta duruyor; kaybedilecek sır yok.
+    **T42 (deploy) gerçek sırlarla geldiğinde bu P1 olur.**
+  - Doğrula: `@v4` yerine tam SHA, yanına yorumda sürüm; güncellemeyi
+    Dependabot açsın (T102).
+  - **Yapıldı:** yedi `uses:` referansının tamamı commit SHA'sına sabitlendi
+    (checkout v4.4.0, pnpm/action-setup v4.3.0, setup-node v4.4.0,
+    upload-artifact v4.6.2), sürüm yanlarında yorumda.
+  - **İncelik:** `pnpm/action-setup`'ın `v4`'ü ANOTASYONLU etiket.
+    `f40ffcd` etiket NESNESİNİN SHA'sı; Actions commit SHA'sı bekliyor,
+    o yüzden `v4^{}` ile çözülen `b906aff` yazıldı. Etiket nesnesi
+    yazılsaydı iş akışı action'ı çözemezdi.
+  - Doğrulandı: dördü de `git ls-remote` ile upstream'de aranıp
+    beklenen etiketlere denk geldiği görüldü.
+  - Kaynak: CI incelemesi 2026-08-30
+
+- [x] **T99 (P3, human: ~20dk / CC: ~10dk)** - altyapı - **Node sürümünü sabitle**
+  - CI Node 22 kullanıyor, geliştirme makinesi Node 24, `engines` yalnızca
+    `>=22` diyor, `.nvmrc` yok. Üretimde hangi sürümün koşacağı hiçbir yerde
+    yazmıyor.
+  - Yön şu an tesadüfen iyi: CI daha eski sürümde koştuğu için Node 24'e özgü
+    bir API kullanımı CI'da yakalanır. Tesadüf, karar değil; ters çevrilse
+    (CI 24, geliştirme 22) hatayı üretimde öğrenirdik.
+  - Düzeltme: `.nvmrc` eklensin, CI `node-version-file` ile onu okusun,
+    `engines` daraltılsın.
+  - Doğrula: `.nvmrc` değiştir, CI logunda o sürümün kurulduğunu gör.
+  - **Yapıldı:** `.nvmrc` (22) eklendi, iki iş de `node-version-file`
+    ile onu okuyor, `engines` `>=22 <25`e daraltıldı.
+  - **Sürüm DEĞİŞTİRİLMEDİ.** CI zaten 22 koşuyordu; tek değişen, sürümün
+    iş akışından tek bir kaynağa taşınması. Geliştirme makinesi 24'te;
+    nvm/fnm kullanan biri artık CI ile aynı sürüme hizalanıyor. 22 mi 24
+    mü sorusu ayrı bir karar ve burada verilmedi.
+  - Kaynak: CI incelemesi 2026-08-30
+
+- [x] **T100 (P3, human: ~10dk / CC: ~5dk)** - altyapı - **`concurrency` master koşularını iptal etmesin**
+  - `concurrency.group` dal referansına bağlı ve `cancel-in-progress: true`.
+    Master'a arka arkaya iki push gelirse birincisi iptal ediliyor ve o
+    commit'in durumu hiç bilinmiyor.
+  - Bugün zararsız çünkü deploy yok. **T42 geldiğinde** deploy yeşil koşuya
+    bağlanacak ve iptal edilmiş bir commit "başarısız" gibi görünecek.
+  - Düzeltme: `cancel-in-progress` yalnızca master DIŞINDAKİ dallarda açık
+    olsun (ifade `github.ref` karşılaştırmasıyla yazılır).
+  - **Yapıldı:** `cancel-in-progress` master dışındaki dallara
+    sınırlandı; master koşuları artık iptal edilmiyor.
+  - Kaynak: CI incelemesi 2026-08-30
+
+- [x] **T101 (P3, human: ~3sa / CC: ~30dk)** - test - **Kapsam ölçümü**
+  - 316 test ve 5052 satır test kodu var, ama hangi satırların kapsandığı
+    ölçülmüyor. `apps/web`'in sıfır testi (T94) hiçbir sayıda görünmüyor; bu
+    incelemede ancak `package.json` elle okunarak fark edildi.
+  - Ölçülmeyen boşluk tartışılmıyor. Eşik koymak şart değil, rakamın PR'da
+    görünmesi yeterli.
+  - Alternatif: eşik koyup CI'ı kırmak. Seçilmedi — düşük kapsamlı ama doğru
+    bir değişikliği bloklamak, kapsamı test yazarak değil test silerek
+    yükseltmeye teşvik eder.
+  - Doğrula: `vitest --coverage` çıktısında `apps/web` yüzde sıfır görünsün.
+  - **YAPILDI:** `@vitest/coverage-v8`, dört pakete `test:coverage`, CI'da
+    `Testler` adımı kapsamla koşuyor (testi iki kez koşturmamak için).
+  - **BOŞLUK ARTIK BİR RAKAM:**
+    `packages/core %93,6` · `packages/shared %91,7` ·
+    `packages/db %48,3` · `apps/web %7,3`
+  - `apps/web`'in %7'si beklenen ve T94'ün kapsam düzeltmesini doğruluyor:
+    geri kalanı sayfa bileşenleri, yani T92'nin Playwright alanı.
+    `packages/db`'nin %48'i seed/init gibi CLI betiklerinden.
+  - **EŞİK KONMADI, bilinçli.** Eşik, kapsamı test yazarak değil test
+    silerek yükseltmeye teşvik eder. Rakamın PR logunda görünmesi yeterli:
+    ölçülmeyen boşluk tartışılmıyor, görünen boşluk tartışılıyor.
+  - **Kurulum tuzağı:** `@vitest/coverage-v8` varsayılan olarak v4 çekti,
+    paketler ise vitest 3'te. "Running mixed versions is not supported"
+    uyarısı verip `reportsDirectory` okunamadı diye patladı. Sürüm eşlendi.
+  - Kaynak: CI incelemesi 2026-08-30
+
+- [x] **T102 (P3, human: ~30dk / CC: ~15dk)** - güvenlik - **Dependabot ve bağımlılık denetimi**
+  - `.github` altında yalnızca `ci.yml` var. Bağımlılık güncellemesi elle,
+    bilinen açık taraması hiç yok. `pnpm audit` çıktısına hiç bakılmamış
+    olması, açığın yokluğu anlamına gelmiyor.
+  - Kapsam: `.github/dependabot.yml` (npm + github-actions, haftalık) ve
+    CI'da **bloklamayan** bir `pnpm audit --audit-level=high` adımı.
+  - Alternatif: audit'i bloklayıcı yapmak. Seçilmedi — hemen düzeltilemeyen
+    bir transitive açık bütün geliştirmeyi durdurur ve ilk çare kontrolü
+    kapatmak olur.
+  - **YAPILDI:** `.github/dependabot.yml` (npm + github-actions, haftalık,
+    küçük sürümler tek PR'da gruplu) ve CI'da **bloklamayan**
+    `pnpm audit --audit-level=high` adımı.
+  - **İLK KOŞUDA DÖRT YÜKSEK ŞİDDETLİ AÇIK BULDU.** Biri doğrudan
+    bağımlılıkta ve bu projenin güvenlik modelinin tam kalbinde:
+    **`drizzle-orm`, yanlış kaçırılmış SQL tanımlayıcıları üzerinden SQL
+    injection.** 0.44.7 kullanılıyordu, düzeltme 0.45.2'de.
+    Yükseltildi; lint, typecheck, migration drift ve 546 test yeşil kaldı.
+  - Kalan üçü (`sharp`, `postcss` ×2) Next üzerinden geçişli ve Next
+    yükseltmesi gerektiriyor → **T104**.
+  - **NEDEN BLOKLAMIYOR:** hemen düzeltilemeyen bir geçişli açık bütün
+    geliştirmeyi durdurursa ilk çare adımı kapatmak olur. Görünür olması,
+    bloklaması değil, işi görüyor — nitekim ilk koşuda gördü.
+  - Kaynak: CI incelemesi 2026-08-30
+
+- [x] **T103 (P3, human: ~30dk / CC: ~15dk)** - altyapı - **Action'ları v5 hattına taşı (Node 20 kullanımdan kalkıyor)**
+  - **İLK GERÇEK KOŞUDA ORTAYA ÇIKTI** (run 33318396877). Sabitlenen `v4`
+    hatları Node 20 hedefliyor; GitHub şu an zorla Node 24'te çalıştırıyor
+    ve her koşuda uyarı basıyor:
+    `actions/checkout`, `actions/setup-node`, `pnpm/action-setup`.
+  - **Neden şimdi P3, ne zaman P1 olur:** bugün yalnızca uyarı, koşu yeşil.
+    Zorlama kaldırıldığında action'lar hiç başlamayacak ve CI tamamen
+    durur — o an P1 olur ve aceleye gelir. Şimdi yapmak ucuz.
+  - **Kapsam:** `v5` hattının commit SHA'larına geç. T98'deki incelik
+    burada da geçerli: anotasyonlu etiketlerde `git ls-remote <repo>
+    'refs/tags/v5^{}'` ile ETİKET NESNESİNİN değil COMMIT'in SHA'sı
+    alınmalı; Actions commit SHA'sı bekliyor.
+  - Doğrula: push sonrası koşuda "Node.js 20 is deprecated" uyarısı
+    kalmamalı.
+  - **YAPILDI:** on `uses:` referansının tamamı v5 hattına, commit
+    SHA'sıyla: checkout v5.1.0, setup-node v5.0.0, upload-artifact v5.0.0,
+    pnpm/action-setup v5.0.0. Dördü de `git ls-remote` ile upstream'de
+    doğrulandı.
+  - T98'deki incelik burada da geçerliydi: `pnpm/action-setup`'ın etiketi
+    anotasyonlu, `v5^{}` ile çözülen commit yazıldı.
+  - **Doğrulanacak:** "Node.js 20 is deprecated" uyarısının kalkması ancak
+    gerçek koşuda görülebilir; v5 hattının bu depoda sorunsuz çalıştığı da
+    öyle. Bir sonraki CI koşusunda bakılacak.
+  - Kaynak: CI incelemesi 2026-08-30, ilk gerçek koşu
+
+
+
+- [x] **T104 (P2, human: ~1g / CC: ~2sa)** - altyapı - **Next yükseltmesi: üç geçişli yüksek şiddetli açık**
+  - **T102'NİN İLK KOŞUSUNDA ÇIKTI.** `pnpm audit` üç yüksek şiddetli açık
+    buluyor ve üçü de Next üzerinden geçişli: `sharp` (libvips CVE'leri) ve
+    `postcss` ×2 (keyfi dosya okuma; source map üzerinden dizin gezinme).
+  - **Neden P2, P1 değil:** üçü de DERLEME zamanı bileşenleri. `postcss`
+    derlemede koşuyor, `sharp` görsel işlemede — ve bu üründe ürün
+    görselleri `next/image` ile değil düz bir img etiketiyle gösteriliyor
+    (T82-T84, adres kullanıcıdan geliyor). Yine de saldırı yüzeyi ve denetim
+    kaydı için kapatılmalı.
+  - **Kapsam:** Next sürümünü açıkların kapandığı hatta çıkar, sonra
+    `pnpm audit` temiz mi bak.
+  - **Yükseltme sonrası ZORUNLU:** duman testi (T93) ve web derlemesi. Next
+    yükseltmeleri modül çözümlemesini etkiliyor ve `next.config.ts`teki
+    `extensionAlias` ayarı kırılgan; bozulursa typecheck yeşil kalır,
+    derleme patlar.
+  - Doğrula: `pnpm audit --audit-level=high` yüksek şiddetli açık
+    döndürmemeli; duman testi 4/4 kalmalı.
+  - Kaynak: CI incelemesi 2026-08-30, T102 ilk koşusu
+  - **KAPANDI, ama görevin varsayımı yanlıştı.** "Sürümü açıkların
+    kapandığı hatta çıkar" diyordu; 15.x hattında öyle bir sürüm YOK.
+    En yeni 15.5.24 bile `postcss`'i **8.4.31'e sabitliyor** ve yama
+    8.5.18'de. Sürüm yükseltmek tek başına çözmüyor.
+  - `sharp` farklıydı: Next'in kendi aralığı zaten `^0.34.3 || ^0.35.3`,
+    yani yamalı hat destekleniyordu; pnpm sadece alt sınırı seçmişti.
+  - Çözüm `pnpm-workspace.yaml` içinde `overrides`. package.json'daki
+    `pnpm.overrides` alanı pnpm 11'de OKUNMUYOR — depo zaten `allowBuilds`
+    ayarını workspace dosyasında tutuyor, override da oraya ait.
+  - postcss override'ı yeni sürüm getirmiyor: depoda Tailwind için zaten
+    8.5.26 vardı, ağaç tek sürüme indi.
+  - Next 16 ikisini de kaynağında çözerdi (postcss 8.5.23, sharp ^0.35.3)
+    ama major yükseltme; derleme zamanı bir P2 açığı için orantısız risk.
+    Ayrı görev: **T105**.
+  - Doğrulandı: `pnpm audit --audit-level=high` yüksek açık döndürmüyor
+    (3 high + 2 moderate kapandı), lint temiz, typecheck temiz, 546 test
+    yeşil, `next build` başarılı, duman testi 4/4.
+
+- [x] **T105 (P3, human: ~1g / CC: ~2sa)** - altyapı - **Next 16'ya geçiş**
+  - **P3 SANILIYORDU, P1 ÇIKTI.** Yükseltme T109(b)'yi kapattı: Next 15'in
+    istemci yönlendiricisi sunucu eyleminin yönlendirmesini turların
+    3-5'inde sessizce düşürüyordu ("Kaydet'e bastım, hiçbir şey olmadı").
+    Aynı ölçüm Next 16'da **0/24**. Faz 10'un dokuz tarayıcı senaryosu da
+    yeşile döndü ve CI kapısına alındı.
+  - **`extensionAlias` KIRILDI, tam da beklendiği gibi.** Next 16'da
+    Turbopack varsayılan ve `webpack()` kancası hiç çalışmıyor; derleme
+    "packages/core/src/index.ts'in hiç export'u yok" diye patladı.
+    Turbopack'te `extensionAlias` karşılığı yok.
+  - Çözüm AYARA değil KAYNAĞA uygulandı: paketlerin içindeki 159 göreli
+    import uzantısız yazıldı (45 dosya). `moduleResolution: "Bundler"`
+    bunu zaten destekliyor; tsx ve vitest de öyle çözüyor. Böylece
+    derleyiciye özel kanca tamamen kalktı — bir sonraki paketleyici
+    değişikliğinde yeniden yazılacak bir hack de kalmadı.
+  - `agentRules: false` eklendi: Next 16 her açılışta
+    `apps/web/AGENTS.md` ve `apps/web/CLAUDE.md` üretiyor. Kök `CLAUDE.md`
+    elle yazılmış; ikinci, otomatik bir kaynak aynı soruya iki cevap verir
+    ve her `next dev` sonrası depo kirli görünürdü.
+  - `postcss`/`sharp` override'ları kaldırıldı (T104). Doğrulandı:
+    `pnpm audit --audit-level=high` temiz; kalan iki `moderate` yalnızca
+    geliştirme bağımlılıklarında (drizzle-kit→esbuild, exceljs→uuid).
+  - Doğrulandı: lint + typecheck + 599 test + `next build` (Turbopack) +
+    `next dev` (Turbopack) + drizzle drift yok + **e2e 14/14** (eskiden 5).
+  - Kaynak: T104 kapanışı, T109 teşhisi
+
+- [ ] **T106 (P2, human: ~1sa / CC: ~15dk)** - tasarım - **56 px kuralı ile kod ayrıştı, biri düzeltilmeli**
+  - PLAN Bölüm 11 ve CLAUDE.md "minimum 56 px dokunma hedefi (eldiven var)"
+    diyor. Kod: menü satırı 48 px, form kontrolü 52 px, barkod/miktar 64 px.
+  - İkisi de savunulabilir ama İKİSİ BİRDEN DOĞRU OLAMAZ. Yazılı kural ile
+    kodun ayrışması, bu projede tekrar eden en pahalı hata sınıfı: sonraki
+    kişi hangisine uyacağını bilemez.
+  - **Karar kullanıcınındır, çünkü 56 px bir ürün kararıydı:** eldivenli el,
+    soğuk, acele. Referans görselin oranları için indirmek estetik bir
+    tercih; ikisini tartan kişi ürünü kullanacak olan.
+  - Seçenekler: (a) kuralı 52/48'e indir ve gerekçesini yaz, (b) kodu 56'ya
+    çıkar, (c) ikili kural yaz — "dokunma hedefi 56, işaretleme kontrolü 48".
+  - Not: barkod ve miktar alanları 64 px'te kaldı, yani en sık dokunulan
+    iki alan zaten hedefin üstünde.
+  - Kaynak: T56 kapanışı
+
+- [x] **T107 (P3, human: ~10dk / CC: ~5dk)** - arayüz - **favicon yok: her sayfada 404**
+  - Tarayıcıda ölçüldü (T88 demo turu): `GET /favicon.ico` → 404, ve bu
+    konsola hata olarak düşüyor. Tek başına zararsız ama konsolu KİRLETİYOR:
+    gerçek bir JS hatası bu gürültünün içinde gözden kaçar, ve tarayıcı
+    testinin "konsol temiz mi" kontrolü hep kirli döner.
+  - `apps/web/src/app/icon.svg` eklendi; kabuktaki kutu logosunun aynısı.
+    İkinci bir çizim yapılmadı: sekmedeki simge menüdekiyle ayrışırsa
+    kullanıcı ikisini aynı ürün saymaz.
+  - Renkler SABİT yazıldı, `var(--accent)` değil: sekme simgesi sayfanın
+    CSS'ini görmüyor, belirteç orada boş kalır ve simge görünmezdi.
+  - Doğrulandı (gerçek tarayıcı, beş ekran gezildi): `<link rel="icon">`
+    basılıyor, tarayıcı artık `/favicon.ico` İSTEMİYOR, konsolda 404 yok.
+  - Kaynak: T88 tarayıcı turu
+
+- [ ] **T108 (P2, human: ~1sa / CC: ~20dk)** - hareket - **fiyat alanı sebebe göre açılıp kapanmıyor**
+  - "Birim fiyat" ve "Sapma sebebi" alanları HER sebepte görünüyor,
+    fire/kullanım seçilse bile.
+    **GEREKÇE DEĞİŞTİ (T110):** eskiden "form JS'siz çalışıyor, koşullu
+    gizleme JS gerektirir" deniyordu; o iddia ölçümle yanlış çıktı — JS
+    kapalıyken form zaten kullanılamıyor. Yani teknik engel YOK; geriye
+    yalnızca "gerekli mi" sorusu kalıyor ve o da aşağıdaki gibi ölçülmeden
+    cevaplanmamalı. Sunucu yanlış eşleşmeyi `PRICE_NOT_APPLICABLE`
+    ile reddediyor ve etikette hangi işlemlerde geçerli olduğu yazıyor — yani
+    kullanıcı kaybolmuyor ama GEREKSİZ BİR TUR atıyor.
+  - Ölçülmeden çözülmemeli: bu gerçekten yaşanıyor mu? Depoda fire girişi
+    ne sıklıkta yapılıyor ve kullanıcı oraya fiyat yazmaya kalkıyor mu?
+    Kalkmıyorsa bu iş HİÇ YAPILMAMALI — JS eklemek T52'nin kararını geri
+    almak demek ve bedeli eski tarayıcıda formun tamamen çalışmaması.
+  - Yapılacaksa: progressive enhancement (JS varsa gizle, yoksa hepsi
+    görünür kalsın), JS'e bağımlı gizleme DEĞİL.
+  - Kaynak: T88 tarayıcı turu
+
+- [ ] **T110 (P1, human: ~2sa / CC: ~1sa)** - arayüz - **"JavaScript gerekmiyor" iddiası YANLIŞ: JS kapalıyken form kullanılamıyor**
+  - Ölçüldü (2026-09-03, gerçek tarayıcı, `javaScriptEnabled: false`):
+    `/hareket?barkod=…` sayfasında `main` metni yalnızca **"Sayfa
+    yükleniyor"**, ve **"Kaydet" düğmesi hiç yok** (rol sorgusu 0 döndü).
+    Giriş çalışıyor (303 → `/panel`), ama panel de iskelette kalıyor.
+  - Sebep: sayfalar AKIŞLA (streaming Suspense) geliyor ve akan içeriği
+    yerine koyan şey satır içi script'ler. JS kapalıyken içerik hiç
+    yerleşmiyor. `loading.tsx` olan her ekran aynı durumda.
+  - **Neden önemli:** iki ayrı karar bu yanlış iddiaya dayanıyordu —
+    `hareket/page.tsx` başlığındaki "JavaScript de gerekmiyor" notu ve
+    T108'in "alanları koşullu gizlemek JS gerektirir, o yüzden yapmıyoruz"
+    gerekçesi. Kod yorumları düzeltildi; karar gerekçeleri yeniden
+    kuruldu.
+  - **Karar gerekiyor (kullanıcının):** depodaki eski Android tarayıcılar
+    gerçekten JS'siz mi? Öyleyse bu P0'dır ve akış sınırları kaldırılmalı
+    (ya da bu ekranlar için `loading.tsx` düşürülmeli). Değilse iddia
+    kaldırıldığı için sorun kalmıyor ve T108 farklı gerekçeyle
+    değerlendirilir.
+  - Kaynak: T109 teşhisi
+
+- [x] **T111 (P2, human: ~1sa / CC: ~20dk)** - gözlem - Tekrar bekleyen iş, Sistem Sağlığı kartında SAĞLIKLI görünüyor
+  - Ölçüldü (2026-09-03, T34 canlı sürüş): SMTP'siz kurulumda gün sonu
+    raporu bir kez patlayıp `QUEUED`'a dönüyor (`last_error_code` dolu),
+    kart ise "2 iş kuyrukta, işleniyor" diyor. Yani hata KAYITLI ama
+    ekranda YOK.
+  - Uyarı eşiği 1 saat; cron günde bir koştuğu için o satır ~24 saat
+    "işleniyor" olarak duruyor. G4 tam olarak bu: kayıt var, görünürlük yok.
+  - Çözüm: `queueCheck` `last_error_code IS NOT NULL AND status='QUEUED'`
+    satırlarını ayrı sayıp `warn` dönsün — "1 iş bir kez başarısız oldu,
+    tekrar denenecek".
+  - Yapıldı: `queueCheck` artık `last_error_code IS NOT NULL` olan QUEUED
+    satırlarını ayrı sayıyor ve "1 iş bir kez başarısız oldu, tekrar
+    denenecek" diye `warn` dönüyor.
+  - `error` DEĞİL `warn`: işin bir hakkı daha var ve bir sonraki tur
+    gerçekten düzeltebilir. Kalıcı başarısızlık zaten ayrı ve `error`.
+  - Kontrol kalıcı başarısızlığın ÜSTÜNDE değil ALTINDA: `FAILED` varsa o
+    kazanıyor. Tersi olsaydı gerçek bir kalıcı hata, "tekrar denenecek"
+    diyen daha yumuşak bir mesajın arkasına gizlenirdi.
+  - Mutasyonla doğrulandı.
+  - Kaynak: T34 canlı sürüşü
+
+- [ ] **T112 (P2, human: ~2sa / CC: ~30dk)** - cron - Zamanlayıcının kendisi kurulmadı
+  - `POST /api/cron` hazır ama onu VURAN bir şey yok. Deploy hedefi
+    seçilmeden (T42) hangisi olacağı belli değil: Vercel Cron
+    (`vercel.json`), systemd timer, ya da klasik crontab + curl.
+  - **Bu kurulmadan gün sonu raporu hiç çıkmaz.** `next.config.ts` açılışta
+    `CRON_SECRET` yoksa uyarıyor ama sır tanımlı olup zamanlayıcı yoksa
+    hiçbir yerde ses çıkmıyor — "en son ne zaman koştu" bilgisi hiçbir
+    yerde tutulmuyor.
+  - Ek olarak: turun kendisi de izlenmeli. Zamanlayıcı ölürse bunu
+    anlamanın tek yolu raporun gelmediğini fark etmek, yani G4.
+  - **T42'ye bağlı.**
+  - Kaynak: T34
+
+
+- [x] **T113 (P2, human: ~2sa / CC: ~40dk)** - test - **Paylaşılan test veritabanında GLOBAL iddia kuran testler taransın**
+  - **CI'DA YAŞANDI (2026-09-04, koşu 33870506493).** `cron.test.ts` iki
+    testte kırmızı yandı, yerelde 441/441 yeşildi. Sebep: test
+    `runCronAllTenants` sonucundaki **her** kiracıya bakıp "hiçbirinin hakkı
+    bitmemiş olmalı" diyordu — yirmi test dosyasıyla paylaşılan bir
+    veritabanında. Başka bir dosyanın bıraktığı, hakkı yarılanmış tek bir iş
+    (`attempts=1`, `max_attempts=2`) ilk turda tükeniyor ve test, kendi
+    davranışı kusursuzken düşüyor.
+  - **İkinci kırmızı tamamen yanıltıcıydı:** temizlik testin gövdesindeydi,
+    ilk assertion patlayınca atlandı ve artıklar bir sonraki testi de
+    düşürdü. Kök hata bir taneydi, rapor iki tane gösterdi.
+  - Düzeltildi (`cron.test.ts`): iddia kendi kiracılarımıza daraltıldı, tur
+    bayrağı sabit değere değil turun kendi içeriğine karşı sınanıyor,
+    temizlik `afterEach`'e alındı ve sınır veritabanı saatinden okunuyor.
+  - **Kalan iş bu dosya değil, SINIF.** Aynı desen başka yerlerde de olabilir:
+    paylaşılan veritabanında `count(*)`, "hiç yok", "hepsi" gibi iddialar.
+    `packages/core` ve `packages/db` testleri taranmalı; bulunan her biri
+    ya kendi kiracısına daraltılmalı ya da gerekçesi yazılmalı.
+  - **Neden P2:** kararsız test, kırmızıya güveni yok ediyor. Bir kez "bu
+    test bazen düşer" denince gerçek regresyon da göz ardı edilir.
+  - Doğrula: taramadan çıkan her testte, yabancı durumu bilerek kurup
+    (zehirleme) önce kırmızı gör. Bu düzeltmede öyle yapıldı — yabancı
+    kiracıya `attempts=1` bir iş eklenince CI'daki iki hata birebir
+    yeniden üretildi, düzeltmeden sonra aynı durumda 19/19 yeşil.
+  - Kaynak: CI hatası 2026-09-04
+
+---
+
+## T42 ÜRETİME HAZIRLIK DENETİMİ (2026-09-04)
+
+Hiçbir deploy yapılmadan, PLAN Bölüm 9 (deploy sırası, geriye uyumluluk
+kuralı, ilk 5 dakika kontrol listesi) ve T112 kaynak alınarak on alan
+tarandı. Sonuç: **5 BLOCKER, 4 WARNING, 1 READY.**
+
+| # | Alan | Sonuç | Neden |
+|---|---|---|---|
+| 1 | Vercel ayarları | **BLOCKER** | `vercel.json` yok; Root Directory / Install / Build hiçbir yerde yazılı değil |
+| 2 | Supabase bağlantısı + migration akışı | **BLOCKER** | `stok_app` rolünü üretimde kuran ve migration'ı koşturan bir yol YOK |
+| 3 | `DATABASE_URL` / `MIGRATION_DATABASE_URL` ayrımı | **READY** | Ayrım kodda temiz; tek şart migration URL'inin Vercel runtime'ına KONMAMASI |
+| 4 | Production secret/env | **WARNING** | Liste `.env.example`'da tam ama `assertServerConfig()` Vercel'de hiç koşmuyor (T116) |
+| 5 | RLS'in üretim rolüyle zorlanması | **WARNING** | 30+ test yerelde kanıtlıyor; Supabase'de aynı kurulumun sağlandığını doğrulayan hiçbir kontrol yok |
+| 6 | `/api/v1/health` | **BLOCKER** | Uç yok; kontrol listesinin 1. maddesi çalıştırılamaz (T114) |
+| 7 | Vercel Cron + `CRON_SECRET` | **BLOCKER** | Vercel Cron **GET** atıyor, uç POST-only → 405 (T115) |
+| 8 | Geriye uyumlu migration | **WARNING** | `0009` kuralı çiğniyor (`RENAME COLUMN`); ilk deploy'da zararsız, kuralı zorlayan kontrol yok |
+| 9 | Üretim duman testleri | **BLOCKER** | Listenin 1. maddesi imkânsız, 4. maddesi (mobil) hiç yok; uygulanabilir hali yazılmamış |
+| 10 | Rollback | **WARNING** | Vercel Instant Rollback web için hazır geliyor; DB için geri alma yolu yok ve hiçbir yerde yazılı değil (T119) |
+
+**Doğru olduğu doğrulananlar** (denetimin çıktısı bunlar da): `prepare: false`
+pgbouncer için ayarlı (client.ts:39), `secureCookies()` `APP_URL` yokken
+kapalı tarafa düşüyor, `.nvmrc` + `engines` + `packageManager` sabit,
+`CRON_SECRET` 32 karakter altını reddediyor ve sabit zamanlı karşılaştırma
+kullanıyor, cron ucu `runtime = 'nodejs'` + `dynamic = 'force-dynamic'`.
+
+- [ ] **T114 (P1, human: ~1sa / CC: ~20dk)** - deploy - **`/api/v1/health` ucu yok, deploy sonrası kontrol listesi çalıştırılamaz**
+  - PLAN Bölüm 9, deploy sonrası ilk 5 dakikanın **1. maddesi** olarak
+    `/api/v1/health` 200 mü diye soruyor. Böyle bir uç yok:
+    `apps/web/src/app/api` altında yalnızca `arama`, `cron`, `rapor/*` var.
+  - Bugünkü tek sağlık yüzeyi `/saglik` panel sayfası ve `user:manage`
+    istiyor. Yani deploy'un sağ olup olmadığını öğrenmek için önce
+    tarayıcıda yönetici olarak giriş yapmak gerekiyor — bir izleme aracının
+    yapamayacağı şey. Kontrol listesinin amacı tam olarak bunu ortadan
+    kaldırmaktı.
+  - **Yetkisiz olmalı ama SUSKUN.** Sürüm, şema durumu, kiracı sayısı gibi
+    şeyleri yazan bir sağlık ucu, kimliği doğrulanmamış birine altyapı
+    haritası verir. Gövde `{"status":"ok"}` düzeyinde kalmalı; ayrıntı
+    zaten `/saglik` kartında ve orada yetki var.
+  - `systemHealth()` KULLANILAMAZ: `requirePermission(actor, 'user:manage')`
+    ile başlıyor ve kiracı bağlamı istiyor. Sağlık ucunun sorusu farklı:
+    "bu sürüm ayakta ve veritabanına bağlanabiliyor mu". `SELECT 1` yeter.
+  - T53 (`/api/v1` REST uçları) beklenmemeli: o mobilin ön şartı ve mobil
+    en sona bırakıldı. Sağlık ucu tek başına yazılabilir ve `/api/v1`
+    öneki, T53 geldiğinde yolun değişmemesi için baştan doğru seçilmeli.
+  - Doğrula: veritabanını durdur, uç 503 dönsün; ayağa kaldır, 200 dönsün.
+    Yeşil cevap tek başına hiçbir şey ispat etmez.
+  - Kaynak: T42 üretime hazırlık denetimi
+
+- [ ] **T115 (P1, human: ~30dk / CC: ~10dk)** - cron - **Vercel Cron GET atıyor, `POST /api/cron` 405 dönecek**
+  - Vercel Cron zamanlanmış yolu **GET** ile çağırıyor; başka bir metot
+    seçilemiyor. `apps/web/src/app/api/cron/route.ts` yalnızca `POST`
+    export ediyor, yani Next 405 döner ve **tur hiç çalışmaz.** T112
+    kurulsa bile gün sonu raporu çıkmaz — G4'ün ta kendisi, üstelik
+    zamanlayıcı "kuruldu" görünürken.
+  - `POST` seçimi gerekçesiz değildi (route.ts:70): uç yan etkili ve GET
+    olsaydı bir tarayıcı ön-getirmesi turu tetikleyebilirdi. Bu gerekçe
+    hâlâ geçerli, o yüzden **`POST` KALDIRILMAMALI**; yanına, aynı
+    doğrulamayı yapan bir `GET` eklenmeli. Ön-getirme riski `CRON_SECRET`
+    ile zaten kapalı: sırrı olmayan bir GET 401 alır.
+  - Vercel `CRON_SECRET` adlı ortam değişkeni tanımlıysa isteğe
+    `Authorization: Bearer <CRON_SECRET>` başlığını KENDİSİ ekliyor.
+    Yani uçtaki doğrulama olduğu gibi çalışıyor; değişmesi gereken tek şey
+    kabul edilen metot.
+  - **Plan seçimi bu görevin içinde:** `HEALTH_ALARM` dedupe anahtarı saat
+    bazlı (`cron.ts:517`), yani tur en az SAATTE BİR koşmalı. Vercel Hobby
+    planı günde bir cron'a izin veriyor — Hobby'de alarm sınıfı tamamen
+    ölü doğar. Pro planı ya da harici bir zamanlayıcı (systemd timer,
+    cron + curl) gerekiyor; karar T42'de verilmeli.
+  - Doğrula: GET'i geçici olarak kaldır, üretim benzeri bir çağrıda 405
+    gör, geri koy.
+  - Kaynak: T42 üretime hazırlık denetimi
+
+- [ ] **T116 (P2, human: ~1sa / CC: ~20dk)** - deploy - **`assertServerConfig()` Vercel'de HİÇ koşmuyor**
+  - `next.config.ts:159` kontrolü `phase !== PHASE_PRODUCTION_BUILD`
+    koşuluna bağlıyor, yani yalnızca `next dev` ve `next start` açılışında.
+    **Vercel'de `next start` yok:** her istek serverless fonksiyonu doğrudan
+    başlatıyor ve `next.config.ts` çalışma anında hiç yüklenmiyor.
+  - Sonuç, dosyanın kendi yorumunun (satır 35-48) önlemek için yazıldığı
+    arızanın aynısı: eksik `AUTH_SECRET` ile deploy yeşil geçer, ilk giriş
+    denemesinde kullanıcı "SERVER_ERROR" görür. Yorum "kullanıcı testinde
+    bu iki kez oldu" diyor; üretimde üçüncü kez olacak ve bu sefer
+    operatörün konsolunda hiçbir şey yazmayacak.
+  - Faz koşulu YANLIŞ DEĞİL, EKSİK. `next build` gerçekten sırsız bir
+    ortamda koşabilmeli. Eksik olan, çalışma anında da bir kez kontrol
+    eden ikinci bir çağrı noktası (uygulama modülü seviyesinde, örneğin
+    `src/server/` altında bir modül yükleme yan etkisi olarak).
+  - Doğrula: `AUTH_SECRET`'i sil, uygulamanın İLK İSTEKTE ne söylediğine
+    bak — "SERVER_ERROR" değil, ne eksik olduğunu söyleyen bir kayıt.
+  - Kaynak: T42 üretime hazırlık denetimi
+
+- [ ] **T117 (P2, human: ~1sa / CC: ~20dk)** - deploy - **Serverless'ta bağlantı havuzu ayarları yerel varsayımla yazılmış**
+  - `client.ts:31` havuzu `max = 10` ile açıyor ve `idle_timeout`
+    vermiyor. Tek bir uzun ömürlü sunucuda ikisi de doğru. Vercel'de
+    uygulama N tane eşzamanlı fonksiyon örneğine dağılıyor ve her biri
+    kendi havuzunu açıyor: 20 örnek = 200 bağlantı. Supabase pooler'ın
+    istemci sınırı bunun civarında; aşıldığında hata "too many
+    connections" olarak KULLANICIYA düşer.
+  - `idle_timeout` yokluğu ayrı bir sorun: fonksiyon örneği donduruluyor
+    ama bağlantı sunucu tarafında açık kalıyor ve kimse kapatmıyor.
+  - Düzeltme yerel geliştirmeyi bozmamalı: `max` ve `idle_timeout` ortam
+    değişkeninden okunmalı, varsayılanlar bugünküyle aynı kalmalı.
+    Sabit küçük bir `max` yazmak, yerelde tek süreçli demo yolunu
+    yavaşlatırdı.
+  - Doğrula: sınırı 1'e indirip eşzamanlı iki isteğin sıraya girdiğini gör.
+  - Kaynak: T42 üretime hazırlık denetimi
+
+- [ ] **T118 (P3, human: ~30dk / CC: ~10dk)** - deploy - **`bodySizeLimit: '5mb'` Vercel'in 4,5 MB sınırının ÜSTÜNDE**
+  - `next.config.ts:122` sunucu eylemleri için 5 MB'a izin veriyor. Vercel
+    fonksiyonlarının istek gövdesi sınırı 4,5 MB ve platform seviyesinde,
+    yani uygulamanın haberi olmadan reddediyor.
+  - Uygulama kodunda dosya boyutu kontrolü YOK (arandı, bulunamadı). Yani
+    4,6 MB'lık bir içe aktarma dosyası (T23) Türkçe bir hata mesajı değil,
+    platformun ham 413'ünü üretir — deponun anlayamayacağı bir ekran.
+  - Sınırı 4,5 MB'ın altına çekmek TEK BAŞINA yetmez: kullanıcı yine
+    sebebini bilmeden reddedilir. Yükleme formunda boyut kontrolü ve
+    "dosya çok büyük, N satırlık parçalara bölün" mesajı gerekiyor.
+  - Kaynak: T42 üretime hazırlık denetimi
+
+- [ ] **T119 (P1, human: ~2sa / CC: ~40dk)** - deploy - **Üretim runbook'u yok: rol kurulumu, migration ve geri alma yazılı değil**
+  - Üç şey hiçbir yerde yazmıyor ve üçü de bir kişinin kafasında duruyor:
+    1. **`stok_app` rolü Supabase'de nasıl kurulur.** `db/init/01-roles.sql`
+       yalnızca Docker'ın ilk açılışında ve test veritabanı kurulurken
+       koşuyor. `pnpm --filter @stok/db run init` bu boşluğu kapatıyor ama
+       README'de deploy diye bir bölüm bile yok. Rol kurulmazsa uygulama
+       hiç bağlanamaz; daha kötüsü, telaşla `postgres` ile bağlanılırsa
+       tenant izolasyonu SESSİZCE kapanır (D5'in tam olarak uyardığı şey).
+    2. **Migration'ı üretimde ne çalıştırır.** CI'da deploy işi yok,
+       `apps/web/package.json`'da migrate script'i yok. PLAN Bölüm 9
+       "1. DB migration, 2. Web deploy" diyor ama 1. adımı yapan bir şey
+       yok. Vercel build adımında koşturmak YANLIŞ olurdu: build'in
+       veritabanına erişimi olmayabilir ve eşzamanlı iki build aynı
+       migration'ı iki kez dener.
+    3. **Geri alma.** Web tarafı Vercel'in Instant Rollback'i ile hazır
+       geliyor; **veritabanı için hiçbir yol yok.** drizzle-kit `down`
+       migration üretmiyor. Bu, "additive migration" kuralını bir tercih
+       değil ZORUNLULUK yapıyor: şema geri alınamadığı için ileri uyumluluk
+       tek çıkış. `0009` (`RENAME COLUMN unit_cost → unit_price`) bu kuralı
+       çiğniyor; ilk deploy'da zararsız (boş veritabanına hepsi birden
+       koşuyor) ama kuralın çiğnenebildiğini gösteriyor ve bunu yakalayan
+       bir kontrol yok.
+  - Runbook `docs/` altına yazılmalı, README'den bağlanmalı. Deneme yanılma
+    ile bulunacak bir şey değil: yanlış rolle bir kez bağlanmak izolasyonu
+    kapatır ve kimse fark etmez.
+  - Kaynak: T42 üretime hazırlık denetimi
+
+---
 ---
 
 ## GSTACK REVIEW REPORT
@@ -1237,7 +2826,7 @@ Türkçe arama normalizasyonu, büyük Excel raporu arka plan işi.
 | CEO Review | `/plan-ceo-review` | Kapsam ve strateji | 1 | ISSUES_OPEN | Mod SELECTIVE EXPANSION, 10 fırsat sunuldu, 6 kabul, 4 ertelendi, 4 kritik açık |
 | Eng Review | `/plan-eng-review` | Mimari ve testler (zorunlu) | 1 | ISSUES_OPEN (PLAN) | 16 bulgu, 6 karar (D4-D9), 9 düzeltme, 8 yeni görev, 4 kritik açık taşındı |
 | Codex Review | `/codex review` | Bağımsız 2. görüş | 0 | - | Codex kurulu değil |
-| Design Review | `/plan-design-review` | UI/UX açıkları | 0 | - | Çalıştırılmadı |
+| Design Review | `/plan-design-review` | UI/UX açıkları | 1 | ISSUES_OPEN | puan: 3/10 → 6/10, 9 karar (TD1-TD6), 22 görev (T65-T86), 2 kalem kapsam dışı |
 | DX Review | `/plan-devex-review` | Geliştirici deneyimi | 0 | - | Çalıştırılmadı |
 
 **ENG REVIEW BULGULARI:** Mimari 5 (2 P1), Kod kalitesi 6 (2 P1), Test 30 kapsam boşluğu
@@ -1247,7 +2836,8 @@ Türkçe arama normalizasyonu, büyük Excel raporu arka plan işi.
 hatası). Dördü de T14-T17'de kapatılıyor. Eng review yeni kritik açık eklemedi ama
 G1'in çözümünü değiştirdi (stream yerine eşik üstü arka plan işi).
 
-**UNRESOLVED:** 4. Bunlar hiçbir zaman açıkça cevaplanmadı, varsayılanlarla ilerleniyor:
+**UNRESOLVED:** 4 (ürün stratejisi) + 8 (tasarım kapsamı, yukarıda).
+Ürün stratejisi açıkları: Bunlar hiçbir zaman açıkça cevaplanmadı, varsayılanlarla ilerleniyor:
 U1 negatif stok politikası (varsayılan: çalışan engellenir, admin geçebilir),
 U2 maliyet yöntemi (varsayılan: ağırlıklı ortalama, **muhasebeciye sorulmalı**),
 U3 hosting (varsayılan: Supabase),
@@ -1256,6 +2846,91 @@ U4 ürünün asıl çözdüğü acı (ilk demoda hangi ekranın açılacağını
 **OUTSIDE VOICE:** Çalıştırılmadı. Codex kurulu değil; Claude alt ajanı ile bağımsız
 ikinci görüş alınabilir, kullanıcı onayı bekliyor.
 
-**VERDICT:** CEO + ENG İNCELEMELERİ TAMAMLANDI. Uygulamaya başlanabilir.
-U2 (maliyet yöntemi) tek yönlü kapı olduğu için Faz 2'den önce cevaplanmalı;
-diğer üç açık soru uygulama sırasında geri alınabilir.
+**DESIGN REVIEW BULGULARI (2026-08-25):** Yedi geçiş çalıştırıldı. Bilgi mimarisi 3→7,
+etkileşim durumları 2→5, kullanıcı yolculuğu 6→8, AI slop 7, tasarım sistemi uyumu 7→4
+(iki çelişen sistem; T77 kapatıyor), duyarlılık ve erişilebilirlik 3→6. Genel 3/10 → 6/10.
+
+Kodda iki ölçülebilir açık bulundu, ikisi de tasarımdan bağımsız:
+`loading.tsx`/`error.tsx` hiçbir rotada yok (T69) ve `outline-none` +
+`border-slate-300` (1,48:1) erişilebilirlik gerilemesi (T68).
+
+Referans görselin 19 öğesi incelendi: 7'si bugünkü veriyle hazırdı, 4'ü bu tura girdi
+(Kategoriler, Raporlar, Ayarlar, koyu tema). Kalanlar TTTD2'da tek tek karara bağlandı:
+ürün fotoğrafı, bildirim zili ve Ctrl+K arama kapsama ALINDI (T80-T86); Tedarikçiler ve
+Siparişler için "KAPSAM DIŞI → Faz 2" kararı TEYİT EDİLDİ.
+
+TTTD2'da ortaya çıkan bir veri modeli gerçeği: görselin kiracı değiştirici kontrolü bu üründe
+uygulanamaz. `users.tenantId` notNull ve tek FK, yani bir kullanıcı tam olarak bir
+işletmeye ait; değiştirilecek bir şey yok. Kontrol hesap menüsü olarak yorumlandı.
+
+**VERDICT (Faz 9):** CEO + ENG + DESIGN İNCELEMELERİ TAMAMLANDI.
+
+---
+
+### Faz 10 mühendislik incelemesi (2026-08-30)
+
+| Çalıştırma | Durum | Sonuç |
+|---|---|---|
+| Step 0 — kapsam | tamam | Karmaşıklık eşiği aştı (T88 tek başına 15 dosya). Kullanıcı dördünü birden kilitlemeyi seçti |
+| Section 1 — mimari | tamam | 4 bulgu (hepsi P1), 4 karar: D2/D3, D4, D5, D6 |
+| Section 2 — kod kalitesi | tamam | 2 bulgu → 1 karar (D7) + 1 önemsiz (Excel başlığı) |
+| Section 3 — test | tamam | 1 bulgu (D8) + zorunlu regresyon listesi → T92 |
+| Section 4 — performans | tamam | 1 bulgu, 1 karar (D9) |
+| **Dış ses (Codex)** | **ÇALIŞMADI** | `codex` kurulu değil; alt-ajan geri düşüşü bu oturumda kapalıydı. **Bu incelemeyi tek model yaptı — çapraz doğrulama yok.** |
+
+**En ciddi bulgu:** planın kendisi tutarsızdı. `PLAN.md:1533`'teki DB CHECK ile
+tolerans kararı birbirini kesiyordu; tolerans içindeki bir yuvarlama sebep
+taşımadığı için CHECK tarafından reddedilecekti, yani mutlu yol kasada
+veritabanı hatasıyla duracaktı. Kullanıcının "fiyat barkod/OCR'dan geliyor,
+kazara sapma yok" düzeltmesi tolerans kavramını tamamen düşürdü ve üç iş
+birden gitti (epsilon, `tenants` ayar sütunu, `/ayarlar` alanı).
+
+**Kod okunarak doğrulanan diğer üç bulgu:**
+- `numeric.ts` miktara özel (`QTY_SCALE = 3`), para `numeric(12,2)` — yardımcılar
+  kullanılamıyor ve kod tabanında hiç para aritmetiği yok → hesap SQL'de (D5)
+- `rls.test.ts:247` public şemadaki HER tabloyu tarıyor → `price_index`
+  politikasız eklenirse test kırmızı, üretimde 500 (D6)
+- `authz.ts:88`'in yazılı gerekçesi satır bazlı gizlemeyi dışlıyor → ayrı alan
+  adı `saleUnitPrice` (D7)
+
+**U2 üzerine düzeltme:** yukarıdaki Faz 9 verdict'i "U2 Faz 2'den önce
+cevaplanmalı" diyordu. Faz 10 için geçerli DEĞİL. FIFO/ağırlıklı ortalama
+"hangi geçmiş maliyeti düşeyim" sorusudur ve kâr raporuna (E8) aittir;
+yenileme maliyeti ileriye bakan bir sayıdır. T88-T92 U2 beklemeden yazılabilir.
+
+**TODOS.md:87 YANLIŞ:** "veri toplanmaya bugün başlıyor" diyor. Başlamıyor —
+arayüz `unit_cost` alanını hiç göndermiyor. E8'in 4 günlük tahmini "geçmiş veri
+hazır" varsayımına dayanıyor ve T88 girmezse E8 sıfır veriyle başlar. Düzeltilmeli.
+
+**VERDICT (Faz 10):** ENG İNCELEMESİ TAMAMLANDI, DIŞ SES EKSİK. Dokuz karar
+alındı, hepsi PLAN.md T88-T92'ye gerekçesiyle yazıldı. Uygulamaya başlanabilir.
+
+**UNRESOLVED DECISIONS:**
+- Sapma sebebi listesi onaylanmadı: `TANIDIK`, `TOPTAN`, `KAMPANYA`, `HASARLI`, `ESKI_STOK`, `YUVARLAMA`, `YONETICI_ONAYLI`, `DIGER` — kullanıcı eksik/fazla söylemedi, T88 bu listeyle başlıyor
+- `DAMAGE` / `USAGE` çıkışlarında fiyat ne olmalı (öneri: NULL, para el değiştirmedi)
+- "Son alış yeterince yeni" eşiği 90 gün mü — gerçek veri olmadan kalibre edilemez
+- `client_list_price` sunucununkinden farklı çıkınca raporda ne yazacak, sadece işaret mi ayrı satır mı
+- Yİ-ÜFE aylık güncellemesini kim yapacak ve bayatlama uyarısı hangi gecikmede çıkacak
+- U2 maliyet yöntemi — Faz 10'u bloke etmiyor ama E8 (kâr raporu) için hâlâ açık
+- Dış ses (Codex) çalışmadı; bu incelemenin bulguları çapraz doğrulanmadı
+  - **TARAMA YAPILDI (2026-09-04).** `packages/core` ve `packages/db`
+    testlerinde paylaşılan veritabanına global iddia kuran her yer bakıldı.
+    Üç sonuç:
+    1. `exports.test.ts` → `jobCount()` bütün tablodaki işleri sayıyordu ve
+       "planlama yan etkisiz" iddiası bu sayıma dayanıyordu. Kendi
+       kiracısına daraltıldı. Mutasyonla gösterildi: global sayımla yabancı
+       bir kiracının tek işi testi düşürüyor, daraltılmışla düşürmüyor.
+    2. `cron.test.ts` → "eski kaba kuvvet sayaçları budanıyor" testi
+       `toBeGreaterThanOrEqual(0)` diyordu, yani HER ZAMAN doğruydu:
+       budama tamamen kaldırılsa bile yeşil yanardı. Kendi öznemizle bir
+       satır eskitip onun gittiği sınanıyor artık. `auth_attempts` tenant
+       kapsamlı olmadığı için ayrışma özneyle yapılıyor, sayımla değil.
+       Mutasyonla doğrulandı.
+    3. Kalan global sorgular BİLEREK global ve gerekçeleri yazıldı:
+       `dusman-qa.test.ts` SQL kaçırma sonrası "tablo hâlâ var mı" diye
+       soruyor (eşik sıfırın üstü, sayım yalnızca artabilir);
+       `rls.test.ts` sayımları `withTenant` içinde, yani RLS zaten
+       daraltıyor — testin ölçtüğü şey tam olarak o.
+  - Kalan risk: dosyalar bugün SIRAYLA koşuyor (`singleFork`). Paralelleştirme
+    günü gelirse bu sınıf yeniden açılır; o gün taramanın tekrarı gerekir.
+
