@@ -95,9 +95,9 @@ büyük kısmı veritabanında duruyor.
 
 ## Nerede kaldık
 
-Faz 0–4 bitti (T1–T25), artı T34/T35/T37/T44/T46/T47/T50/T51/T52/T54/T55/
-T56/T88/T88.1/T89/T93/T94/T105/T107/T109 ve CI. **599 birim testi + 14
-tarayıcı testi yeşil.**
+Faz 0–4 bitti (T1–T25), artı T34/T35/T36/T37/T38/T39/T40/T41/T44/T46/T47/
+T50/T51/T52/T54/T55/T56/T88/T88.1/T89/T93/T94/T105/T107/T109/T111/T113 ve
+CI. **663 birim testi + 21 tarayıcı testi yeşil.**
 
 Cron turu (T34) `POST /api/cron` ucundan çalışıyor: `CRON_SECRET` sırrıyla,
 her tenant için planla → kuyruğu işle → bakım. **Ucu VURAN zamanlayıcı
@@ -109,15 +109,20 @@ içinde `webpack()` kancası YOK, geri koyma. `agentRules: false` bilerek:
 
 Sıradaki işler `PLAN.md`'de numaralı duruyor:
 
-| Görev | Ne |
+**Mobil dışı, engelsiz iş KALMADI.** Açık duran her şey ya kullanıcının
+kararını ya başka bir görevi bekliyor:
+
+| Görev | Neyi bekliyor |
 |---|---|
-| **T36** | Yapısal log + metrik + alarm |
-| **T39/T40** | Düşman QA + kaos testi |
-| **T41** | 5 ADR |
-| **T111** | Tekrar bekleyen iş Sistem Sağlığı'nda sağlıklı görünüyor |
-| **T112** | Cron ucunu vuran zamanlayıcı kurulmadı (T42'ye bağlı) |
-| **T42/T43** | Deploy hattı — kullanıcı "bir sonraki adım" dedi |
-| **T53** | `/api/v1` REST uçları — Faz 5'in (mobil) tamamı buna bağlı, EN SON |
+| **T42/T43** | Kullanıcı "bir sonraki adım" dedi — deploy hattı |
+| **T112** | T42 (zamanlayıcı kurulmadan gün sonu raporu çıkmaz) |
+| **T106** | Kullanıcı kararı: 56 px kuralı mı kod mu düzelecek |
+| **T108** | Ölçüm: fire girişinde fiyat alanı gerçekten sorun mu |
+| **T110** | Kullanıcı cevabı: depodaki Android'ler gerçekten JS'siz mi |
+| **T90/T91** | Kullanıcı gözlemi + Yİ-ÜFE verisi |
+| **T78** | U2 (maliyet yöntemi) kararı — bkz. `docs/ADR/004` |
+| **T16** | E5 (etiket basma), v1 kapsamı dışında |
+| **T53 + T26–T33, T48, T49** | Mobil — kullanıcı EN SON dedi |
 
 ## gstack
 
