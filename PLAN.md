@@ -2415,12 +2415,18 @@ aynı), migration drift kontrolü, dört adım CLAUDE.md'deki bitmiş sayılma
     iki alan zaten hedefin üstünde.
   - Kaynak: T56 kapanışı
 
-- [ ] **T107 (P3, human: ~10dk / CC: ~5dk)** - arayüz - **favicon yok: her sayfada 404**
+- [x] **T107 (P3, human: ~10dk / CC: ~5dk)** - arayüz - **favicon yok: her sayfada 404**
   - Tarayıcıda ölçüldü (T88 demo turu): `GET /favicon.ico` → 404, ve bu
     konsola hata olarak düşüyor. Tek başına zararsız ama konsolu KİRLETİYOR:
     gerçek bir JS hatası bu gürültünün içinde gözden kaçar, ve tarayıcı
     testinin "konsol temiz mi" kontrolü hep kirli döner.
-  - `apps/web/src/app/icon.svg` yeterli; kabuktaki kutu logosu zaten var.
+  - `apps/web/src/app/icon.svg` eklendi; kabuktaki kutu logosunun aynısı.
+    İkinci bir çizim yapılmadı: sekmedeki simge menüdekiyle ayrışırsa
+    kullanıcı ikisini aynı ürün saymaz.
+  - Renkler SABİT yazıldı, `var(--accent)` değil: sekme simgesi sayfanın
+    CSS'ini görmüyor, belirteç orada boş kalır ve simge görünmezdi.
+  - Doğrulandı (gerçek tarayıcı, beş ekran gezildi): `<link rel="icon">`
+    basılıyor, tarayıcı artık `/favicon.ico` İSTEMİYOR, konsolda 404 yok.
   - Kaynak: T88 tarayıcı turu
 
 - [ ] **T108 (P2, human: ~1sa / CC: ~20dk)** - hareket - **fiyat alanı sebebe göre açılıp kapanmıyor**
