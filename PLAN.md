@@ -1376,7 +1376,24 @@ G1, G2 ve G4 kapandı. G3 (yazıcı) TODOS E5'e bağlı, aşağıda gerekçesi y
 - [ ] **T38 (P1, human: ~6sa / CC: ~45dk)** - test - E2E senaryoları (Playwright): 8 kritik akış
 - [ ] **T39 (P1, human: ~3sa / CC: ~25dk)** - test - Düşman QA testleri (Bölüm 6, madde 4)
 - [ ] **T40 (P1, human: ~3sa / CC: ~25dk)** - test - Kaos testi: senkron ortasında DB kapat
-- [ ] **T41 (P2, human: ~2sa / CC: ~15dk)** - doküman - `docs/ADR/` 5 karar kaydı: ledger, tenant, offline, maliyet, versiyonlama
+- [x] **T41 (P2, human: ~2sa / CC: ~15dk)** - doküman - `docs/ADR/` 5 karar kaydı: ledger, tenant, offline, maliyet, versiyonlama
+  - ADR'ler `PLAN.md`'yi tekrar ETMİYOR, farklı bir soruyu cevaplıyor.
+    PLAN çalışan bir belge — kararın BUGÜNKÜ halini anlatıyor. ADR tarihli ve
+    değişmez; "bu neden böyle" sorusunu burada olmayan birine anlatıyor
+    (yeni geliştirici, müşterinin bir sonraki tedarikçisi, altı ay sonraki
+    biz).
+  - Her kayıtta **elenen yollar** var. Bir ADR'nin en değerli kısmı seçilen
+    çözüm değil, seçilmeyenlerin neyi bozacağı; onu yazmayan ADR kodun
+    kendisinin söylemediği hiçbir şeyi söylemiyor demektir.
+  - **ADR-004 (maliyet yöntemi) bilerek AÇIK durumda.** Karar müşterinin
+    muhasebecisine ait (U2) ve ertelenebilir olduğu ölçülerek gösterildi:
+    FIFO/ağırlıklı ortalama sorusu kâr raporuna (E8) ait, T88/T89'un
+    cevapladığı "bunu kaça satmalıyım" sorusuna değil. Kayıt ayrıca kararın
+    ÖN ŞARTINI yazıyor: yöntem seçilse bile geçmiş hareketlerde `unit_price`
+    `NULL` olduğu için geriye dönük kâr raporu yine çıkmaz.
+  - Durum etiketleri gerçeği söylüyor: ADR-003 ve ADR-005 "Kabul edildi
+    (uygulanmadı)" — kararı verilmiş ama kodu Faz 5'te. Hepsine "kabul
+    edildi" demek, okuyanı var olmayan bir özelliğin peşine düşürürdü.
 - [ ] **T42 (P1, human: ~3sa / CC: ~20dk)** - deploy - Vercel + Supabase + EAS pipeline, deploy sonrası kontrol listesi
 
 ### Faz 8: Mühendislik incelemesinden gelen görevler (D4-D9)
