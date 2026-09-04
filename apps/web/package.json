@@ -18,7 +18,7 @@
     "@stok/db": "workspace:*",
     "@stok/shared": "workspace:*",
     "dotenv": "^16.4.7",
-    "next": "^15.5.24",
+    "next": "^16.3.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

@@ -9,20 +9,12 @@ allowBuilds:
   # uyarı verip devam ediyor ama üretimde görsel dönüşümü kapalı kalıyor.
   sharp: true
 
-# GEÇİŞLİ AÇIKLARIN KAPATILMASI (T104).
+# GEÇİŞLİ AÇIK OVERRIDE'LARI KALDIRILDI (T105).
 #
-# Üç yüksek şiddetli açık da `next` üzerinden geliyor ve 15.x hattında
-# sürüm yükselterek kapanmıyor:
+# T104'te `postcss` ve `sharp` için override yazılmıştı: next 15.5.24
+# postcss'i 8.4.31'e sabitliyordu ve sharp'ın alt sınırını seçiyordu.
+# Override belirtiyi kapatıyordu, kaynağı değil.
 #
-#   postcss  next 15.5.24 bunu 8.4.31'e SABİTLİYOR; yama 8.5.18'de.
-#            Depoda zaten 8.5.26 var (Tailwind için), yani override
-#            yeni bir sürüm getirmiyor, ağacı tek sürüme indiriyor.
-#   sharp    next'in kendi aralığı zaten `^0.34.3 || ^0.35.3`, yani
-#            yamalı hat DESTEKLENİYOR; pnpm sadece alt sınırı seçmişti.
-#
-# Next 16'ya çıkmak ikisini de kaynağında çözerdi ama major sürüm
-# yükseltmesi; build zamanı bir P2 açığı için orantısız risk. Ayrı görev
-# olarak kaydedildi (T105).
-overrides:
-  postcss: '^8.5.18'
-  sharp: '^0.35.3'
+# Next 16 ikisini de kaynağında çözüyor. Override'ları bırakmak, ileride
+# gerçekten gereken bir sürümü sessizce eziyor olurdu — ve kimse
+# "bu override hâlâ gerekli mi" diye geri dönüp bakmaz.

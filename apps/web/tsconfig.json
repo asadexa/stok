@@ -18,7 +18,7 @@
     "esModuleInterop": true,
     "resolveJsonModule": true,
     "forceConsistentCasingInFileNames": true,
-    "jsx": "preserve",
+    "jsx": "react-jsx",
     "incremental": true,
     "allowJs": true,
     "plugins": [
@@ -38,7 +38,8 @@
     "next.config.ts",
     ".next/types/**/*.ts",
     "e2e",
-    "playwright.config.ts"
+    "playwright.config.ts",
+    ".next/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"
