@@ -9,7 +9,7 @@ import {
   testAppDb,
 } from '@stok/db/testing'
 import type { Db } from '@stok/db'
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { type MailTransport, createInMemoryTransport } from './mail'
 import { createMovement } from './movements'
 import {
@@ -278,18 +278,33 @@ describe('bütün tenant listesi (T34)', () => {
    * Bu blok BÜTÜN tenant'lara dokunuyor — diğer test dosyalarının
    * kiracıları dahil. Bıraktığı kuyruk satırları onların testlerine
    * sızmasın diye tur boyunca oluşan işler siliniyor.
+   *
+   * TEMİZLİK `afterEach`'TE, testin gövdesinde DEĞİL. Gövdedeyken bir
+   * assertion patladığı anda atlanıyordu ve o testin bıraktığı yarım işler
+   * bir SONRAKİ testi de düşürüyordu: CI'da tek bir kök hata iki kırmızı
+   * üretti ve ikincisi tamamen yanıltıcıydı.
+   *
+   * SINIR VERİTABANI SAATİNDEN alınıyor, `new Date()` ile değil.
+   * `created_at` sunucuda damgalanıyor; iki saat arasında milisaniyelik
+   * bir fark bile satırların silme aralığının dışında kalmasına yeter ve
+   * bu, testin kendi kirini başka dosyaya taşıması demek.
    */
-  async function turdanKalanlariSil(baslangic: string): Promise<void> {
+  let turBaslangici: string
+
+  beforeEach(async () => {
+    const [row] = await admin.db.execute<{ t: string }>(sql`SELECT now()::text AS t`)
+    turBaslangici = row!.t
+  })
+
+  afterEach(async () => {
     await admin.db.execute(
-      sql`DELETE FROM background_jobs WHERE created_at >= ${baslangic}::timestamptz`,
+      sql`DELETE FROM background_jobs WHERE created_at >= ${turBaslangici}::timestamptz`,
     )
-  }
+  })
 
   it('HER tenant için rapor çıkıyor', async () => {
-    const baslangic = new Date().toISOString()
     const mail = createInMemoryTransport()
     const sonuc = await runCronAllTenants({ mail }, { db: app.db })
-    await turdanKalanlariSil(baslangic)
 
     const alicilar = mail.sent.map((m) => m.to)
     expect(alicilar).toContain(`admin@cron.test`)
@@ -305,7 +320,6 @@ describe('bütün tenant listesi (T34)', () => {
     // Route bu ayrımı HTTP durumuna çeviriyor (200 / 500). Eşik yanlış
     // olsaydı ya her geçici SMTP hatası alarm çalar (operatör alarmı yok
     // saymayı öğrenir) ya da hiç çalmaz (G4).
-    const baslangic = new Date().toISOString()
     const bozuk = {
       async send() {
         throw new Error('smtp yok')
@@ -313,23 +327,53 @@ describe('bütün tenant listesi (T34)', () => {
     }
 
     const ilk = await runCronAllTenants({ mail: bozuk }, { db: app.db })
-    expect(ilk.tenants.every((t) => (t.result?.failed ?? 0) === 0), 'ilk turda hak bitti').toBe(true)
-    expect(ilk.failed, 'ilk tur alarm çaldı').toBe(false)
+
+    // İDDİA YALNIZCA BU DOSYANIN KİRACILARI ÜZERİNDE.
+    //
+    // Eskiden `ilk.tenants.every(...)` veritabanındaki HER tenant'a
+    // bakıyordu — yirmi test dosyasıyla paylaşılan bir veritabanında.
+    // Başka bir dosyanın bıraktığı, hakkı yarılanmış tek bir iş
+    // (`attempts=1`, `max_attempts=2`) ilk turda tükeniyor ve bu test,
+    // kendi davranışı kusursuzken kırmızı yanıyordu. CI'da tam olarak bu
+    // oldu; yerelde dosya sırası farklı olduğu için görünmüyordu.
+    //
+    // Test kendi kurduğu durumu ölçmeli: başka bir dosyanın kuyruk
+    // geçmişi bu testin iddiası değil.
+    const bizimkiler = ilk.tenants.filter(
+      (t) => t.tenantId === tenant.tenantId || t.tenantId === ikinci.tenantId,
+    )
+    expect(bizimkiler, 'kendi kiracılarımız tura girmemiş').toHaveLength(2)
+    expect(bizimkiler.every((t) => (t.result?.failed ?? 0) === 0), 'ilk turda hak bitti').toBe(true)
+    // TUR BAYRAĞI, SABİT BİR DEĞERE DEĞİL, TURUN KENDİ İÇERİĞİNE karşı
+    // sınanıyor. `toBe(false)` yazmak yine paylaşılan veritabanına bağımlı
+    // olurdu: başka bir dosyanın tükenmiş işi bayrağı haklı olarak true
+    // yapar. Burada sınanan şey zaten AGREGASYON — bayrak, kiracı
+    // sonuçlarından doğru türüyor mu.
+    expect(ilk.failed, 'tur bayrağı kiracı sonuçlarıyla tutarsız').toBe(
+      ilk.tenants.some((t) => (t.result?.failed ?? 0) > 0 || t.error !== undefined),
+    )
 
     // Tekrar gecikmesinin (60 sn) ötesine geçiyoruz: ikinci deneme
     // yapılabilsin. Gerçek zamanı beklemek testi 60 saniye uzatırdı.
     const sonra = Date.now() + 5 * 60_000
-    const ikinci = await runCronAllTenants({ mail: bozuk }, { db: app.db, now: () => sonra })
-    await turdanKalanlariSil(baslangic)
+    const ikinciTur = await runCronAllTenants({ mail: bozuk }, { db: app.db, now: () => sonra })
 
-    expect(ikinci.failed, 'hak bittiği halde alarm çalmadı').toBe(true)
+    // ASIL İDDİA: hak bitince alarm çalıyor. KENDİ kiracılarımızın
+    // işlerinin tükendiği ayrıca sınanıyor — bayrağın başka bir dosyanın
+    // artığından doğmuş olma ihtimali böylece kapanıyor.
+    const bizimIkinciTur = ikinciTur.tenants.filter(
+      (t) => t.tenantId === tenant.tenantId || t.tenantId === ikinci.tenantId,
+    )
+    expect(
+      bizimIkinciTur.some((t) => (t.result?.failed ?? 0) > 0),
+      'kendi kiracılarımızın hakkı bitmemiş',
+    ).toBe(true)
+    expect(ikinciTur.failed, 'hak bittiği halde alarm çalmadı').toBe(true)
   })
 
   it('bir tenant DÜŞERSE diğerleri yine çalışıyor', async () => {
-    const baslangic = new Date().toISOString()
     const mail = createInMemoryTransport()
     const sonuc = await runCronAllTenants({ mail }, { db: dbThatFailsFor(app.db, tenant.tenantId) })
-    await turdanKalanlariSil(baslangic)
 
     const dusen = sonuc.tenants.find((t) => t.tenantId === tenant.tenantId)
     expect(dusen?.error, 'düşen tenant hatasız görünüyor').toBeTruthy()

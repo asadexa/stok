@@ -2544,6 +2544,34 @@ aynı), migration drift kontrolü, dört adım CLAUDE.md'deki bitmiş sayılma
   - **T42'ye bağlı.**
   - Kaynak: T34
 
+
+- [ ] **T113 (P2, human: ~2sa / CC: ~40dk)** - test - **Paylaşılan test veritabanında GLOBAL iddia kuran testler taransın**
+  - **CI'DA YAŞANDI (2026-09-04, koşu 33870506493).** `cron.test.ts` iki
+    testte kırmızı yandı, yerelde 441/441 yeşildi. Sebep: test
+    `runCronAllTenants` sonucundaki **her** kiracıya bakıp "hiçbirinin hakkı
+    bitmemiş olmalı" diyordu — yirmi test dosyasıyla paylaşılan bir
+    veritabanında. Başka bir dosyanın bıraktığı, hakkı yarılanmış tek bir iş
+    (`attempts=1`, `max_attempts=2`) ilk turda tükeniyor ve test, kendi
+    davranışı kusursuzken düşüyor.
+  - **İkinci kırmızı tamamen yanıltıcıydı:** temizlik testin gövdesindeydi,
+    ilk assertion patlayınca atlandı ve artıklar bir sonraki testi de
+    düşürdü. Kök hata bir taneydi, rapor iki tane gösterdi.
+  - Düzeltildi (`cron.test.ts`): iddia kendi kiracılarımıza daraltıldı, tur
+    bayrağı sabit değere değil turun kendi içeriğine karşı sınanıyor,
+    temizlik `afterEach`'e alındı ve sınır veritabanı saatinden okunuyor.
+  - **Kalan iş bu dosya değil, SINIF.** Aynı desen başka yerlerde de olabilir:
+    paylaşılan veritabanında `count(*)`, "hiç yok", "hepsi" gibi iddialar.
+    `packages/core` ve `packages/db` testleri taranmalı; bulunan her biri
+    ya kendi kiracısına daraltılmalı ya da gerekçesi yazılmalı.
+  - **Neden P2:** kararsız test, kırmızıya güveni yok ediyor. Bir kez "bu
+    test bazen düşer" denince gerçek regresyon da göz ardı edilir.
+  - Doğrula: taramadan çıkan her testte, yabancı durumu bilerek kurup
+    (zehirleme) önce kırmızı gör. Bu düzeltmede öyle yapıldı — yabancı
+    kiracıya `attempts=1` bir iş eklenince CI'daki iki hata birebir
+    yeniden üretildi, düzeltmeden sonra aynı durumda 19/19 yeşil.
+  - Kaynak: CI hatası 2026-09-04
+
+---
 ---
 
 ## GSTACK REVIEW REPORT
