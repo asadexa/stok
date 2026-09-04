@@ -21,7 +21,7 @@
  * açıkça yazmak, açık olanı zekice olana tercih etme ilkesi.
  */
 
-import { formatMoneyTr } from './prices.js'
+import { formatMoneyTr } from './prices'
 
 export type ErrorDetails = Record<string, unknown>
 

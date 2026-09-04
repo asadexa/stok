@@ -2,7 +2,7 @@ import { sql } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/postgres-js'
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
-import { schema } from './schema.js'
+import { schema } from './schema'
 
 /**
  * ============================================================================

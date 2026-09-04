@@ -8,9 +8,9 @@ import {
 } from '@stok/shared'
 import { type TestTenant, seedTestTenant, testAdminDb, testAppDb } from '@stok/db/testing'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { type Actor, redactPrices, requirePermission } from './authz.js'
-import { createMovement, listMovements } from './movements.js'
-import { TEST_DB_NAME } from './test/db-name.js'
+import { type Actor, redactPrices, requirePermission } from './authz'
+import { createMovement, listMovements } from './movements'
+import { TEST_DB_NAME } from './test/db-name'
 
 /**
  * ============================================================================

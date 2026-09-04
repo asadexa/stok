@@ -10,8 +10,8 @@ import {
 } from '@stok/db/testing'
 import type { Db } from '@stok/db'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
-import { createInMemoryTransport } from './mail.js'
-import { createMovement } from './movements.js'
+import { createInMemoryTransport } from './mail'
+import { createMovement } from './movements'
 import {
   dailyReportText,
   dailySummary,
@@ -19,10 +19,10 @@ import {
   lowStockProducts,
   runCron,
   runCronAllTenants,
-} from './cron.js'
-import { listJobs } from './jobs.js'
-import type { Actor } from './authz.js'
-import { TEST_DB_NAME } from './test/db-name.js'
+} from './cron'
+import { listJobs } from './jobs'
+import type { Actor } from './authz'
+import { TEST_DB_NAME } from './test/db-name'
 
 /**
  * ============================================================================

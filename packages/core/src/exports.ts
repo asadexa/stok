@@ -21,7 +21,7 @@ import {
   withTenant,
 } from '@stok/db'
 import { and, asc, eq, gte, isNull, lte, or, sql } from 'drizzle-orm'
-import { type Actor, canSeePrices, movementUserScope, requirePermission } from './authz.js'
+import { type Actor, canSeePrices, movementUserScope, requirePermission } from './authz'
 import {
   type MovementExportRow,
   type StockExportRow,
@@ -29,11 +29,11 @@ import {
   exportFileName,
   movementColumns,
   stockColumns,
-} from './excel.js'
-import { type JobRecord, enqueueJob, requesterEmail } from './jobs.js'
-import { type MailTransport, XLSX_CONTENT_TYPE } from './mail.js'
-import { parseScaled, scaledToNumber } from './numeric.js'
-import { parseOrThrow } from './validate.js'
+} from './excel'
+import { type JobRecord, enqueueJob, requesterEmail } from './jobs'
+import { type MailTransport, XLSX_CONTENT_TYPE } from './mail'
+import { parseScaled, scaledToNumber } from './numeric'
+import { parseOrThrow } from './validate'
 
 /**
  * ============================================================================

@@ -3,16 +3,16 @@ import {
   BARCODE_KIND_VALUES,
   type BarcodeKind,
   multiplierMatchesKind,
-} from './barcodes.js'
+} from './barcodes'
 import {
   PRICE_OVERRIDE_REASON_VALUES,
   PRICE_OVERRIDE_REASONS,
   type PriceOverrideReason,
   type PriceSource,
-} from './prices.js'
-import { MOVEMENT_REASON_VALUES, MOVEMENT_REASONS, type MovementReason } from './reasons.js'
-import { ROLE_VALUES, type Role } from './roles.js'
-import { UNIT_VALUES, type Unit } from './units.js'
+} from './prices'
+import { MOVEMENT_REASON_VALUES, MOVEMENT_REASONS, type MovementReason } from './reasons'
+import { ROLE_VALUES, type Role } from './roles'
+import { UNIT_VALUES, type Unit } from './units'
 
 const reasonEnum = z.enum(MOVEMENT_REASON_VALUES as [MovementReason, ...MovementReason[]])
 const unitEnum = z.enum(UNIT_VALUES as [Unit, ...Unit[]])

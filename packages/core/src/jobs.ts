@@ -7,7 +7,7 @@ import {
 } from '@stok/shared'
 import { type Db, type Tx, backgroundJobs, isUniqueViolation, users, withTenant } from '@stok/db'
 import { and, desc, eq, inArray, isNull, lte, or, sql } from 'drizzle-orm'
-import { type Actor, requirePermission } from './authz.js'
+import { type Actor, requirePermission } from './authz'
 
 /**
  * ============================================================================

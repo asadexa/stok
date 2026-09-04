@@ -5,8 +5,8 @@ import { sql } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/postgres-js'
 import { migrate } from 'drizzle-orm/postgres-js/migrator'
 import postgres from 'postgres'
-import type { Db } from './client.js'
-import { hashSecret } from './password.js'
+import type { Db } from './client'
+import { hashSecret } from './password'
 import {
   locations,
   productBarcodes,
@@ -14,7 +14,7 @@ import {
   schema,
   tenants,
   users,
-} from './schema.js'
+} from './schema'
 
 /**
  * ============================================================================

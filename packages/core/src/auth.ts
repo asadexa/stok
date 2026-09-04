@@ -10,8 +10,8 @@ import {
 import { type Db, appDb, hashSecret, users, verifySecret, withTenant } from '@stok/db'
 import { eq, sql } from 'drizzle-orm'
 import { SignJWT, jwtVerify } from 'jose'
-import { type Actor, requirePermission } from './authz.js'
-import { parseOrThrow } from './validate.js'
+import { type Actor, requirePermission } from './authz'
+import { parseOrThrow } from './validate'
 import {
   LOGIN_EMAIL_POLICY,
   LOGIN_IP_POLICY,
@@ -19,7 +19,7 @@ import {
   clearAttempts,
   recordFailure,
   throwIfLocked,
-} from './rate-limit.js'
+} from './rate-limit'
 
 /**
  * ============================================================================

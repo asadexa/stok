@@ -2,9 +2,9 @@ import { randomUUID } from 'node:crypto'
 import { AppError, type MovementReason } from '@stok/shared'
 import { type TestTenant, seedTestTenant, testAdminDb, testAppDb } from '@stok/db/testing'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { checkStockInvariant, createMovement } from './movements.js'
-import type { Actor } from './authz.js'
-import { TEST_DB_NAME } from './test/db-name.js'
+import { checkStockInvariant, createMovement } from './movements'
+import type { Actor } from './authz'
+import { TEST_DB_NAME } from './test/db-name'
 
 /**
  * ============================================================================

@@ -18,8 +18,8 @@ import {
 } from '@stok/shared'
 import { sql } from 'drizzle-orm'
 import { afterAll, describe, expect, it } from 'vitest'
-import { testAdminDb } from './testing.js'
-import { TEST_DB_NAME } from './test/db-name.js'
+import { testAdminDb } from './testing'
+import { TEST_DB_NAME } from './test/db-name'
 
 /**
  * ============================================================================

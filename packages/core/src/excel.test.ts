@@ -10,7 +10,7 @@ import {
   exportFileName,
   movementColumns,
   stockColumns,
-} from './excel.js'
+} from './excel'
 
 /**
  * ============================================================================

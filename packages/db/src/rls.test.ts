@@ -1,8 +1,8 @@
 import { and, eq, sql } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { withTenant } from './client.js'
-import { pgErrorCode } from './pg-errors.js'
-import { TEST_DB_NAME } from './test/db-name.js'
+import { withTenant } from './client'
+import { pgErrorCode } from './pg-errors'
+import { TEST_DB_NAME } from './test/db-name'
 import {
   type TestTenant,
   detUuid,
@@ -10,8 +10,8 @@ import {
   seedTestTenant,
   testAdminDb,
   testAppDb,
-} from './testing.js'
-import { currentStock, productBarcodes, products, stockMovements, tenants, users } from './schema.js'
+} from './testing'
+import { currentStock, productBarcodes, products, stockMovements, tenants, users } from './schema'
 
 /**
  * ============================================================================

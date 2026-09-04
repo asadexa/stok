@@ -11,9 +11,9 @@ import {
   testAppDb,
 } from '@stok/db/testing'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { createMovement, listMovements, lookupBarcode } from './movements.js'
-import type { Actor } from './authz.js'
-import { TEST_DB_NAME } from './test/db-name.js'
+import { createMovement, listMovements, lookupBarcode } from './movements'
+import type { Actor } from './authz'
+import { TEST_DB_NAME } from './test/db-name'
 
 /**
  * ============================================================================

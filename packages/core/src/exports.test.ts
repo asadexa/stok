@@ -5,7 +5,7 @@ import { type TestTenant, seedTestTenant, testAdminDb, testAppDb } from '@stok/d
 import ExcelJS from 'exceljs'
 import { sql } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import type { Actor } from './authz.js'
+import type { Actor } from './authz'
 import {
   INLINE_ROW_LIMIT,
   QUEUED_ROW_LIMIT,
@@ -13,11 +13,11 @@ import {
   exportMovements,
   exportStock,
   planExport,
-} from './exports.js'
-import { RETRY_DELAY_SECONDS, getJob, listFailedJobs, listJobs, runQueuedJobs } from './jobs.js'
-import { createInMemoryTransport } from './mail.js'
-import { createMovement } from './movements.js'
-import { TEST_DB_NAME } from './test/db-name.js'
+} from './exports'
+import { RETRY_DELAY_SECONDS, getJob, listFailedJobs, listJobs, runQueuedJobs } from './jobs'
+import { createInMemoryTransport } from './mail'
+import { createMovement } from './movements'
+import { TEST_DB_NAME } from './test/db-name'
 
 /**
  * ============================================================================

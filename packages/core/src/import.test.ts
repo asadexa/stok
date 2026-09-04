@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { type TestTenant, seedTestTenant, testAdminDb, testAppDb } from '@stok/db/testing'
 import ExcelJS from 'exceljs'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import type { Actor } from './authz.js'
+import type { Actor } from './authz'
 import {
   IMPORT_ROW_LIMIT,
   type ParsedFile,
@@ -13,10 +13,10 @@ import {
   parseTurkishNumber,
   previewImport,
   templateRows,
-} from './import.js'
-import { getProductDetail, listBarcodes } from './products.js'
-import { listStock } from './stock.js'
-import { TEST_DB_NAME } from './test/db-name.js'
+} from './import'
+import { getProductDetail, listBarcodes } from './products'
+import { listStock } from './stock'
+import { TEST_DB_NAME } from './test/db-name'
 
 /**
  * ============================================================================

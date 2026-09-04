@@ -1,6 +1,6 @@
 import { config } from 'dotenv'
-import { resetTestDatabase } from '../testing.js'
-import { TEST_DB_NAME } from './db-name.js'
+import { resetTestDatabase } from '../testing'
+import { TEST_DB_NAME } from './db-name'
 
 config({ path: '../../.env' })
 

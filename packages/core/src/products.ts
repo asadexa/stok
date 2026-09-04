@@ -17,10 +17,10 @@ import {
   withTenant,
 } from '@stok/db'
 import { and, asc, eq, sql } from 'drizzle-orm'
-import { type Actor, requirePermission } from './authz.js'
-import { formatScaled, parseScaled, scaledFromNumber, scaledToNumber } from './numeric.js'
-import { getProduct, type StockRow } from './stock.js'
-import { parseOrThrow } from './validate.js'
+import { type Actor, requirePermission } from './authz'
+import { formatScaled, parseScaled, scaledFromNumber, scaledToNumber } from './numeric'
+import { getProduct, type StockRow } from './stock'
+import { parseOrThrow } from './validate'
 
 /**
  * ============================================================================

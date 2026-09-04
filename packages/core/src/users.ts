@@ -16,9 +16,9 @@ import {
   updateUserSchema,
 } from '@stok/shared'
 import { and, eq, ne, sql } from 'drizzle-orm'
-import { revokeSessions } from './auth.js'
-import { type Actor, requirePermission } from './authz.js'
-import { parseOrThrow } from './validate.js'
+import { revokeSessions } from './auth'
+import { type Actor, requirePermission } from './authz'
+import { parseOrThrow } from './validate'
 
 /**
  * ============================================================================

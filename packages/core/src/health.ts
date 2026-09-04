@@ -1,7 +1,7 @@
 import { type Db, withTenant } from '@stok/db'
 import { sql } from 'drizzle-orm'
-import { type Actor, requirePermission } from './authz.js'
-import { checkStockInvariant } from './movements.js'
+import { type Actor, requirePermission } from './authz'
+import { checkStockInvariant } from './movements'
 
 /**
  * ============================================================================

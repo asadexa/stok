@@ -3,9 +3,9 @@ import { config } from 'dotenv'
 import { sql } from 'drizzle-orm'
 import type { MovementReason, PriceOverrideReason } from '@stok/shared'
 import { reasonPriceBasis, toDelta } from '@stok/shared'
-import { adminDbUnsafe } from './client.js'
-import { hashSecret } from './password.js'
-import { locations, productBarcodes, products, stockMovements, tenants, users } from './schema.js'
+import { adminDbUnsafe } from './client'
+import { hashSecret } from './password'
+import { locations, productBarcodes, products, stockMovements, tenants, users } from './schema'
 
 config({ path: '../../.env' })
 

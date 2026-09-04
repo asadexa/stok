@@ -13,10 +13,10 @@ import {
 import { type Db, products, withTenant } from '@stok/db'
 import { and, eq, inArray } from 'drizzle-orm'
 import ExcelJS from 'exceljs'
-import { type Actor, requirePermission } from './authz.js'
-import type { SheetColumn } from './excel.js'
-import { addBarcode, createProduct, listBarcodes, updateProduct } from './products.js'
-import { issuesOf, validationError } from './validate.js'
+import { type Actor, requirePermission } from './authz'
+import type { SheetColumn } from './excel'
+import { addBarcode, createProduct, listBarcodes, updateProduct } from './products'
+import { issuesOf, validationError } from './validate'
 import { z } from 'zod'
 
 /**

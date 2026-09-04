@@ -1,18 +1,18 @@
 import { AppError, type MovementReason, formatQty, reasonLabel, type Unit } from '@stok/shared'
 import { type Db, appDb, withTenant } from '@stok/db'
 import { sql } from 'drizzle-orm'
-import type { Actor } from './authz.js'
-import { XLSX_CONTENT_TYPE, type MailTransport } from './mail.js'
-import { buildWorkbook, type SheetColumn } from './excel.js'
+import type { Actor } from './authz'
+import { XLSX_CONTENT_TYPE, type MailTransport } from './mail'
+import { buildWorkbook, type SheetColumn } from './excel'
 import {
   type JobHandler,
   type JobOptions,
   type JobRecord,
   enqueueJob,
   runQueuedJobs,
-} from './jobs.js'
-import { checkStockInvariant } from './movements.js'
-import { pruneAttempts } from './rate-limit.js'
+} from './jobs'
+import { checkStockInvariant } from './movements'
+import { pruneAttempts } from './rate-limit'
 
 /**
  * ============================================================================

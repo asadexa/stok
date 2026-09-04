@@ -2,8 +2,8 @@ import { randomUUID } from 'node:crypto'
 import { type TestTenant, seedTestTenant, testAdminDb, testAppDb } from '@stok/db/testing'
 import { AppError } from '@stok/shared'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import type { Actor } from './authz.js'
-import { createMovement } from './movements.js'
+import type { Actor } from './authz'
+import { createMovement } from './movements'
 import {
   addBarcode,
   archiveBarcode,
@@ -13,9 +13,9 @@ import {
   listBarcodes,
   restoreProduct,
   updateProduct,
-} from './products.js'
-import { listStock } from './stock.js'
-import { TEST_DB_NAME } from './test/db-name.js'
+} from './products'
+import { listStock } from './stock'
+import { TEST_DB_NAME } from './test/db-name'
 
 /**
  * ============================================================================

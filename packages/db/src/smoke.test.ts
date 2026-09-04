@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { withTenant } from './client.js'
-import { TEST_DB_NAME } from './test/db-name.js'
+import { withTenant } from './client'
+import { TEST_DB_NAME } from './test/db-name'
 import {
   type TestTenant,
   detUuid,
@@ -9,7 +9,7 @@ import {
   seedTestTenant,
   testAdminDb,
   testAppDb,
-} from './testing.js'
+} from './testing'
 
 /**
  * ============================================================================

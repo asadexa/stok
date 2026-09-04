@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { barcodeSchema, createMovementSchema, createProductSchema, qtySchema } from './schemas.js'
+import { barcodeSchema, createMovementSchema, createProductSchema, qtySchema } from './schemas'
 
 /** Geçerli bir temel istek. Testler bunun üstüne tek alan değiştirir. */
 const validMovement = {

@@ -6,7 +6,7 @@ import {
   parseScaled,
   scaledFromNumber,
   scaledToNumber,
-} from './numeric.js'
+} from './numeric'
 
 /**
  * Bu testler veritabanı gerektirmez ve saniyenin altında koşar.

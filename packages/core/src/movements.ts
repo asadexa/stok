@@ -32,9 +32,9 @@ import {
   movementUserScope,
   redactMovementPricesAll,
   requirePermission,
-} from './authz.js'
-import { issuesOf, parseOrThrow, validationError } from './validate.js'
-import { formatScaled, multiplyScaled, parseScaled, scaledFromNumber, scaledToNumber } from './numeric.js'
+} from './authz'
+import { issuesOf, parseOrThrow, validationError } from './validate'
+import { formatScaled, multiplyScaled, parseScaled, scaledFromNumber, scaledToNumber } from './numeric'
 
 /**
  * ============================================================================

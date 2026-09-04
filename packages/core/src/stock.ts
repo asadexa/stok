@@ -7,10 +7,10 @@ import {
   canSeePrices,
   movementUserScope,
   requirePermission,
-} from './authz.js'
-import { lookupBarcode } from './movements.js'
-import { parseScaled, scaledToNumber } from './numeric.js'
-import { parseOrThrow } from './validate.js'
+} from './authz'
+import { lookupBarcode } from './movements'
+import { parseScaled, scaledToNumber } from './numeric'
+import { parseOrThrow } from './validate'
 
 /**
  * ============================================================================

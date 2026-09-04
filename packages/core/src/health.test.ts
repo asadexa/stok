@@ -2,11 +2,11 @@ import { randomUUID } from 'node:crypto'
 import { type TestTenant, seedTestTenant, testAdminDb, testAppDb } from '@stok/db/testing'
 import { sql } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import type { Actor } from './authz.js'
-import { systemHealth } from './health.js'
-import { enqueueJob } from './jobs.js'
-import { createMovement } from './movements.js'
-import { TEST_DB_NAME } from './test/db-name.js'
+import type { Actor } from './authz'
+import { systemHealth } from './health'
+import { enqueueJob } from './jobs'
+import { createMovement } from './movements'
+import { TEST_DB_NAME } from './test/db-name'
 
 /**
  * ============================================================================

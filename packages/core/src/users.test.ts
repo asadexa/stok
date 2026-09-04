@@ -1,8 +1,8 @@
 import { type TestTenant, seedTestTenant, testAdminDb, testAppDb } from '@stok/db/testing'
 import { AppError } from '@stok/shared'
 import { beforeAll, afterAll, describe, expect, it } from 'vitest'
-import type { Actor } from './authz.js'
-import { login, refreshSession } from './auth.js'
+import type { Actor } from './authz'
+import { login, refreshSession } from './auth'
 import {
   changeOwnPassword,
   createUser,
@@ -11,8 +11,8 @@ import {
   listTenantUsers,
   setUserPassword,
   updateUser,
-} from './users.js'
-import { TEST_DB_NAME } from './test/db-name.js'
+} from './users'
+import { TEST_DB_NAME } from './test/db-name'
 
 /**
  * ============================================================================
