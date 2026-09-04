@@ -1374,8 +1374,51 @@ G1, G2 ve G4 kapandı. G3 (yazıcı) TODOS E5'e bağlı, aşağıda gerekçesi y
 ### Faz 7: Test ve yayın
 
 - [ ] **T38 (P1, human: ~6sa / CC: ~45dk)** - test - E2E senaryoları (Playwright): 8 kritik akış
-- [ ] **T39 (P1, human: ~3sa / CC: ~25dk)** - test - Düşman QA testleri (Bölüm 6, madde 4)
-- [ ] **T40 (P1, human: ~3sa / CC: ~25dk)** - test - Kaos testi: senkron ortasında DB kapat
+- [x] **T39 (P1, human: ~3sa / CC: ~25dk)** - test - Düşman QA testleri (Bölüm 6, madde 4)
+  - `packages/core/src/dusman-qa.test.ts`, 47 test. Miktar, barkod, sebep,
+    not, fiyat, idempotency anahtarı ve gövde şekli.
+  - **Her iddia "stok DEĞİŞMEDİ" diye de kontrol ediyor.** En tehlikeli
+    sonuç 500 değil 200: reddedilmesi gereken bir miktar kabul edilirse
+    depoda yanlış sayı oluşur ve fark sayım gününe kadar görünmez.
+  - Düşman değerler formdan gelen METİN üzerinden üretiliyor (`1e999`,
+    emoji, boşluk, `-0`), çünkü arayüzün gerçek yolu o. Dönüşümün ne
+    ürettiği ayrı bir testle kayıt altında; varsayım gizli kalmasın.
+  - **İKİ ÖLÜ KORUMA BULUNDU VE KALDIRILDI.** `qtySchema.finite()` ve
+    `moneySchema.finite()` mutasyonla kaldırıldığında hiçbir test kırmızı
+    yanmadı: `+Infinity`'yi `.max()`, `-Infinity`'yi `.positive()` /
+    `.nonnegative()`, `NaN`'ı zod'un kendisi zaten reddediyor. İspatlanamayan
+    koruma zararsız değil — biri `.max()`'ı kaldırırken "`.finite()` nasılsa
+    tutuyor" diye düşünebilir.
+  - **BİR TEST YANLIŞ SEBEPLE YEŞİLDİ, mutasyonla yakalandı.** Fiyat
+    testleri "bir AppError fırladı" diyordu; oysa `SALE` sebebinde liste
+    fiyatından sapan her tutar zaten sapma sebebi istiyor (T88). Para
+    şemasının BÜTÜN kontrolleri kaldırıldığında bile testler yeşil
+    yanıyordu — reddeden şey şema değil, komşusuydu. Artık hata kodu tam
+    olarak kontrol ediliyor.
+  - Ters yön de sınanıyor: `0.001` miktar, Türkçe karakterli ve emojili not,
+    okuyucunun eklediği `\r\n`. Düşman testleri kapıyı fazla kapatmış
+    olabilir; gram satan bir depoyu ya da gerçek bir el terminalini
+    kullanılamaz hale getirmek de bir arıza.
+- [x] **T40 (P1, human: ~3sa / CC: ~25dk)** - test - Kaos testi: senkron ortasında DB kapat
+  - `packages/core/src/kaos.test.ts`. Bağlantı `pg_terminate_backend` ile
+    SUNUCUDAN öldürülüyor — istemciden `end()` çağırmak düzgün kapanış olur
+    ve sınamak istediğimiz durumu hiç üretmezdi.
+  - **PLAN'daki cümlenin iki yarısı var, biri bugün sınanamıyor.** Cihaz
+    tarafı (kuyruk korunur, ağ dönünce tamamlanır) mobil outbox'a bağlı —
+    ortada kuyruk yok, sahte bir kuyrukla sınamak var olmayan kodun testi
+    olurdu. Sunucu tarafı sınandı ve ASIL TEHLİKELİ OLAN O: cihaz kuyruğu
+    kaybolursa kullanıcı okutmayı tekrarlar, ama sunucuda YARIM yazma
+    olursa defter ile projeksiyon ayrışır ve kimse fark etmez.
+  - Üç iddia: (1) kopma anında defter ile projeksiyon ayrışmıyor,
+    (2) ya hep ya hiç — yarım satır yok, (3) havuz kopan bağlantıyı
+    değiştirip çalışmaya devam ediyor.
+  - Dördüncüsü mobil outbox'ın (ADR-003) dayandığı garanti: aynı anahtar
+    kopmadan sonra tekrar gönderilirse çift kayıt olmuyor. Outbox henüz
+    yazılmadı ama garantinin KENDİSİ bugün sınanabiliyor. Mutasyonla
+    doğrulandı.
+  - Zamanlama KESİN DEĞİL ve olması gerekmiyor: kopma hangi ana denk
+    gelirse gelsin sonuç aynı olmalı. Zamanlamaya bağlı bir test "bazen
+    yeşil" olurdu; bu depoda o hatanın bedeli T109'da ölçüldü.
 - [x] **T41 (P2, human: ~2sa / CC: ~15dk)** - doküman - `docs/ADR/` 5 karar kaydı: ledger, tenant, offline, maliyet, versiyonlama
   - ADR'ler `PLAN.md`'yi tekrar ETMİYOR, farklı bir soruyu cevaplıyor.
     PLAN çalışan bir belge — kararın BUGÜNKÜ halini anlatıyor. ADR tarihli ve
