@@ -1,3 +1,6 @@
+'use client'
+
+import { usePathname, useSearchParams } from 'next/navigation'
 import type { Theme } from '@/server/theme'
 
 /**
@@ -38,13 +41,20 @@ export function ThemeToggle({
   action,
 }: {
   theme: Theme | null
-  action: () => Promise<void>
+  action: (form: FormData) => Promise<void>
 }) {
   const key = theme ?? 'system'
   const label = `${CURRENT_LABEL[key]}. ${NEXT_LABEL[key]}.`
 
+  // Eylem, işi bitince BU adrese yönlendiriyor. Sorgu dizesi dahil: tema
+  // değiştirmek `/hareket?barkod=...` sayfasındaki okutulmuş ürünü
+  // düşürürse kullanıcı barkodu yeniden okutmak zorunda kalır.
+  const pathname = usePathname()
+  const query = useSearchParams().toString()
+
   return (
     <form action={action}>
+      <input type="hidden" name="yol" value={query ? `${pathname}?${query}` : pathname} />
       <button
         type="submit"
         aria-label={label}

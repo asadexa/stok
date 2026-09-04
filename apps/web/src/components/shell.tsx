@@ -59,14 +59,38 @@ export async function Shell({
     redirect('/giris')
   }
 
-  async function cycleTheme() {
+  async function cycleTheme(form: FormData) {
     'use server'
     const current = await readTheme()
     // sistem → açık → koyu → sistem
     await writeTheme(current === null ? 'light' : current === 'light' ? 'dark' : null)
-    // Tema `<html>` niteliğinde, yani KÖK DÜZENDE. Sadece bulunulan sayfayı
-    // tazelemek yetmez; 'layout' kapsamı olmadan nitelik eski değerde kalır.
+
+    /**
+     * TAZELEME YETMİYOR, YÖNLENDİRME GEREKİYOR.
+     *
+     * Tema `<html data-theme>` niteliğinde, yani KÖK DÜZENDE. Tek başına
+     * `revalidatePath('/', 'layout')` ölçümde 12 tıklamanın 8'inde
+     * niteliği GÜNCELLEMEDİ: çerez yazılıyor, eylem 200 dönüyor, sert
+     * yenilemede yeni tema geliyor — ama ekran eski temada kalıyor.
+     * Kullanıcı için bu "düğme çalışmıyor" demek; birkaç kez basıp
+     * vazgeçiyor. (Gerçek tarayıcıda ölçüldü, T109.)
+     *
+     * Yönlendirme, istemciyi kökten yeniden render etmeye zorluyor.
+     * Adres istemciden geliyor (gizli `yol` alanı) çünkü sunucu eylemi
+     * hangi sayfada çalıştığını bilmiyor — Next düzene yol bilgisi
+     * vermiyor.
+     *
+     * Adres DOĞRULANIYOR: `redirect()`'e istemciden gelen ham metni
+     * vermek açık yönlendirme (open redirect) olurdu. Yalnızca tek eğik
+     * çizgiyle başlayan yollar kabul ediliyor; `//baska.site` ve
+     * `https://…` elenip panele düşülüyor.
+     */
+    const yol = form.get('yol')
+    const hedef =
+      typeof yol === 'string' && /^\/(?!\/)/.test(yol) ? yol : '/panel'
+
     revalidatePath('/', 'layout')
+    redirect(hedef)
   }
 
   return (
