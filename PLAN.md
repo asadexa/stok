@@ -2719,7 +2719,7 @@ kullanıyor, cron ucu `runtime = 'nodejs'` + `dynamic = 'force-dynamic'`.
     Yeşil cevap tek başına hiçbir şey ispat etmez.
   - Kaynak: T42 üretime hazırlık denetimi
 
-- [ ] **T115 (P1, human: ~30dk / CC: ~10dk)** - cron - **Vercel Cron GET atıyor, `POST /api/cron` 405 dönecek**
+- [x] **T115 (P1, human: ~30dk / CC: ~10dk)** - cron - **Vercel Cron GET atıyor, `POST /api/cron` 405 dönecek**
   - Vercel Cron zamanlanmış yolu **GET** ile çağırıyor; başka bir metot
     seçilemiyor. `apps/web/src/app/api/cron/route.ts` yalnızca `POST`
     export ediyor, yani Next 405 döner ve **tur hiç çalışmaz.** T112
@@ -2741,6 +2741,16 @@ kullanıyor, cron ucu `runtime = 'nodejs'` + `dynamic = 'force-dynamic'`.
     cron + curl) gerekiyor; karar T42'de verilmeli.
   - Doğrula: GET'i geçici olarak kaldır, üretim benzeri bir çağrıda 405
     gör, geri koy.
+  - **Yapıldı:** gövde `handleCron`'a alındı, `POST` ve `GET` ikisi de ona
+    bağlandı. Doğrulama ORTAK: metot gevşetildi, kapı gevşetilmedi.
+  - **İki mutasyonla doğrulandı.** (a) `GET` export'u silinince iki yeni
+    test de kırmızı — testler gerçekten GET yolunu sürüyor. (b) `GET`
+    sır doğrulamasını atlayan ayrı bir gövdeye çevrilince "sırsız GET
+    KAPALI" testi kırmızı, diğeri yeşil kaldı — yani ikinci test tam
+    olarak kapıyı ölçüyor, turun çalışmasını değil.
+  - **Plan seçimi HÂLÂ AÇIK:** `HEALTH_ALARM` saatlik dedupe istiyor,
+    Vercel Hobby günde bir cron veriyor. Pro ya da harici zamanlayıcı
+    kararı T42'de verilecek.
   - Kaynak: T42 üretime hazırlık denetimi
 
 - [ ] **T116 (P2, human: ~1sa / CC: ~20dk)** - deploy - **`assertServerConfig()` Vercel'de HİÇ koşmuyor**

@@ -7,7 +7,7 @@ import { resetCookieJar } from '@/test/cookie-jar'
 import { TEST_DB_NAME } from '@/test/db-name'
 
 import { GET as aramaGET } from './arama/route'
-import { POST as cronPOST } from './cron/route'
+import { GET as cronGET, POST as cronPOST } from './cron/route'
 import { POST as aktarimHatalariPOST } from './rapor/aktarim-hatalari/route'
 import { GET as hareketGET } from './rapor/hareket/route'
 import { GET as sablonGET } from './rapor/sablon/route'
@@ -187,9 +187,9 @@ describe('cron ucu (T34)', () => {
   const SIR = 'x'.repeat(40)
   let onceki: Record<string, string | undefined>
 
-  function cronReq(authorization?: string): NextRequest {
+  function cronReq(authorization?: string, method: 'GET' | 'POST' = 'POST'): NextRequest {
     return new NextRequest(new URL('http://localhost/api/cron'), {
-      method: 'POST',
+      method,
       headers: authorization ? { authorization } : undefined,
     })
   }
@@ -329,5 +329,43 @@ describe('cron ucu (T34)', () => {
     // yok saymaya alıştırırdı. Hak bittiğinde 500 dönüyor — bkz.
     // packages/core/src/cron.test.ts, "deneme hakkı bitince".
     expect(res.status).toBe(200)
+  })
+
+  /**
+   * ------------------------------------------------------------------
+   * T115 — VERCEL CRON GET ATIYOR.
+   *
+   * Zamanlanmış yolu yalnızca GET ile çağırıyor ve metot seçilemiyor.
+   * Uç POST-only kaldığı sürece Next 405 döndürüyordu: zamanlayıcı
+   * kurulu görünürken tur HİÇ ÇALIŞMIYOR, gün sonu raporu hiç çıkmıyor
+   * ve kimse fark etmiyor.
+   *
+   * İki testin işi ayrı: birincisi GET'in gerçekten TUR ÇALIŞTIRDIĞINI,
+   * ikincisi GET'i açmanın kapıyı AÇMADIĞINI gösteriyor. Yalnız
+   * birincisi yazılsaydı, doğrulamayı tamamen atlayan bir GET de yeşil
+   * yanardı.
+   * ------------------------------------------------------------------
+   */
+  it('GET doğru sırla tur çalıştırıyor (Vercel Cron yolu)', async () => {
+    process.env.CRON_SECRET = SIR
+    const once = await isSayisi()
+
+    const res = await cronGET(cronReq(`Bearer ${SIR}`, 'GET'))
+    const body = (await res.json()) as { code?: string; tenants?: { result?: { ran: number } }[] }
+
+    expect(body.code, `GET'te kapı açılmadı: ${JSON.stringify(body)}`).toBeUndefined()
+    expect(body.tenants?.[0]?.result?.ran, 'GET turu kuyruğu işlemedi').toBeGreaterThan(0)
+    expect(await isSayisi(), 'GET turunda iş kuyruğa hiç girmedi').toBeGreaterThan(once)
+  })
+
+  it('GET sırsız istekte de KAPALI', async () => {
+    process.env.CRON_SECRET = SIR
+    const once = await isSayisi()
+
+    const res = await cronGET(cronReq(undefined, 'GET'))
+
+    expect(res.status).toBe(401)
+    // ASIL KONTROL: metot gevşetilirken doğrulama da gevşetilmiş olabilir.
+    expect(await isSayisi(), 'sırsız GET turu çalıştırdı').toBe(once)
   })
 })

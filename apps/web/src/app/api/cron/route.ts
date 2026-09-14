@@ -71,11 +71,23 @@ function mailTransport(): MailTransport {
 }
 
 /**
- * `POST` çünkü YAN ETKİLİ: rapor gönderiyor, kuyruk işliyor, sayaç buduyor.
- * `GET` olsaydı tarayıcı ön-getirmesi ya da bir link tarayıcısı turu
- * tetikleyebilirdi.
+ * İKİ METOT DA KABUL EDİLİYOR ve gerekçeleri ayrı.
+ *
+ * `POST` DOĞRU OLAN: tur yan etkili — rapor gönderiyor, kuyruk işliyor,
+ * sayaç buduyor. Elle tetikleyen (curl, systemd timer, crontab) bunu
+ * kullanmalı.
+ *
+ * `GET` ZORUNLULUK: Vercel Cron zamanlanmış yolu YALNIZCA GET ile
+ * çağırıyor, metot seçilemiyor. Uç POST-only kalsaydı Next 405 döner ve
+ * tur HİÇ ÇALIŞMAZDI — üstelik zamanlayıcı kurulu görünürken. Gün sonu
+ * raporunun gelmemesi de kimseye haber vermiyor: G4'ün tam tanımı.
+ *
+ * GET'e karşı klasik itiraz — tarayıcı ön-getirmesi ya da bir link
+ * tarayıcısı turu tetikler — burada geçerli DEĞİL: sırrı olmayan istek
+ * aşağıda 401 alıyor. Tetiklemek için `CRON_SECRET`'i bilmek gerekiyor;
+ * metot hiçbir zaman ikinci bir kilit değildi, tek savunma sırdı.
  */
-export async function POST(request: NextRequest) {
+async function handleCron(request: NextRequest) {
   try {
     const expected = process.env.CRON_SECRET
     // Sır TANIMSIZSA uç KAPALI. "Tanımsızsa doğrulama yapma" varsayılanı,
@@ -120,3 +132,6 @@ export async function POST(request: NextRequest) {
     return errorResponse(err)
   }
 }
+
+export const POST = handleCron
+export const GET = handleCron
