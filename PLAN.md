@@ -2679,7 +2679,7 @@ tarandı. Sonuç: **5 BLOCKER, 4 WARNING, 1 READY.**
 
 | # | Alan | Sonuç | Neden |
 |---|---|---|---|
-| 1 | Vercel ayarları | **BLOCKER** | `vercel.json` yok; Root Directory / Install / Build hiçbir yerde yazılı değil |
+| 1 | Vercel ayarları | ~~BLOCKER~~ → **KAPANDI (T42.1)** | `apps/web/vercel.json` eklendi (saatlik cron + maxDuration); pano ayarları runbook'ta |
 | 2 | Supabase bağlantısı + migration akışı | **BLOCKER** | `stok_app` rolünü üretimde kuran ve migration'ı koşturan bir yol YOK |
 | 3 | `DATABASE_URL` / `MIGRATION_DATABASE_URL` ayrımı | **READY** | Ayrım kodda temiz; tek şart migration URL'inin Vercel runtime'ına KONMAMASI |
 | 4 | Production secret/env | **WARNING** | Liste `.env.example`'da tam ama `assertServerConfig()` Vercel'de hiç koşmuyor (T116) |
@@ -2729,6 +2729,29 @@ kullanıyor, cron ucu `runtime = 'nodejs'` + `dynamic = 'force-dynamic'`.
     bağlantıyı ölçüyor; hiçbir şeye dokunmayan bir sağlık ucu geçemiyor.
   - **Hata metni sızmıyor**, testle korunuyor: postgres.js'in bağlantı
     hatası kullanıcı adını, sunucuyu ve portu içerebiliyor.
+  - Kaynak: T42 üretime hazırlık denetimi
+
+- [x] **T42.1 (P1, human: ~1sa / CC: ~20dk)** - deploy - **`vercel.json` eklendi**
+  - Dosya `apps/web/vercel.json`: Vercel `vercel.json`'ı Root Directory'den
+    okuyor ve Next uygulaması orada.
+  - İki şey var: `/api/cron` için SAATLİK cron girdisi ve o rotaya
+    `maxDuration: 60`. Saatlik çünkü `cron.ts` içinde `HEALTH_ALARM` dedupe
+    anahtarı `${kind}:${day}:${hour}`; günlük bir zamanlayıcıda alarm
+    sınıfı ölü doğardı — sabah bakılır, gün içinde bir daha bakılmaz.
+    `maxDuration` çünkü tur her kiracı için planlıyor, kuyruğu işliyor ve
+    e-posta gönderiyor; varsayılan süre sınırı bunun için kısa.
+  - **JSON YORUM KABUL ETMİYOR.** Gerekçe bu satırlarda ve
+    `docs/uretim-runbook.md` içinde; dosyanın kendisi sessiz.
+  - **SESSİZ KOPMA RİSKİ TESTE BAĞLANDI** (`apps/web/src/vercel-config.test.ts`).
+    `vercel.json` kodun geri kalanına hiçbir derleyici ya da tip tarafından
+    bağlı değil: cron girdisi bir YOL DİZESİ. Rota taşınır, adı değişir ya
+    da `GET` export'u kaldırılırsa zamanlayıcı sessizce 404/405 alır,
+    hiçbir test kırmızı yanmaz ve gün sonu raporu bir daha hiç çıkmaz.
+  - **İki mutasyonla doğrulandı:** (a) cron yolu var olmayan rotayı
+    gösterince iki test kırmızı, (b) zamanlama günlüğe çekilince saatlik
+    testi kırmızı.
+  - **Hobby planı yetmiyor:** saatlik cron Pro gerektiriyor. Alternatifler
+    (systemd timer, crontab + curl) runbook'ta.
   - Kaynak: T42 üretime hazırlık denetimi
 
 - [x] **T115 (P1, human: ~30dk / CC: ~10dk)** - cron - **Vercel Cron GET atıyor, `POST /api/cron` 405 dönecek**
