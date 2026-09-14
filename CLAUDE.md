@@ -97,17 +97,27 @@ büyük kısmı veritabanında duruyor.
 
 Faz 0–4 bitti (T1–T25), artı T34/T35/T36/T37/T38/T39/T40/T41/T44/T46/T47/
 T50/T51/T52/T54/T55/T56/T88/T88.1/T89/T93/T94/T105/T107/T109/T111/T113 ve
-CI. **663 birim testi + 21 tarayıcı testi yeşil.**
+CI. **688 birim testi + 21 tarayıcı testi yeşil.**
 
 Cron turu (T34) `POST /api/cron` ucundan çalışıyor: `CRON_SECRET` sırrıyla,
 her tenant için planla → kuyruğu işle → bakım. **Ucu VURAN zamanlayıcı
 henüz yok** (T112, T42'ye bağlı) — kurulmadan gün sonu raporu çıkmaz.
 
-**T42 üretime hazırlık denetimi yapıldı (deploy YAPILMADI):** 5 BLOCKER,
-4 WARNING, 1 READY. Sonuçlar ve en küçük değişiklik seti PLAN.md →
-"T42 ÜRETİME HAZIRLIK DENETİMİ" ve T114-T119'da. Öne çıkanlar:
-`vercel.json` yok, `/api/v1/health` yok, Vercel Cron GET atıyor ama uç
-POST-only, `assertServerConfig()` Vercel'de hiç koşmuyor.
+**T42 denetiminden çıkan altı iş KAPANDI (deploy hâlâ YAPILMADI):**
+T42.1 `apps/web/vercel.json` (saatlik cron + maxDuration), T114
+`/api/v1/health`, T115 cron ucu GET kabul ediyor, T116 yapılandırma
+kontrolü `src/instrumentation.ts` ile üretimde de koşuyor, T117 havuz
+ayarları ortamdan, T118 yükleme sınırı Vercel tavanının altında + Türkçe
+hata, T119 `docs/uretim-runbook.md`.
+
+Yol boyunca iki açık daha bulunup kapatıldı: `new URL()` tek başına
+`localhost:5433/stok`'u geçiriyordu (artık şema `postgresql:` olmak
+zorunda), ve `01-roles.sql` Supabase'de önce koşarsa üretim rolü yerel
+geliştirme şifresiyle kalıyordu (runbook sırayı yazıyor).
+
+**Kalan deploy işi insana ait:** Vercel/Supabase hesap kurulumu, Pro planı
+kararı (saatlik cron Hobby'de yok) ve ilk migration. Hepsi runbook'ta
+adım adım.
 
 **Next 16 + Turbopack** (T105). Paket içi importlar uzantısız; `next.config.ts`
 içinde `webpack()` kancası YOK, geri koyma. `agentRules: false` bilerek:
@@ -120,9 +130,8 @@ kararını ya başka bir görevi bekliyor:
 
 | Görev | Neyi bekliyor |
 |---|---|
-| **T42/T43** | Kullanıcı "bir sonraki adım" dedi — deploy hattı |
-| **T114-T119** | T42 denetiminden çıktı; deploy'u bloke ediyorlar |
-| **T112** | T42 (zamanlayıcı kurulmadan gün sonu raporu çıkmaz) |
+| **T42/T43** | Kod tarafı hazır; Vercel/Supabase hesap kurulumu insana ait |
+| **T112** | T42 deploy'u (vercel.json hazır, zamanlayıcı ilk deploy'da kurulacak) |
 | **T106** | Kullanıcı kararı: 56 px kuralı mı kod mu düzelecek |
 | **T108** | Ölçüm: fire girişinde fiyat alanı gerçekten sorun mu |
 | **T110** | Kullanıcı cevabı: depodaki Android'ler gerçekten JS'siz mi |
