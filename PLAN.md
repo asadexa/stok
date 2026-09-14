@@ -2878,7 +2878,7 @@ kullanıyor, cron ucu `runtime = 'nodejs'` + `dynamic = 'force-dynamic'`.
     Her dosyayı reddeden bir kontrol tek yönlü testten geçerdi.
   - Kaynak: T42 üretime hazırlık denetimi
 
-- [ ] **T119 (P1, human: ~2sa / CC: ~40dk)** - deploy - **Üretim runbook'u yok: rol kurulumu, migration ve geri alma yazılı değil**
+- [x] **T119 (P1, human: ~2sa / CC: ~40dk)** - deploy - **Üretim runbook'u yok: rol kurulumu, migration ve geri alma yazılı değil**
   - Üç şey hiçbir yerde yazmıyor ve üçü de bir kişinin kafasında duruyor:
     1. **`stok_app` rolü Supabase'de nasıl kurulur.** `db/init/01-roles.sql`
        yalnızca Docker'ın ilk açılışında ve test veritabanı kurulurken
@@ -2903,6 +2903,25 @@ kullanıyor, cron ucu `runtime = 'nodejs'` + `dynamic = 'force-dynamic'`.
   - Runbook `docs/` altına yazılmalı, README'den bağlanmalı. Deneme yanılma
     ile bulunacak bir şey değil: yanlış rolle bir kez bağlanmak izolasyonu
     kapatır ve kimse fark etmez.
+  - **Yapıldı:** `docs/uretim-runbook.md`, README'den bağlı.
+  - **Yazarken bulunan incelik — SIRA ÖNEMLİ.** `01-roles.sql` rolü
+    `IF NOT EXISTS` ile koruyor ve YEREL GELİŞTİRME ŞİFRESİYLE
+    (`stok_app_dev`) yaratıyor. Supabase'de önce `pnpm --filter @stok/db
+    run init` koşulsaydı üretim rolü o şifreyle kalırdı. Runbook rolü önce
+    elle güçlü şifreyle yaratmayı, sonra init'i yalnızca yetkiler için
+    koşturmayı söylüyor.
+  - **Migration 5432'den, 6543'ten değil:** pooler transaction modunda DDL
+    sorunlu. Uygulama tam tersi (6543).
+  - **`MIGRATION_DATABASE_URL` Vercel'e KONMAYACAK**, tabloda açıkça
+    "HAYIR" yazıyor: o rol RLS'i atlıyor ve runtime'da bulunması,
+    uygulama kodunun yanlışlıkla sahip rolüne bağlanabilmesi demek.
+  - **Geri alma dürüstçe yazıldı:** web tarafı Vercel Instant Rollback ile
+    çalışıyor, veritabanı için YOL YOK. Pratik sonucu runbook'ta:
+    migration'lar ileri uyumlu olmak zorunda, çünkü web geri alınınca şema
+    ileride kalıyor.
+  - **Yedek geri yükleme tatbikatı YAPILMADI** ve runbook bunu yazıyor:
+    ilk gerçek müşteriden önce bir kez denenmeli, yoksa yedeğin çalıştığı
+    yalnızca varsayım.
   - Kaynak: T42 üretime hazırlık denetimi
 
 ---

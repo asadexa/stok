@@ -85,6 +85,15 @@ işletmenin tek bir ürününü bile göremezsiniz (veritabanı seviyesinde RLS)
 
 ---
 
+## Üretime alma
+
+Vercel + Supabase adımları, sırası ve gerekçeleriyle:
+**[`docs/uretim-runbook.md`](docs/uretim-runbook.md)**
+
+Deneme yanılmayla bulunacak bir şey değil — `stok_app` rolü kurulmadan
+uygulama bağlanamaz, ve telaşla `postgres` rolüyle bağlanmak tenant
+izolasyonunu SESSİZCE kapatır.
+
 ## Geliştirme
 
 `.env` yoksa önce `.env.example` dosyasını `.env` adıyla kopyalayın
