@@ -106,6 +106,25 @@ export async function withTenant<T>(
   })
 }
 
+/**
+ * Bağlantının GERÇEKTEN ayakta olup olmadığını sorar. T114 sağlık ucu bunu
+ * kullanıyor.
+ *
+ * NEDEN BURADA, ROTADA DEĞİL. `apps/web` drizzle-orm'a bağımlı değil ve
+ * `sql` şablonu oradan geliyor. Sırf tek bir `SELECT 1` için web paketine
+ * drizzle eklemek, onu veritabanı katmanına doğrudan bağlardı; bugün
+ * `@stok/db` arkasında duran bağlantı ayrıntısı arayüz koduna sızardı.
+ *
+ * `SELECT 1` BİLEREK EN UCUZ SORGU: sağlık ucu dakikada bir vurulabilir ve
+ * bir tabloya bakan kontrol, izleme trafiğini gerçek yükün üstüne eklerdi.
+ * Sorulan soru "şema doğru mu" değil, "bu sürüm veritabanına ulaşabiliyor
+ * mu" — üretimde en sık görülen arıza tam olarak bu: uygulama ayakta,
+ * veritabanı erişilemez.
+ */
+export async function pingDb(db: Db = appDb()): Promise<void> {
+  await db.execute(sql`SELECT 1`)
+}
+
 export async function closeAppDb(): Promise<void> {
   if (appSingleton) {
     await appSingleton.client.end()

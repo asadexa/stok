@@ -2696,7 +2696,7 @@ kapalı tarafa düşüyor, `.nvmrc` + `engines` + `packageManager` sabit,
 `CRON_SECRET` 32 karakter altını reddediyor ve sabit zamanlı karşılaştırma
 kullanıyor, cron ucu `runtime = 'nodejs'` + `dynamic = 'force-dynamic'`.
 
-- [ ] **T114 (P1, human: ~1sa / CC: ~20dk)** - deploy - **`/api/v1/health` ucu yok, deploy sonrası kontrol listesi çalıştırılamaz**
+- [x] **T114 (P1, human: ~1sa / CC: ~20dk)** - deploy - **`/api/v1/health` ucu yok, deploy sonrası kontrol listesi çalıştırılamaz**
   - PLAN Bölüm 9, deploy sonrası ilk 5 dakikanın **1. maddesi** olarak
     `/api/v1/health` 200 mü diye soruyor. Böyle bir uç yok:
     `apps/web/src/app/api` altında yalnızca `arama`, `cron`, `rapor/*` var.
@@ -2717,6 +2717,18 @@ kullanıyor, cron ucu `runtime = 'nodejs'` + `dynamic = 'force-dynamic'`.
     öneki, T53 geldiğinde yolun değişmemesi için baştan doğru seçilmeli.
   - Doğrula: veritabanını durdur, uç 503 dönsün; ayağa kaldır, 200 dönsün.
     Yeşil cevap tek başına hiçbir şey ispat etmez.
+  - **Yapıldı:** `apps/web/src/app/api/v1/health/route.ts`. Yetkisiz, gövde
+    `{"status":"ok"}` ile sınırlı, `runtime = 'nodejs'` +
+    `dynamic = 'force-dynamic'` (önbellekten dönen bir "ok", veritabanı
+    düştükten sonra da yeşil yanardı).
+  - **`pingDb()` `@stok/db`'ye eklendi, rotaya değil:** `apps/web`
+    drizzle-orm'a bağımlı değil ve sırf tek bir `SELECT 1` için eklemek web
+    paketini veritabanı katmanına doğrudan bağlardı.
+  - **Mutasyonla doğrulandı:** `pingDb()` çağrısı silinip uç "hep 200"
+    haline getirildiğinde 503 testi kırmızı yandı. Yani test gerçekten
+    bağlantıyı ölçüyor; hiçbir şeye dokunmayan bir sağlık ucu geçemiyor.
+  - **Hata metni sızmıyor**, testle korunuyor: postgres.js'in bağlantı
+    hatası kullanıcı adını, sunucuyu ve portu içerebiliyor.
   - Kaynak: T42 üretime hazırlık denetimi
 
 - [x] **T115 (P1, human: ~30dk / CC: ~10dk)** - cron - **Vercel Cron GET atıyor, `POST /api/cron` 405 dönecek**
