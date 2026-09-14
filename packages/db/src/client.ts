@@ -26,11 +26,64 @@ export type Tx = Parameters<Parameters<Db['transaction']>[0]>[0]
 interface ClientOptions {
   url: string
   max?: number
+  idleTimeout?: number
 }
 
-function createClient({ url, max = 10 }: ClientOptions) {
+/**
+ * Sayı okuyan ortam değişkeni yardımcısı.
+ *
+ * GEÇERSİZ DEĞER SESSİZCE YOK SAYILMIYOR. `DB_POOL_MAX=bir` yazılıp
+ * varsayılana düşülseydi üretim on bağlantıyla koşar, operatör ayarı
+ * yaptığını sanır ve "neden hâlâ too many connections alıyorum" sorusunun
+ * cevabı hiçbir yerde olmazdı. Yapılandırma hatası kurulumda söylenmeli.
+ */
+function envInt(name: string, fallback: number): number {
+  const raw = process.env[name]
+  if (raw === undefined || raw === '') return fallback
+
+  const n = Number(raw)
+  if (!Number.isInteger(n) || n < 0) {
+    throw new Error(`${name} negatif olmayan bir tam sayı olmalı, "${raw}" verildi.`)
+  }
+  return n
+}
+
+/**
+ * ============================================================================
+ * T117 — HAVUZ AYARLARI ORTAMDAN OKUNUYOR
+ *
+ * Bugünkü değerler TEK UZUN ÖMÜRLÜ SUNUCU varsayıyor ve orada doğrular.
+ * Vercel'de uygulama N tane eşzamanlı fonksiyon örneğine dağılıyor, her
+ * biri KENDİ havuzunu açıyor: 20 örnek × 10 = 200 bağlantı. Supabase
+ * pooler'ın istemci sınırı bu civarda ve aşıldığında hata "too many
+ * connections" olarak KULLANICIYA düşüyor.
+ *
+ * `idle_timeout` yokluğu ayrı bir sorun: fonksiyon örneği donduruluyor ama
+ * bağlantı sunucu tarafında açık kalıyor ve kimse kapatmıyor.
+ *
+ * VARSAYILANLAR BUGÜNKÜYLE AYNI BIRAKILDI (max 10, idle_timeout 0 = hiç
+ * kapatma). Sabit küçük bir `max` yazmak yerelde tek süreçli demo yolunu
+ * yavaşlatırdı; üretim değerleri `docs/uretim-runbook.md` içinde.
+ *
+ * SADECE UYGULAMA HAVUZUNA uygulanıyor. Migration bağlantısı (`max: 2`)
+ * kısa ömürlü ve elle kapatılıyor; onu ortamdan ayarlanabilir yapmak,
+ * yanlışlıkla büyütülebilen bir sahip-rolü havuzu demek olurdu.
+ * ============================================================================
+ */
+export function appPoolOptions(): { max: number; idleTimeout: number } {
+  return {
+    max: envInt('DB_POOL_MAX', 10),
+    idleTimeout: envInt('DB_IDLE_TIMEOUT', 0),
+  }
+}
+
+function createClient({ url, max = 10, idleTimeout = 0 }: ClientOptions) {
   const client = postgres(url, {
     max,
+    // 0 = bağlantıyı hiç kapatma (postgres.js varsayılanı). Serverless'ta
+    // sıfırdan büyük bir değer gerekiyor: donan fonksiyon örneğinin
+    // bağlantısı aksi halde sunucu tarafında sonsuza kadar açık kalıyor.
+    idle_timeout: idleTimeout,
     // pgbouncer transaction modunda (Supabase pooler, port 6543) prepared
     // statement desteklenmiyor ve açık bırakılırsa çalışma zamanında
     // "prepared statement already exists" hatası veriyor (PLAN.md D-1.4).
@@ -57,7 +110,7 @@ export function appDb(): Db {
   if (!appSingleton) {
     const url = process.env.DATABASE_URL
     if (!url) throw new Error('DATABASE_URL tanımlı değil')
-    appSingleton = createClient({ url })
+    appSingleton = createClient({ url, ...appPoolOptions() })
   }
   return appSingleton.db
 }

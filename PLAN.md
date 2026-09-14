@@ -2800,7 +2800,7 @@ kullanıyor, cron ucu `runtime = 'nodejs'` + `dynamic = 'force-dynamic'`.
     `https://` adresi.
   - Kaynak: T42 üretime hazırlık denetimi
 
-- [ ] **T117 (P2, human: ~1sa / CC: ~20dk)** - deploy - **Serverless'ta bağlantı havuzu ayarları yerel varsayımla yazılmış**
+- [x] **T117 (P2, human: ~1sa / CC: ~20dk)** - deploy - **Serverless'ta bağlantı havuzu ayarları yerel varsayımla yazılmış**
   - `client.ts:31` havuzu `max = 10` ile açıyor ve `idle_timeout`
     vermiyor. Tek bir uzun ömürlü sunucuda ikisi de doğru. Vercel'de
     uygulama N tane eşzamanlı fonksiyon örneğine dağılıyor ve her biri
@@ -2814,6 +2814,19 @@ kullanıyor, cron ucu `runtime = 'nodejs'` + `dynamic = 'force-dynamic'`.
     Sabit küçük bir `max` yazmak, yerelde tek süreçli demo yolunu
     yavaşlatırdı.
   - Doğrula: sınırı 1'e indirip eşzamanlı iki isteğin sıraya girdiğini gör.
+  - **Yapıldı:** `appPoolOptions()` `DB_POOL_MAX` ve `DB_IDLE_TIMEOUT`
+    okuyor, varsayılanlar bugünküyle AYNI (10 / 0). Yalnızca uygulama
+    havuzuna uygulanıyor; migration bağlantısını (`max: 2`) ortamdan
+    ayarlanabilir yapmak, yanlışlıkla büyütülebilen bir sahip-rolü havuzu
+    demek olurdu. `.env.example` üretim değerlerini yazıyor.
+  - **Bozuk değer sessizce yok sayılmıyor, fırlatıyor.** Varsayılana düşen
+    bir okuma, ayarı yaptığını sanan operatörü on bağlantıyla üretimde
+    bırakırdı.
+  - **Mutasyonla doğrulandı:** `envInt` bozuk değerde varsayılana düşecek
+    şekilde değiştirildiğinde üç test birden kırmızı yandı.
+  - **Havuzun gerçekten o boyutta açıldığı SINANMADI, bilerek:** postgres.js'in
+    iç durumunu okumak kütüphanenin özel alanlarına bağımlı bir test
+    üretir ve sürüm yükseltmesinde sessizce anlamsızlaşırdı.
   - Kaynak: T42 üretime hazırlık denetimi
 
 - [ ] **T118 (P3, human: ~30dk / CC: ~10dk)** - deploy - **`bodySizeLimit: '5mb'` Vercel'in 4,5 MB sınırının ÜSTÜNDE**
