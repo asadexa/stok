@@ -1,5 +1,5 @@
 import { config } from 'dotenv'
-import { adminDbUnsafe } from './client.js'
+import { adminDbUnsafe } from './client'
 
 /**
  * Veritabanındaki ürün sayısını tek satır olarak basar.

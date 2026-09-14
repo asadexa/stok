@@ -4,6 +4,8 @@ import {
   type ExportStockInput,
   type JobKind,
   type MovementReason,
+  type PriceOverrideReason,
+  type PriceSource,
   type Role,
   type Unit,
   exportMovementsSchema,
@@ -19,7 +21,7 @@ import {
   withTenant,
 } from '@stok/db'
 import { and, asc, eq, gte, isNull, lte, or, sql } from 'drizzle-orm'
-import { type Actor, canSeePrices, movementUserScope, requirePermission } from './authz.js'
+import { type Actor, canSeePrices, movementUserScope, requirePermission } from './authz'
 import {
   type MovementExportRow,
   type StockExportRow,
@@ -27,11 +29,11 @@ import {
   exportFileName,
   movementColumns,
   stockColumns,
-} from './excel.js'
-import { type JobRecord, enqueueJob, requesterEmail } from './jobs.js'
-import { type MailTransport, XLSX_CONTENT_TYPE } from './mail.js'
-import { parseScaled, scaledToNumber } from './numeric.js'
-import { parseOrThrow } from './validate.js'
+} from './excel'
+import { type JobRecord, enqueueJob, requesterEmail } from './jobs'
+import { type MailTransport, XLSX_CONTENT_TYPE } from './mail'
+import { parseScaled, scaledToNumber } from './numeric'
+import { parseOrThrow } from './validate'
 
 /**
  * ============================================================================
@@ -223,7 +225,11 @@ async function loadMovements(
       reason: stockMovements.reason,
       delta: stockMovements.delta,
       note: stockMovements.note,
-      unitCost: stockMovements.unitCost,
+      unitPrice: stockMovements.unitPrice,
+      listPrice: stockMovements.listPrice,
+      priceOverrideReason: stockMovements.priceOverrideReason,
+      priceDate: stockMovements.priceDate,
+      priceSource: stockMovements.priceSource,
     })
     .from(stockMovements)
     .innerJoin(products, eq(products.id, stockMovements.productId))
@@ -241,7 +247,11 @@ async function loadMovements(
     reason: r.reason as MovementReason,
     delta: scaledToNumber(parseScaled(r.delta)),
     note: r.note,
-    unitCost: r.unitCost === null ? null : Number(r.unitCost),
+    unitPrice: r.unitPrice === null ? null : Number(r.unitPrice),
+    listPrice: r.listPrice === null ? null : Number(r.listPrice),
+    priceOverrideReason: r.priceOverrideReason as PriceOverrideReason | null,
+    priceDate: r.priceDate,
+    priceSource: r.priceSource as PriceSource | null,
   }))
 }
 

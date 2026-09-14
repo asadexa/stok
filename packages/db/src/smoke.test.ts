@@ -1,82 +1,107 @@
-import { afterAll, describe, expect, it } from 'vitest'
+import { sql } from 'drizzle-orm'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { withTenant } from './client'
+import { TEST_DB_NAME } from './test/db-name'
 import {
-  asTenant,
-  closeTestDbs,
-  createTenantFixture,
-  dropTenantFixture,
-  insertMovement,
-  invariantDrift,
-  withoutTenant,
-} from './test-support.js'
+  type TestTenant,
+  detUuid,
+  seedOpeningStock,
+  seedTestTenant,
+  testAdminDb,
+  testAppDb,
+} from './testing'
 
 /**
- * Test iskelesinin kendisinin çalıştığını doğrular.
+ * ============================================================================
+ * TEST İSKELESİNİN KENDİSİ
  *
- * Bu dosya asıl garantileri test etmiyor; onlar ayrı dosyalarda. Buradaki
- * amaç, iskele bozuksa onu diğer testlerin yanlış pozitifleri arasında
+ * Bu dosya ürünün hiçbir garantisini sınamıyor; onlar rls.test.ts,
+ * invariant.test.ts ve movements.test.ts'de. Buradaki amaç, İSKELE
+ * bozulduğunda bunu diğer testlerin kafa karıştırıcı hataları arasında
  * aramak zorunda kalmamak.
+ *
+ * Somut senaryo: `resetTestDatabase()` migration'ları uygulamayı atlarsa
+ * projeksiyon tetikleyicisi hiç kurulmaz. O durumda onlarca test
+ * "beklenen 50, gelen 0" diye düşer ve hepsi ürün kodunu suçlar. Buradaki
+ * tek satır ise doğrudan "tetikleyici yok" der.
+ *
+ * NEDEN YENİDEN YAZILDI: bu dosya master'a `test-support.ts` iskelesine
+ * dayanarak eklendi, ama o iskele 134cb32'de kaldırılmıştı (iki ayrı test
+ * önyüklemesi vardı ve biri kullanılmıyordu). Dosyanın fikri doğruydu,
+ * dayandığı temel yoktu. Dört testinden ikisi kaldırılan iskelenin kendi
+ * temizlik mekanizmasını sınıyordu; kalan ikisinin karşılığı zaten
+ * rls.test.ts'te var. Bu yüzden "port" değil, aynı amaca hizmet eden yeni
+ * bir dosya.
+ * ============================================================================
  */
 
+const app = testAppDb(TEST_DB_NAME)
+const admin = testAdminDb(TEST_DB_NAME)
+
+let tenant: TestTenant
+
+beforeAll(async () => {
+  tenant = await seedTestTenant(admin.db, 'smoke', [
+    { sku: 'SMK-1', name: 'Duman Testi Ürünü', caseMultiplier: '6' },
+  ])
+})
+
 afterAll(async () => {
-  await closeTestDbs()
+  await app.client.end()
+  await admin.client.end()
 })
 
 describe('test iskelesi', () => {
-  it('fixture kurulup silinebiliyor', async () => {
-    const f = await createTenantFixture('smoke')
-    expect(f.tenantId).toMatch(/^[0-9a-f-]{36}$/)
-    await dropTenantFixture(f.tenantId)
+  it('fixture beklenen kullanıcı, konum ve ürünleri kuruyor', () => {
+    expect(tenant.tenantId).toMatch(/^[0-9a-f-]{36}$/)
+    expect(tenant.adminUserId).not.toBe(tenant.staffUserId)
+    expect(tenant.locationId).toMatch(/^[0-9a-f-]{36}$/)
+
+    const product = tenant.products['SMK-1']
+    expect(product).toBeDefined()
+    // Koli çarpanı istendiğinde İKİ barkod oluşmalı: adet ve koli. Biri
+    // eksik kalırsa D7 (koli çarpanı) testleri sessizce kapsamsız kalır.
+    expect(product?.barcode).toBeTruthy()
+    expect(product?.caseBarcode).toBeTruthy()
   })
 
-  it('tenant bağlamında yazılan hareket projeksiyona yansıyor', async () => {
-    const f = await createTenantFixture('smoke')
-    try {
-      await asTenant(f.tenantId, async (tx) => {
-        await insertMovement(tx, f, 20, 'PURCHASE')
-        await insertMovement(tx, f, -5, 'SALE')
-      })
-
-      const rows = await asTenant(f.tenantId, (tx) =>
-        tx`SELECT qty FROM current_stock WHERE product_id = ${f.productId}`,
-      )
-      expect(Number(rows[0]?.qty)).toBe(15)
-      expect(await invariantDrift(f.tenantId)).toBe(0)
-    } finally {
-      await dropTenantFixture(f.tenantId)
-    }
+  it('kimlikler kararlı: aynı etiket aynı UUID', () => {
+    // Fixture'ların tekrar üretilebilirliği buna dayanıyor. Rastgele
+    // kimliğe kayarsa, başarısız bir testi aynı veriyle tekrar koşturmak
+    // imkânsızlaşır.
+    expect(detUuid('tenant:smoke')).toBe(detUuid('tenant:smoke'))
+    expect(detUuid('tenant:smoke')).not.toBe(detUuid('tenant:baska'))
   })
 
-  it('tenant bağlamı kurulmadan hiçbir satır görünmüyor', async () => {
-    const f = await createTenantFixture('smoke')
-    try {
-      await asTenant(f.tenantId, (tx) => insertMovement(tx, f, 7, 'PURCHASE'))
+  it('defter yazınca projeksiyon tetikleyicisi çalışıyor', async () => {
+    // ASIL SORU: `resetTestDatabase()` migration'ları gerçekten uyguladı mı?
+    // Tetikleyici 0002 migration'ında kuruluyor; uygulanmadıysa burada
+    // satır hiç oluşmaz.
+    const productId = tenant.products['SMK-1']!.id
+    await seedOpeningStock(admin.db, tenant, productId, '50')
 
-      const rows = await withoutTenant(
-        (tx) => tx`SELECT id FROM products WHERE id = ${f.productId}`,
-      )
-      // Güvenli varsayılan: yanlış yapılandırmada veri sızmaz, boş döner.
-      expect(rows).toHaveLength(0)
-    } finally {
-      await dropTenantFixture(f.tenantId)
-    }
+    const rows = await withTenant(
+      tenant.tenantId,
+      (tx) =>
+        tx.execute<{ qty: string }>(
+          sql`SELECT qty FROM current_stock WHERE product_id = ${productId}`,
+        ),
+      app.db,
+    )
+    expect(Number([...rows][0]?.qty)).toBe(50)
   })
 
-  it('temizlik ledger trigger.ını global olarak kapatmıyor', async () => {
-    // dropTenantFixture SET LOCAL session_replication_role kullanıyor.
-    // ALTER TABLE DISABLE TRIGGER kullansaydı, bu test sırasında paralel
-    // koşan bir değiştirilemezlik testi sahte geçerdi.
-    const a = await createTenantFixture('smoke-a')
-    const b = await createTenantFixture('smoke-b')
-    try {
-      await asTenant(b.tenantId, (tx) => insertMovement(tx, b, 5, 'PURCHASE'))
-      // A temizlenirken B'nin ledger trigger'ı hâlâ görevde olmalı.
-      await dropTenantFixture(a.tenantId)
+  it('uygulama bağlantısı RLS uyguluyor, admin bağlantısı atlıyor', async () => {
+    // İkisi karışırsa tenant izolasyonu testlerinin TAMAMI yeşil yanar ve
+    // hiçbir şey ispat etmez — RLS testlerinin en sinsi yanlış pozitifi.
+    const withoutContext = await app.db.execute<{ id: string }>(
+      sql`SELECT id FROM products WHERE tenant_id = ${tenant.tenantId}`,
+    )
+    expect([...withoutContext]).toHaveLength(0)
 
-      await expect(
-        asTenant(b.tenantId, (tx) => tx`DELETE FROM stock_movements WHERE tenant_id=${b.tenantId}`),
-      ).rejects.toThrow()
-    } finally {
-      await dropTenantFixture(b.tenantId)
-    }
+    const asAdmin = await admin.db.execute<{ id: string }>(
+      sql`SELECT id FROM products WHERE tenant_id = ${tenant.tenantId}`,
+    )
+    expect([...asAdmin].length).toBeGreaterThan(0)
   })
 })

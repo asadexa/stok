@@ -8,3 +8,13 @@ allowBuilds:
   # Next.js'in görsel optimizasyonu. Build script'i çalışmazsa `next build`
   # uyarı verip devam ediyor ama üretimde görsel dönüşümü kapalı kalıyor.
   sharp: true
+
+# GEÇİŞLİ AÇIK OVERRIDE'LARI KALDIRILDI (T105).
+#
+# T104'te `postcss` ve `sharp` için override yazılmıştı: next 15.5.24
+# postcss'i 8.4.31'e sabitliyordu ve sharp'ın alt sınırını seçiyordu.
+# Override belirtiyi kapatıyordu, kaynağı değil.
+#
+# Next 16 ikisini de kaynağında çözüyor. Override'ları bırakmak, ileride
+# gerçekten gereken bir sürümü sessizce eziyor olurdu — ve kimse
+# "bu override hâlâ gerekli mi" diye geri dönüp bakmaz.

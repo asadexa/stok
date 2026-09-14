@@ -37,6 +37,18 @@ export function formatDate(value: Date): string {
   return dateFmt.format(value)
 }
 
+/**
+ * `YYYY-MM-DD` → "12.06.2021".
+ *
+ * `new Date('2021-06-12')` KULLANILMIYOR: o metin UTC gece yarısı olarak
+ * çözülür ve UTC'nin batısındaki bir tarayıcıda BİR GÜN ÖNCE gösterilir.
+ * `price_date` bir takvim günü, bir zaman anı değil (T89).
+ */
+export function formatIsoDate(value: string): string {
+  const [y, m, d] = value.split('-')
+  return y && m && d ? `${d}.${m}.${y}` : value
+}
+
 /** Para: "1.234,50". Birim simgesi ÇAĞIRAN yerde — kur alanı yok, ₺ sabit. */
 export function formatMoney(value: number): string {
   return moneyFmt.format(value)

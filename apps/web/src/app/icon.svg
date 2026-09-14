@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="32" height="32">
+  <!--
+    Kabuktaki kutu logosunun aynısı (components/shell.tsx). İkinci bir
+    çizim yapılmadı: sekmedeki simge ile menüdeki simge ayrışırsa
+    kullanıcı ikisini aynı ürün saymaz.
+
+    Renkler SABİT, tema belirteci DEĞİL. Sekme simgesi sayfanın CSS'ini
+    görmüyor; `var(--accent)` burada boş kalır ve simge görünmez olurdu.
+    Değer `globals.css` içindeki accent ile aynı.
+  -->
+  <rect width="24" height="24" rx="5" fill="#1d4ed8"/>
+  <g fill="none" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="m18.5 15-6.5 3.6L5.5 15V9L12 5.4 18.5 9z"/>
+    <path d="M5.8 8.6 12 12l6.2-3.4"/>
+    <path d="M12 19.2V12"/>
+  </g>
+</svg>

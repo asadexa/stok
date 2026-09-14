@@ -2,10 +2,18 @@ import { randomUUID } from 'node:crypto'
 import { AppError } from '@stok/shared'
 import { type TestTenant, seedTestTenant, testAdminDb, testAppDb } from '@stok/db/testing'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import type { Actor } from './authz.js'
-import { createMovement } from './movements.js'
-import { dashboardSummary, getProduct, listCategories, listStock } from './stock.js'
-import { TEST_DB_NAME } from './test/db-name.js'
+import type { Actor } from './authz'
+import { createMovement } from './movements'
+import {
+  alertSummary,
+  categorySummary,
+  dashboardSummary,
+  getProduct,
+  listCategories,
+  listStock,
+  searchAll,
+} from './stock'
+import { TEST_DB_NAME } from './test/db-name'
 
 /**
  * ============================================================================
@@ -50,7 +58,7 @@ afterAll(async () => {
 
 const opts = { db: app.db }
 
-async function move(barcode: string, qty: number, unitCost?: number) {
+async function move(barcode: string, qty: number, unitPrice?: number) {
   return createMovement(
     boss,
     {
@@ -58,7 +66,7 @@ async function move(barcode: string, qty: number, unitCost?: number) {
       barcode,
       qty,
       reason: 'PURCHASE',
-      ...(unitCost === undefined ? {} : { unitCost }),
+      ...(unitPrice === undefined ? {} : { unitPrice }),
       clientCreatedAt: new Date().toISOString(),
     },
     opts,
@@ -356,6 +364,90 @@ describe('T18 - dashboard özeti', () => {
     const summary = await dashboardSummary(staff, new Date(0), opts)
     expect(summary.criticalCount).toBeGreaterThan(0)
   })
+
+  // ── T71: panel KPI ve grafik verisi ────────────────────────────────
+
+  it('çalışana stoktaki DEĞER alanı HİÇ konulmuyor', async () => {
+    // Alış fiyatı ticari bilgi (roles.ts: price:read çalışanda false).
+    // Toplamı vermek, tek tek fiyatları gizleyip toplamı açıkta bırakmak
+    // olurdu — çalışan stok adedini zaten görüyor, ikisinden birim fiyatı
+    // geri hesaplayabilirdi.
+    const staffView = await dashboardSummary(staff, new Date(0), opts)
+    expect('stockValue' in staffView).toBe(false)
+
+    const bossView = await dashboardSummary(boss, new Date(0), opts)
+    expect('stockValue' in bossView).toBe(true)
+    expect(bossView.stockValue).toBeGreaterThanOrEqual(0)
+  })
+
+  it('ürün sayacı arşivliyi saymıyor', async () => {
+    // Fixture beş ürün kuruyor, biri arşivli. Arşivli ürün panelde
+    // sayılırsa "1.248 ürün" rakamı her arşivlemede yalan söylemeye başlar.
+    const summary = await dashboardSummary(boss, new Date(0), opts)
+    expect(summary.productCount).toBe(4)
+    expect(summary.inStockCount).toBeLessThanOrEqual(summary.productCount)
+  })
+
+  it('kategori dağılımı en fazla altı dilim döndürüyor', async () => {
+    // Beş kategori + "Diğer". Halkada altıdan fazla dilim okunmuyor.
+    const summary = await dashboardSummary(boss, new Date(0), opts)
+    expect(summary.categories.length).toBeLessThanOrEqual(6)
+    const toplam = summary.categories.reduce((n, c) => n + c.count, 0)
+    // Dilimlerin toplamı ürün sayısına EŞİT olmalı: "Diğer" kalanı
+    // topluyor, LIMIT ile kesilseydi yüzdeler %100'e tamamlanmazdı.
+    expect(toplam).toBe(summary.productCount)
+  })
+
+  it('hareket hacmi hareketsiz günleri de döndürüyor', async () => {
+    // 14 gün, boşluksuz. Hareketsiz günü atlamak grafikte iki gün arasını
+    // düz çizgiyle birleştirir ve "o gün de iş vardı" yalanını söyler.
+    const summary = await dashboardSummary(boss, new Date(0), opts)
+    expect(summary.activity).toHaveLength(14)
+
+    const gunler = summary.activity.map((a) => a.day)
+    expect([...gunler].sort()).toEqual(gunler) // artan sırada
+    expect(new Set(gunler).size).toBe(14) // tekrar yok
+
+    for (const gun of summary.activity) {
+      expect(gun.inQty).toBeGreaterThanOrEqual(0)
+      // Çıkış POZİTİF sayı olarak dönüyor: grafik yönü renkten değil
+      // alandan alıyor, eksi işaretiyle uğraşmak zorunda değil.
+      expect(gun.outQty).toBeGreaterThanOrEqual(0)
+    }
+  })
+
+  it('hareket hacmi çalışan için KENDİ hareketleriyle sınırlı', async () => {
+    const t = await seedTestTenant(admin.db, 'stock-activity', [
+      { sku: 'A-1', name: 'Hacim Ürünü' },
+    ])
+    const bigBoss: Actor = { tenantId: t.tenantId, userId: t.adminUserId, role: 'ADMIN' }
+    const worker: Actor = { tenantId: t.tenantId, userId: t.staffUserId, role: 'STAFF' }
+    const barcode = t.products['A-1']!.barcode
+
+    const push = (who: Actor, qty: number) =>
+      createMovement(
+        who,
+        {
+          idempotencyKey: randomUUID(),
+          barcode,
+          qty,
+          reason: 'PURCHASE',
+          clientCreatedAt: new Date().toISOString(),
+        },
+        opts,
+      )
+
+    await push(bigBoss, 40)
+    await push(worker, 6)
+
+    const bugun = (list: { day: string; inQty: number }[]) => list.at(-1)!
+
+    const bossView = await dashboardSummary(bigBoss, new Date(0), opts)
+    const workerView = await dashboardSummary(worker, new Date(0), opts)
+
+    expect(bugun(bossView.activity).inQty).toBe(46)
+    expect(bugun(workerView.activity).inQty).toBe(6)
+  })
 })
 
 describe('getProduct', () => {
@@ -383,5 +475,173 @@ describe('getProduct', () => {
       (e: unknown) => e as AppError,
     )
     expect(err?.code).toBe('NOT_FOUND')
+  })
+})
+
+/**
+ * ============================================================================
+ * T73 — KATEGORİ ÖZETİ
+ *
+ * Kategori ayrı bir tablo değil, `products.category` serbest metin. Bu
+ * testler o kararın sonuçlarını kilitliyor: kategorisiz ürünler kaybolmuyor,
+ * arşivli ürünler sayılmıyor, ve fiyat yetkisi olmayan toplam değeri
+ * göremiyor.
+ * ============================================================================
+ */
+describe('T73 - kategori özeti', () => {
+  it('kategorisiz ürünler kaybolmuyor', async () => {
+    const t = await seedTestTenant(admin.db, 'kategori-bos', [
+      { sku: 'K-1', name: 'Kategorili', category: 'Kırtasiye' },
+      { sku: 'K-2', name: 'Kategorisiz' },
+    ])
+    const who: Actor = { tenantId: t.tenantId, userId: t.adminUserId, role: 'ADMIN' }
+
+    const rows = await categorySummary(who, opts)
+    const toplam = rows.reduce((n, r) => n + r.productCount, 0)
+    // İki ürün de sayılmalı: `GROUP BY` kategorisiz satırı düşürseydi
+    // ekrandaki toplam, stok tablosundaki ürün sayısını tutmazdı.
+    expect(toplam).toBe(2)
+
+    const bos = rows.find((r) => r.value === null)
+    expect(bos).toMatchObject({ name: 'Kategorisiz', productCount: 1 })
+  })
+
+  it('arşivli ürün sayılmıyor', async () => {
+    const t = await seedTestTenant(admin.db, 'kategori-arsiv', [
+      { sku: 'A-1', name: 'Aktif', category: 'Ofis' },
+      { sku: 'A-2', name: 'Arşivli', category: 'Ofis', archived: true },
+    ])
+    const who: Actor = { tenantId: t.tenantId, userId: t.adminUserId, role: 'ADMIN' }
+
+    const rows = await categorySummary(who, opts)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ name: 'Ofis', productCount: 1 })
+  })
+
+  it('çalışan toplam DEĞERİ göremiyor', async () => {
+    // Alış fiyatı ticari bilgi. Kategori toplamını vermek, tek tek fiyatları
+    // gizleyip toplamı açıkta bırakmak olurdu.
+    const staffRows = await categorySummary(staff, opts)
+    for (const row of staffRows) expect('stockValue' in row).toBe(false)
+
+    const bossRows = await categorySummary(boss, opts)
+    for (const row of bossRows) expect('stockValue' in row).toBe(true)
+  })
+
+  it('kritik sayımı stok tablosuyla AYNI eşiği kullanıyor', async () => {
+    // İki yerde ayrı karşılaştırma yazılsaydı (`<` ve `<=`) tam eşikteki
+    // ürün bir ekranda kritik, diğerinde normal görünürdü.
+    const rows = await categorySummary(boss, opts)
+    const kategoriToplami = rows.reduce((n, r) => n + r.criticalCount, 0)
+
+    const summary = await dashboardSummary(boss, new Date(0), opts)
+    expect(kategoriToplami).toBe(summary.criticalCount)
+  })
+
+  it('başka tenantın kategorileri görünmüyor (RLS)', async () => {
+    const yabanci = await seedTestTenant(admin.db, 'kategori-yabanci', [
+      { sku: 'Y-1', name: 'Yabancı Ürün', category: 'GizliKategori' },
+    ])
+    const rows = await categorySummary(boss, opts)
+    expect(rows.map((r) => r.name)).not.toContain('GizliKategori')
+    expect(yabanci.tenantId).not.toBe(tenant.tenantId)
+  })
+})
+
+/**
+ * T80 — bildirim zili sayısı.
+ *
+ * Zil her sayfada görünüyor; sayısı stok tablosuyla AYNI eşiği kullanmazsa
+ * kullanıcı "3" yazan bir zile tıklayıp iki satır görür ve hangisine
+ * güveneceğini bilemez.
+ */
+describe('T80 - uyarı özeti', () => {
+  it('kritik sayımı dashboard ve stok tablosuyla aynı', async () => {
+    const bell = await alertSummary(boss, opts)
+    const dash = await dashboardSummary(boss, new Date(0), opts)
+    const table = await listStock(boss, { onlyCritical: true, limit: 200 }, opts)
+
+    expect(bell.criticalCount).toBe(dash.criticalCount)
+    expect(bell.criticalCount).toBe(table.rows.length)
+  })
+
+  it('çalışana başarısız iş sayısı alanı HİÇ konulmuyor', async () => {
+    // Kuyruk yönetim işi. `0` döndürmek "hata yok" demek olurdu; doğrusu
+    // "bu kullanıcı bilmiyor" (dashboardSummary ile aynı kalıp).
+    const staffBell = await alertSummary(staff, opts)
+    expect('failedJobCount' in staffBell).toBe(false)
+
+    const bossBell = await alertSummary(boss, opts)
+    expect('failedJobCount' in bossBell).toBe(true)
+  })
+
+  it('kritik uyarısı çalışana da görünüyor', async () => {
+    // Kritik stok herkesin işi: çalışan görmezse depoda eksilen şeyi kimse
+    // fark etmez.
+    const staffBell = await alertSummary(staff, opts)
+    expect(staffBell.criticalCount).toBeGreaterThan(0)
+  })
+})
+
+/**
+ * ============================================================================
+ * T85 — BİRLEŞİK ARAMA
+ *
+ * Komut paletinin (T86) veri kaynağı. En kritik davranış barkodun TAM
+ * eşleşmesi: okuyucu bütün kodu tek seferde yazıyor ve o alan doluysa
+ * kullanıcının gideceği yer bellidir.
+ * ============================================================================
+ */
+describe('T85 - birleşik arama', () => {
+  it('barkod tam eşleşmesi ürünü ve mevcut stoğu döndürüyor', async () => {
+    const barcode = tenant.products['KAL-001']!.barcode
+    const result = await searchAll(boss, barcode, opts)
+
+    expect(result.barcode).toMatchObject({
+      barcode,
+      sku: 'KAL-001',
+      name: 'Kırmızı Tükenmez Kalem',
+    })
+    // Aynı ürün listede TEKRAR ETMEMELİ; palet iki satır göstermemeli.
+    expect(result.products.every((p) => p.productId !== result.barcode?.productId)).toBe(
+      true,
+    )
+  })
+
+  it('kısmi barkod eşleşmiyor', async () => {
+    // Okuyucu ya hepsini yazar ya hiç. Kısmi eşleşme kabul etmek, yanlış
+    // ürüne hareket yazma yolunu açardı.
+    const barcode = tenant.products['KAL-001']!.barcode
+    const result = await searchAll(boss, barcode.slice(0, -2), opts)
+    expect(result.barcode).toBeNull()
+  })
+
+  it('ürün araması Türkçe normalizasyondan geçiyor', async () => {
+    // "ısıtıcı" yazan "Isıtıcı Şerit"i bulmalı (D-4.1). Bulamasaydı
+    // kullanıcı ürünün sistemde olmadığını sanıp kopyasını eklerdi.
+    const kucuk = await searchAll(boss, 'ısıtıcı', opts)
+    const buyuk = await searchAll(boss, 'ISITICI', opts)
+
+    expect(kucuk.products.map((p) => p.sku)).toContain('ISI-001')
+    expect(buyuk.products.map((p) => p.sku)).toContain('ISI-001')
+  })
+
+  it('stok koduyla da bulunuyor', async () => {
+    const result = await searchAll(boss, 'KAL-001', opts)
+    expect(result.products.map((p) => p.sku)).toContain('KAL-001')
+  })
+
+  it('boş sorgu sorgu AÇMIYOR', async () => {
+    const result = await searchAll(boss, '   ', opts)
+    expect(result).toEqual({ barcode: null, products: [] })
+  })
+
+  it('başka tenantın barkodu eşleşmiyor (RLS)', async () => {
+    const yabanci = await seedTestTenant(admin.db, 'arama-yabanci', [
+      { sku: 'Y-9', name: 'Yabancı Kalem' },
+    ])
+    const result = await searchAll(boss, yabanci.products['Y-9']!.barcode, opts)
+    expect(result.barcode).toBeNull()
+    expect(result.products.map((p) => p.sku)).not.toContain('Y-9')
   })
 })

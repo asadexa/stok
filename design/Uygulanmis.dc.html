@@ -1,0 +1,98 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<style>*,*::before,*::after{box-sizing:border-box}
+body{margin:0}
+.rt{
+  font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  background:#f6f7fb;color:#171827;-webkit-font-smoothing:antialiased;overflow:hidden;
+}
+.tab{font-variant-numeric:tabular-nums}
+.mono{font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace}
+.band{background:#171827;color:#fff;padding:26px 40px 28px}
+.band h1{margin:0;font-size:30px;line-height:36px;font-weight:600;letter-spacing:-.01em}
+.band p{margin:8px 0 0;font-size:16px;line-height:24px;color:#c9cbdb;max-width:860px}
+.band .src{margin-top:14px;font-size:12px;line-height:16px;color:#8b90ad}
+.body{padding:28px 40px 36px}
+h2{margin:0 0 4px;font-size:20px;line-height:28px;font-weight:600}
+h2 .n{display:inline-block;min-width:26px;color:#6e7391;font-weight:500}
+.lede{margin:0 0 14px;font-size:14px;line-height:20px;color:#565a73;max-width:900px}
+.card{background:#fff;border:1px solid #e4e7f0;border-radius:14px;box-shadow:0 1px 2px rgba(23,24,39,.06)}
+.rules{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:14px}
+.rule{background:#fff;border:1px solid #e4e7f0;border-radius:14px;padding:16px 16px 14px;display:flex;flex-direction:column;box-shadow:0 1px 2px rgba(23,24,39,.06)}
+.rule .num{font-size:12px;line-height:16px;font-weight:600;color:#6e7391;letter-spacing:.06em}
+.rule.chg{border-color:#5b5bd6}
+.rule.chg .num{color:#5b5bd6}
+.rule h3{margin:4px 0 0;font-size:16px;line-height:22px;font-weight:600}
+.rule .val{margin-top:10px;background:#f1f3f9;border-radius:10px;padding:8px 10px;font-size:12px;line-height:18px}
+.rule .why{margin:10px 0 0;font-size:13px;line-height:19px;color:#565a73}
+.tag{display:inline-block;font-size:10px;letter-spacing:.06em;text-transform:uppercase;border-radius:4px;padding:2px 6px;margin-left:7px;vertical-align:2px;font-weight:600}
+.tag.new{background:#5b5bd6;color:#fff}
+.tag.keep{background:#e4f4eb;color:#0c6742}
+table.d{width:100%;border-collapse:collapse;background:#fff;border:1px solid #e4e7f0;border-radius:14px;overflow:hidden;margin-top:14px}
+table.d th{text-align:left;font-size:11px;line-height:16px;font-weight:600;color:#6e7391;padding:10px 16px;background:#f1f3f9;border-bottom:1px solid #e4e7f0;text-transform:uppercase;letter-spacing:.05em}
+table.d td{padding:10px 16px;font-size:13px;line-height:19px;border-top:1px solid #eef0f6;vertical-align:top}
+table.d tr:first-child td{border-top:0}
+.sw{display:inline-block;width:15px;height:15px;border-radius:4px;border:1px solid rgba(128,128,150,.45);vertical-align:-2px;margin-right:8px}
+.ok{color:#0f7b4f;font-weight:600}
+.no{color:#c2261f;font-weight:600}
+.na{color:#6e7391}
+.note{border-left:3px solid #5b5bd6;background:#ededfb;padding:14px 18px;margin:18px 0;border-radius:0 10px 10px 0}
+.note p{margin:0;font-size:13.5px;line-height:20px;max-width:900px}
+.note p+p{margin-top:8px}
+.note .lbl{display:block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#4646c0;font-weight:600;margin-bottom:6px}
+.foot{margin-top:22px;font-size:12px;line-height:18px;color:#6e7391}
+.split{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:14px}
+.split ul{margin:0;padding:6px 0;list-style:none}
+.split li{padding:9px 16px;font-size:13.5px;line-height:20px;display:flex;gap:10px;border-top:1px solid #eef0f6}
+.split li:first-child{border-top:0}
+.split .hd{padding:12px 16px;border-bottom:1px solid #e4e7f0;font-size:14px;font-weight:600}
+.split .m{flex:none;width:16px;text-align:center}
+.split .in .m,.split .in .hd{color:#0f7b4f}
+.split .out .m,.split .out .hd{color:#c2261f}
+.split b{font-weight:600}
+.split i{font-style:normal;color:#565a73}</style>
+<div class="rt">
+  <div class="band">
+    <h1>Uygulanmış — canlı uygulama</h1>
+    <p>Bu tuval ekran çizmiyor, ekranı GÖSTERİYOR. Önceki sürümde Panel, Stok ve Giriş/Çıkış ekranlarının statik kopyaları vardı; artık çalışan bir uygulama var ve statik kopya senkronda tutulması gereken üçüncü bir şey demek.</p>
+    <div class="src">Kaynak: çalışan uygulama · pnpm demo</div>
+  </div>
+  <div class="body">
+    <div class="note">
+      <span class="lbl">Neden çizim değil işaretçi</span>
+      <p>Statik bir ekran kopyası üç şeyi birden bozuyor: kodla ayrışıyor (kimse güncellemeyi hatırlamıyor), ölçülemiyor (kontrast ve dokunma hedefi gerçek DOM&#39;da ölçülür), ve etkileşimi gösteremiyor (odak halkası, açılır liste, iskelet ekran).</p>
+      <p>Kurallar ve belirteçler bu depoda; uygulanmış hâli çalışan uygulamada. İkisi arasında üçüncü bir kopya YOK.</p>
+    </div>
+
+    <h2>Hangi ekran neyi gösteriyor</h2>
+    <table class="d"><thead><tr><th>Adres</th><th>Ne gösteriyor</th><th>Bakılacak kural</th></tr></thead><tbody>
+      <tr><td><span class="mono">/panel</span></td><td>KPI satırı, hareket hacmi grafiği, kritik stok rayı, kategori halkası</td><td>01 büyük sayı VE grafik · 09 boş durum</td></tr>
+      <tr><td><span class="mono">/stok</span></td><td>Yoğun tablo, ürün jetonu, stok kodu, durum rozeti</td><td>03 renk tek başına değil · 04 tablo yoğunluğu</td></tr>
+      <tr><td><span class="mono">/hareket</span></td><td>Barkod 64 px, üç adım, kayıt onayı + bip</td><td>02 dokunma hedefi · 05 arama/odak</td></tr>
+      <tr><td><span class="mono">/kategoriler</span></td><td>Kategori kırılımı, kritik sayısı, stok değeri</td><td>04 tablo yoğunluğu</td></tr>
+      <tr><td><span class="mono">/raporlar</span></td><td>Satır sayısı düğmeden önce yazan export kartları</td><td>—</td></tr>
+      <tr><td><span class="mono">/ayarlar</span></td><td>Tema seçimi (üç durum), ses tercihi, parola</td><td>06 vurgu rengi · 08 odak halkası</td></tr>
+      <tr><td><span class="mono">Ctrl + K</span></td><td>Komut paleti: barkod → Giriş/Çıkış, ad → ürün</td><td>05 arama hep görünür</td></tr>
+      <tr><td><span class="mono">1024 px altı</span></td><td>Kenar çubuğu gizleniyor, alt gezinme çubuğu çıkıyor</td><td>02 dokunma hedefi</td></tr>
+    </tbody></table>
+
+    <h2 style="margin-top:30px">Nasıl açılır</h2>
+    <table class="d"><thead><tr><th>Adım</th><th>Komut</th></tr></thead><tbody>
+      <tr><td>Tek komutla ayağa kaldır</td><td><span class="mono">pnpm demo</span></td></tr>
+      <tr><td>Yönetici olarak gir</td><td><span class="mono">admin@yilmaz.example / admin123</span></td></tr>
+      <tr><td>Çalışan farkını gör (fiyatlar kaybolur)</td><td><span class="mono">ahmet@yilmazkirtasiye.example / calisan123</span></td></tr>
+      <tr><td>Koyu temayı dene</td><td>Üst şeritteki tema düğmesi veya <span class="mono">/ayarlar</span></td></tr>
+    </tbody></table>
+
+    <p class="foot">Tasarım incelemesinin mockup&#39;ları ve ölçülen 32 renk çifti ayrı bir belgede: claude.ai/code/artifact/5579f41a-2794-4146-862b-114c9469c7a8</p>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

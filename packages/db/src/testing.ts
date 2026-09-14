@@ -1,11 +1,12 @@
 import { readFile } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
+import { fileURLToPath } from 'node:url'
 import { sql } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/postgres-js'
 import { migrate } from 'drizzle-orm/postgres-js/migrator'
 import postgres from 'postgres'
-import type { Db } from './client.js'
-import { hashSecret } from './password.js'
+import type { Db } from './client'
+import { hashSecret } from './password'
 import {
   locations,
   productBarcodes,
@@ -13,7 +14,7 @@ import {
   schema,
   tenants,
   users,
-} from './schema.js'
+} from './schema'
 
 /**
  * ============================================================================
@@ -58,7 +59,7 @@ function required(name: 'DATABASE_URL' | 'MIGRATION_DATABASE_URL'): string {
   if (!value) {
     throw new Error(
       `${name} tanımlı değil. Testler kök dizindeki .env dosyasını okur; ` +
-        'komutu paket dizininden çalıştır (pnpm --filter @stok/db test).',
+        'komutu paket dizininden çalıştır (pnpm --filter @stok/db run test).',
     )
   }
   return value
@@ -129,7 +130,17 @@ export async function resetTestDatabase(name: string): Promise<void> {
 
   const { client, db } = connect(migrationUrl, 1)
   try {
-    await migrate(db, { migrationsFolder: new URL('../migrations', import.meta.url).pathname })
+    // `fileURLToPath`, `.pathname` DEĞİL.
+    //
+    // Windows'ta `import.meta.url` = `file:///C:/stok/packages/db/src/testing.ts`
+    // ve `.pathname` bunun `/C:/stok/packages/db/migrations` halini veriyor:
+    // sürücü harfinin ÖNÜNDE bir eğik çizgi var. O yol Windows'ta açılmıyor,
+    // drizzle `meta/_journal.json` dosyasını bulamıyor ve bütün db/core test
+    // paketi daha ilk kurulumda düşüyor. `fileURLToPath` her platformda
+    // doğru yerel yolu üretiyor (POSIX'te davranış değişmiyor).
+    await migrate(db, {
+      migrationsFolder: fileURLToPath(new URL('../migrations', import.meta.url)),
+    })
   } finally {
     await client.end()
   }
@@ -164,6 +175,12 @@ export interface TestProductSpec {
   archived?: boolean
   /** Koli barkodu çarpanı. Verilmezse koli barkodu oluşturulmaz. */
   caseMultiplier?: string
+  /** Kategori. Verilmezse NULL kalır — "kategorisiz" davranışını sınamak için. */
+  category?: string
+  /** Alış fiyatı. Stok değeri toplamlarını sınamak için. */
+  purchasePrice?: string
+  /** Liste satış fiyatı. Kasa açığı kontrolünü (T88) sınamak için. */
+  salePrice?: string
 }
 
 export interface TestProduct {
@@ -258,6 +275,11 @@ export async function seedTestTenant(
       unit: spec.unit ?? 'ADET',
       minStock: spec.minStock ?? '0',
       locationId,
+      // `?? null`: verilmezse NULL kalıyor, boş string DEĞİL. Kategori
+      // özeti ikisini farklı sayıyor ve fixture o ayrımı korumalı.
+      category: spec.category ?? null,
+      purchasePrice: spec.purchasePrice ?? null,
+      salePrice: spec.salePrice ?? null,
       archivedAt: spec.archived ? new Date() : null,
     })
 

@@ -2,7 +2,7 @@ import { sql } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/postgres-js'
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
-import { schema } from './schema.js'
+import { schema } from './schema'
 
 /**
  * ============================================================================
@@ -26,11 +26,64 @@ export type Tx = Parameters<Parameters<Db['transaction']>[0]>[0]
 interface ClientOptions {
   url: string
   max?: number
+  idleTimeout?: number
 }
 
-function createClient({ url, max = 10 }: ClientOptions) {
+/**
+ * Sayı okuyan ortam değişkeni yardımcısı.
+ *
+ * GEÇERSİZ DEĞER SESSİZCE YOK SAYILMIYOR. `DB_POOL_MAX=bir` yazılıp
+ * varsayılana düşülseydi üretim on bağlantıyla koşar, operatör ayarı
+ * yaptığını sanır ve "neden hâlâ too many connections alıyorum" sorusunun
+ * cevabı hiçbir yerde olmazdı. Yapılandırma hatası kurulumda söylenmeli.
+ */
+function envInt(name: string, fallback: number): number {
+  const raw = process.env[name]
+  if (raw === undefined || raw === '') return fallback
+
+  const n = Number(raw)
+  if (!Number.isInteger(n) || n < 0) {
+    throw new Error(`${name} negatif olmayan bir tam sayı olmalı, "${raw}" verildi.`)
+  }
+  return n
+}
+
+/**
+ * ============================================================================
+ * T117 — HAVUZ AYARLARI ORTAMDAN OKUNUYOR
+ *
+ * Bugünkü değerler TEK UZUN ÖMÜRLÜ SUNUCU varsayıyor ve orada doğrular.
+ * Vercel'de uygulama N tane eşzamanlı fonksiyon örneğine dağılıyor, her
+ * biri KENDİ havuzunu açıyor: 20 örnek × 10 = 200 bağlantı. Supabase
+ * pooler'ın istemci sınırı bu civarda ve aşıldığında hata "too many
+ * connections" olarak KULLANICIYA düşüyor.
+ *
+ * `idle_timeout` yokluğu ayrı bir sorun: fonksiyon örneği donduruluyor ama
+ * bağlantı sunucu tarafında açık kalıyor ve kimse kapatmıyor.
+ *
+ * VARSAYILANLAR BUGÜNKÜYLE AYNI BIRAKILDI (max 10, idle_timeout 0 = hiç
+ * kapatma). Sabit küçük bir `max` yazmak yerelde tek süreçli demo yolunu
+ * yavaşlatırdı; üretim değerleri `docs/uretim-runbook.md` içinde.
+ *
+ * SADECE UYGULAMA HAVUZUNA uygulanıyor. Migration bağlantısı (`max: 2`)
+ * kısa ömürlü ve elle kapatılıyor; onu ortamdan ayarlanabilir yapmak,
+ * yanlışlıkla büyütülebilen bir sahip-rolü havuzu demek olurdu.
+ * ============================================================================
+ */
+export function appPoolOptions(): { max: number; idleTimeout: number } {
+  return {
+    max: envInt('DB_POOL_MAX', 10),
+    idleTimeout: envInt('DB_IDLE_TIMEOUT', 0),
+  }
+}
+
+function createClient({ url, max = 10, idleTimeout = 0 }: ClientOptions) {
   const client = postgres(url, {
     max,
+    // 0 = bağlantıyı hiç kapatma (postgres.js varsayılanı). Serverless'ta
+    // sıfırdan büyük bir değer gerekiyor: donan fonksiyon örneğinin
+    // bağlantısı aksi halde sunucu tarafında sonsuza kadar açık kalıyor.
+    idle_timeout: idleTimeout,
     // pgbouncer transaction modunda (Supabase pooler, port 6543) prepared
     // statement desteklenmiyor ve açık bırakılırsa çalışma zamanında
     // "prepared statement already exists" hatası veriyor (PLAN.md D-1.4).
@@ -57,7 +110,7 @@ export function appDb(): Db {
   if (!appSingleton) {
     const url = process.env.DATABASE_URL
     if (!url) throw new Error('DATABASE_URL tanımlı değil')
-    appSingleton = createClient({ url })
+    appSingleton = createClient({ url, ...appPoolOptions() })
   }
   return appSingleton.db
 }
@@ -104,6 +157,25 @@ export async function withTenant<T>(
     await tx.execute(sql`SELECT set_config('app.tenant_id', ${tenantId}, true)`)
     return fn(tx)
   })
+}
+
+/**
+ * Bağlantının GERÇEKTEN ayakta olup olmadığını sorar. T114 sağlık ucu bunu
+ * kullanıyor.
+ *
+ * NEDEN BURADA, ROTADA DEĞİL. `apps/web` drizzle-orm'a bağımlı değil ve
+ * `sql` şablonu oradan geliyor. Sırf tek bir `SELECT 1` için web paketine
+ * drizzle eklemek, onu veritabanı katmanına doğrudan bağlardı; bugün
+ * `@stok/db` arkasında duran bağlantı ayrıntısı arayüz koduna sızardı.
+ *
+ * `SELECT 1` BİLEREK EN UCUZ SORGU: sağlık ucu dakikada bir vurulabilir ve
+ * bir tabloya bakan kontrol, izleme trafiğini gerçek yükün üstüne eklerdi.
+ * Sorulan soru "şema doğru mu" değil, "bu sürüm veritabanına ulaşabiliyor
+ * mu" — üretimde en sık görülen arıza tam olarak bu: uygulama ayakta,
+ * veritabanı erişilemez.
+ */
+export async function pingDb(db: Db = appDb()): Promise<void> {
+  await db.execute(sql`SELECT 1`)
 }
 
 export async function closeAppDb(): Promise<void> {

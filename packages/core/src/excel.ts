@@ -1,5 +1,12 @@
-import { type Unit, formatQty, reasonLabel, roleLabel } from '@stok/shared'
-import type { MovementReason, Role } from '@stok/shared'
+import {
+  type Unit,
+  formatQty,
+  priceOverrideReasonLabel,
+  priceSourceLabel,
+  reasonLabel,
+  roleLabel,
+} from '@stok/shared'
+import type { MovementReason, PriceOverrideReason, PriceSource, Role } from '@stok/shared'
 import ExcelJS from 'exceljs'
 
 /**
@@ -69,7 +76,11 @@ export interface MovementExportRow {
   delta: number
   unit: Unit
   note: string | null
-  unitCost?: number | null
+  unitPrice?: number | null
+  listPrice?: number | null
+  priceOverrideReason?: PriceOverrideReason | null
+  priceDate?: string | null
+  priceSource?: PriceSource | null
 }
 
 /**
@@ -117,10 +128,47 @@ export function movementColumns(includePrices: boolean): SheetColumn<MovementExp
     { header: 'Not', width: 30, value: (r) => r.note },
   ]
   if (!includePrices) return base
+  /**
+   * KASA AÇIĞI ÜÇ SÜTUNLA RAPORLANIYOR (T88): liste, gerçekleşen, sebep.
+   * Yalnızca "Birim Fiyat" konsaydı 100 ₺'lik bir satır masum görünürdü —
+   * açık ancak iki sayı YAN YANA durduğunda okunur, ve sebep olmadan
+   * "bu ay tanıdık indirimine kaç lira gitti" sorusu cevapsız kalırdı.
+   *
+   * EXCEL'DE KURAL SATIR BAZINA İNMİYOR, ekrandakinin aksine (D7). Çalışan
+   * hiç fiyat sütunu almıyor: karışık bir dökümde SATIN ALMA satırındaki
+   * boş "Birim Fiyat" hücresi "bu bilgi var ama sana gösterilmiyor" demek
+   * olurdu. Ekranda sütun başlığı satır türüne göre okunuyor, Excel'de
+   * öyle bir bağlam yok.
+   */
   return [
     ...base,
-    { header: 'Birim Maliyet', width: 14, value: (r) => r.unitCost ?? null, format: MONEY_FORMAT },
+    { header: 'Liste Fiyatı', width: 14, value: (r) => r.listPrice ?? null, format: MONEY_FORMAT },
+    { header: 'Birim Fiyat', width: 14, value: (r) => r.unitPrice ?? null, format: MONEY_FORMAT },
+    {
+      header: 'Sapma Sebebi',
+      width: 22,
+      value: (r) => (r.priceOverrideReason ? priceOverrideReasonLabel(r.priceOverrideReason) : null),
+    },
+    // Fiyatın EKONOMİK tarihi (T89) — hareketin tarihi değil. Metin olarak
+    // yazılıyor, tarih hücresi olarak değil: `price_date` bir takvim günü ve
+    // Excel tarih hücresi onu yerel saate göre kaydırabilir.
+    {
+      header: 'Fiyat Tarihi',
+      width: 14,
+      value: (r) => (r.priceDate ? isoToTr(r.priceDate) : null),
+    },
+    {
+      header: 'Fiyat Kaynağı',
+      width: 16,
+      value: (r) => (r.priceSource ? priceSourceLabel(r.priceSource) : null),
+    },
   ]
+}
+
+/** `YYYY-MM-DD` → "12.06.2021". Takvim günü; saat dilimine sokulmuyor. */
+function isoToTr(value: string): string {
+  const [y, m, d] = value.split('-')
+  return y && m && d ? `${d}.${m}.${y}` : value
 }
 
 export interface SheetSpec<T> {

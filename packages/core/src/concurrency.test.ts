@@ -8,9 +8,9 @@ import {
   testAppDb,
 } from '@stok/db/testing'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { checkStockInvariant, createMovement, getStockQty } from './movements.js'
-import type { Actor } from './authz.js'
-import { TEST_DB_NAME } from './test/db-name.js'
+import { checkStockInvariant, createMovement, getStockQty } from './movements'
+import type { Actor } from './authz'
+import { TEST_DB_NAME } from './test/db-name'
 
 /**
  * ============================================================================

@@ -6,280 +6,94 @@
 </head>
 <body>
 <x-dc>
-<helmet>
-  <style>
-*,*::before,*::after{box-sizing:border-box}
+<style>*,*::before,*::after{box-sizing:border-box}
 body{margin:0}
 .rt{
   font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
-  background:oklch(0.984 0.003 247.858);color:oklch(0.208 0.042 265.755);
-  -webkit-font-smoothing:antialiased;overflow:hidden;padding:32px 40px 40px;
+  background:#f6f7fb;color:#171827;-webkit-font-smoothing:antialiased;overflow:hidden;
 }
 .tab{font-variant-numeric:tabular-nums}
-.mono{font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;font-size:0.92em}
-h1{margin:0;font-size:24px;line-height:32px;font-weight:600;letter-spacing:-0.01em}
-.sub{margin:6px 0 24px;font-size:14px;line-height:20px;color:oklch(0.446 0.03 256.802);max-width:940px}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
-.panel{background:#fff;border:1px solid oklch(0.929 0.013 255.508);border-radius:6px;padding:18px 18px 20px}
-.panel.full{grid-column:1 / -1}
-.cap{font-size:12px;line-height:16px;font-weight:600;letter-spacing:0.05em;color:oklch(0.446 0.03 256.802);margin:0 0 14px}
-.spec{font-size:12px;line-height:18px;color:oklch(0.446 0.03 256.802);margin-top:12px}
-.spec b{color:oklch(0.208 0.042 265.755)}
+.mono{font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace}
+.band{background:#171827;color:#fff;padding:26px 40px 28px}
+.band h1{margin:0;font-size:30px;line-height:36px;font-weight:600;letter-spacing:-.01em}
+.band p{margin:8px 0 0;font-size:16px;line-height:24px;color:#c9cbdb;max-width:860px}
+.band .src{margin-top:14px;font-size:12px;line-height:16px;color:#8b90ad}
+.body{padding:28px 40px 36px}
+h2{margin:0 0 4px;font-size:20px;line-height:28px;font-weight:600}
+h2 .n{display:inline-block;min-width:26px;color:#6e7391;font-weight:500}
+.lede{margin:0 0 14px;font-size:14px;line-height:20px;color:#565a73;max-width:900px}
+.card{background:#fff;border:1px solid #e4e7f0;border-radius:14px;box-shadow:0 1px 2px rgba(23,24,39,.06)}
+.rules{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:14px}
+.rule{background:#fff;border:1px solid #e4e7f0;border-radius:14px;padding:16px 16px 14px;display:flex;flex-direction:column;box-shadow:0 1px 2px rgba(23,24,39,.06)}
+.rule .num{font-size:12px;line-height:16px;font-weight:600;color:#6e7391;letter-spacing:.06em}
+.rule.chg{border-color:#5b5bd6}
+.rule.chg .num{color:#5b5bd6}
+.rule h3{margin:4px 0 0;font-size:16px;line-height:22px;font-weight:600}
+.rule .val{margin-top:10px;background:#f1f3f9;border-radius:10px;padding:8px 10px;font-size:12px;line-height:18px}
+.rule .why{margin:10px 0 0;font-size:13px;line-height:19px;color:#565a73}
+.tag{display:inline-block;font-size:10px;letter-spacing:.06em;text-transform:uppercase;border-radius:4px;padding:2px 6px;margin-left:7px;vertical-align:2px;font-weight:600}
+.tag.new{background:#5b5bd6;color:#fff}
+.tag.keep{background:#e4f4eb;color:#0c6742}
+table.d{width:100%;border-collapse:collapse;background:#fff;border:1px solid #e4e7f0;border-radius:14px;overflow:hidden;margin-top:14px}
+table.d th{text-align:left;font-size:11px;line-height:16px;font-weight:600;color:#6e7391;padding:10px 16px;background:#f1f3f9;border-bottom:1px solid #e4e7f0;text-transform:uppercase;letter-spacing:.05em}
+table.d td{padding:10px 16px;font-size:13px;line-height:19px;border-top:1px solid #eef0f6;vertical-align:top}
+table.d tr:first-child td{border-top:0}
+.sw{display:inline-block;width:15px;height:15px;border-radius:4px;border:1px solid rgba(128,128,150,.45);vertical-align:-2px;margin-right:8px}
+.ok{color:#0f7b4f;font-weight:600}
+.no{color:#c2261f;font-weight:600}
+.na{color:#6e7391}
+.note{border-left:3px solid #5b5bd6;background:#ededfb;padding:14px 18px;margin:18px 0;border-radius:0 10px 10px 0}
+.note p{margin:0;font-size:13.5px;line-height:20px;max-width:900px}
+.note p+p{margin-top:8px}
+.note .lbl{display:block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#4646c0;font-weight:600;margin-bottom:6px}
+.foot{margin-top:22px;font-size:12px;line-height:18px;color:#6e7391}
+.split{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:14px}
+.split ul{margin:0;padding:6px 0;list-style:none}
+.split li{padding:9px 16px;font-size:13.5px;line-height:20px;display:flex;gap:10px;border-top:1px solid #eef0f6}
+.split li:first-child{border-top:0}
+.split .hd{padding:12px 16px;border-bottom:1px solid #e4e7f0;font-size:14px;font-weight:600}
+.split .m{flex:none;width:16px;text-align:center}
+.split .in .m,.split .in .hd{color:#0f7b4f}
+.split .out .m,.split .out .hd{color:#c2261f}
+.split b{font-weight:600}
+.split i{font-style:normal;color:#565a73}</style>
+<div class="rt">
+  <div class="band">
+    <h1>Bileşenler</h1>
+    <p>Referans görselden çıkarılan 13 bileşenin bu ürünün diline çevrilmiş hâli. Her biri gerçek bir dosyaya karşılık geliyor — bu tuval bir katalog değil, koda giden bir dizin.</p>
+    <div class="src">Kaynak: apps/web/src/components/</div>
+  </div>
+  <div class="body">
+    <table class="d"><thead><tr><th>Bileşen</th><th>Dosya</th><th>Ölçü / kural</th></tr></thead><tbody>
+      <tr><td>Durum rozeti</td><td><span class="mono">badge.tsx</span></td><td>26 px · ikon + metin + dolgu · dört ton. Görselde yalnızca renk taşıyordu; renk körlüğü ve parlayan ekran yüzünden ikon eklendi.</td></tr>
+      <tr><td>Stok durumu kararı</td><td><span class="mono">badge.tsx → stockStatus()</span></td><td>Eşik karşılaştırması TEK YERDE. Üç ekranda geçiyor; ayrı yazılsalardı tam eşikteki ürün birinde kritik, diğerinde normal görünürdü.</td></tr>
+      <tr><td>KPI kartı</td><td><span class="mono">kpi-card.tsx</span></td><td>Sayı 31 px Outfit + tabular-nums · ikon karesi 42 px · birim ve kapsam sayının yanında.</td></tr>
+      <tr><td>Ürün hücresi</td><td><span class="mono">product-cell.tsx</span></td><td>Görsel 38 px, YOKSA baş harf karesi. Baş harf <span class="mono">toLocaleUpperCase(&#39;tr&#39;)</span> ile — yoksa "ısıtıcı" → "I" olur, Türkçe&#39;de "İ" olmalı.</td></tr>
+      <tr><td>Boş durum</td><td><span class="mono">empty-state.tsx</span></td><td><span class="mono">action</span> alanı TİP DÜZEYİNDE zorunlu. Kural 09 artık disipline değil derleyiciye bağlı.</td></tr>
+      <tr><td>Olumlu boş durum</td><td><span class="mono">empty-state.tsx → AllClear</span></td><td>"Kritik ürün yok" bir eksiklik değil iyi haber. Eylem çağrısı YOK, çünkü yapılacak bir şey yok.</td></tr>
+      <tr><td>Hareket hacmi grafiği</td><td><span class="mono">activity-chart.tsx</span></td><td>Yön KONUMDAN okunuyor: giriş üstte, çıkış altta. Renk ikinci kanal. Çubuk, çünkü alan grafiği günler arasında olmayan bir süreklilik ima eder.</td></tr>
+      <tr><td>Kategori halkası</td><td><span class="mono">category-donut.tsx</span></td><td>Bilgiyi LEJANT taşıyor. Üç dilim %10 içindeyse açı okunmuyor; her satırda sayı ve yüzde yazılı. Dilim renkleri anlam rengi DEĞİL.</td></tr>
+      <tr><td>İskelet ekran</td><td><span class="mono">skeleton.tsx</span></td><td>İçeriğin ŞEKLİNDE. Nabız <span class="mono">prefers-reduced-motion</span> açıkken duruyor.</td></tr>
+      <tr><td>Bildirim zili</td><td><span class="mono">alert-bell.tsx</span></td><td><span class="mono">&lt;details&gt;</span> ile, JavaScript&#39;siz. Sayı gerçek: kritik ürün + başarısız arka plan işi.</td></tr>
+      <tr><td>Komut paleti</td><td><span class="mono">command-palette.tsx</span></td><td>Ctrl+K. İki harf eşiği, 180 ms bekleme. Barkod tam eşleşmesi her zaman en üstte ve ilk seçili.</td></tr>
+      <tr><td>Tema anahtarı</td><td><span class="mono">theme-toggle.tsx</span></td><td>Üç durum: sistem → açık → koyu. İkon tek başına anlam taşımıyor, <span class="mono">aria-label</span> mevcut durumu ve sonucu söylüyor.</td></tr>
+      <tr><td>Kayıt geri bildirimi</td><td><span class="mono">save-feedback.tsx</span></td><td>Başarı tek 880 Hz, hata iki 440 Hz + titreşim. Ses dosyası yok, Web Audio osilatörü — çevrimdışı çalışıyor.</td></tr>
+    </tbody></table>
 
-/* kontrol merdiveni */
-.ladder{display:flex;align-items:flex-end;gap:16px}
-.step{flex:none;width:186px;border:1px solid oklch(0.554 0.046 257.417);border-radius:6px;background:oklch(0.984 0.003 247.858);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:500}
-.stepnote{font-size:12px;line-height:17px;color:oklch(0.446 0.03 256.802);margin-top:8px;width:186px}
+    <h2 style="margin-top:30px">Kontrol yükseklikleri</h2>
+    <table class="d"><thead><tr><th>Kontrol</th><th>Yükseklik</th><th>Kenarlık</th></tr></thead><tbody>
+      <tr><td>Girdi, seçim, birincil düğme</td><td><span class="mono tab">52 px</span></td><td><span class="mono">--line-control</span> 3,40:1</td></tr>
+      <tr><td>Barkod ve miktar alanı</td><td><span class="mono tab">64 px</span></td><td><span class="mono">border-2</span></td></tr>
+      <tr><td>Satır içi düğme (tablo, filtre)</td><td><span class="mono tab">44 px</span></td><td><span class="mono">--line-control</span></td></tr>
+      <tr><td>İkon düğmesi (zil, tema)</td><td><span class="mono tab">44 × 44 px</span></td><td><span class="mono">--line-control</span></td></tr>
+      <tr><td>Gezinme satırı</td><td><span class="mono tab">48 px</span></td><td>yok — aktifte dolgu</td></tr>
+      <tr><td>Alt gezinme sekmesi</td><td><span class="mono tab">97 × 64 px</span></td><td>yok — üstte 1 px ayırıcı</td></tr>
+    </tbody></table>
 
-/* form */
-label.f{display:block}
-label.f > span.l{font-size:14px;line-height:20px;font-weight:500;display:block}
-.inp{margin-top:4px;height:56px;width:100%;border-radius:6px;border:1px solid oklch(0.554 0.046 257.417);background:#fff;padding:0 12px;font-size:16px;line-height:56px;color:oklch(0.208 0.042 265.755)}
-.inp.ph{color:oklch(0.446 0.03 256.802)}
-.inp.focus{border-color:oklch(0.208 0.042 265.755);box-shadow:0 0 0 2px #fff,0 0 0 4px oklch(0.208 0.042 265.755)}
-.inp.err{border-color:oklch(0.55 0.21 27)}
-.hint{margin-top:4px;font-size:12px;line-height:16px;color:oklch(0.446 0.03 256.802)}
-.req{color:oklch(0.55 0.21 27)}
-.hero{margin-top:4px;height:64px;width:100%;border-radius:6px;border:2px solid oklch(0.554 0.046 257.417);background:#fff;padding:0 16px;font-size:20px;line-height:60px;letter-spacing:0.01em}
-.hero.focus{border-color:oklch(0.208 0.042 265.755);box-shadow:0 0 0 2px #fff,0 0 0 4px oklch(0.208 0.042 265.755)}
-.sel{position:relative}
-.sel::after{content:"▾";position:absolute;right:14px;top:34px;color:oklch(0.446 0.03 256.802);font-size:14px}
-.check{display:flex;align-items:center;gap:10px;height:44px;font-size:14px}
-.box{width:20px;height:20px;border:1px solid oklch(0.554 0.046 257.417);border-radius:4px;background:#fff;flex:none}
-.box.on{background:oklch(0.208 0.042 265.755);border-color:oklch(0.208 0.042 265.755);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px}
-.radio{width:20px;height:20px;border:1px solid oklch(0.554 0.046 257.417);border-radius:999px;background:#fff;flex:none}
-.radio.on{border:6px solid oklch(0.208 0.042 265.755)}
-
-/* düğmeler */
-.btn{height:56px;border-radius:6px;padding:0 24px;font-size:16px;font-weight:500;display:inline-flex;align-items:center;justify-content:center;border:1px solid transparent}
-.btn.p{background:oklch(0.208 0.042 265.755);color:#fff}
-.btn.s{background:#fff;border-color:oklch(0.554 0.046 257.417);color:oklch(0.208 0.042 265.755)}
-.btn.d{background:#fff;border-color:oklch(0.55 0.21 27);color:oklch(0.55 0.21 27)}
-.btn.off{background:oklch(0.968 0.007 247.896);color:oklch(0.704 0.04 256.788);border-color:oklch(0.929 0.013 255.508)}
-.btnrow{display:flex;gap:12px;flex-wrap:wrap}
-
-/* rozet */
-.pill{display:inline-flex;align-items:center;gap:6px;border:1px solid currentColor;border-radius:6px;padding:3px 9px;font-size:12px;line-height:18px;font-weight:600}
-.pillrow{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-
-/* şerit */
-.strip{display:flex;gap:10px;border-radius:6px;padding:12px;font-size:14px;line-height:20px;align-items:flex-start}
-.strip.err{border:1px solid oklch(0.55 0.21 27);background:oklch(0.96 0.03 27);color:oklch(0.55 0.21 27)}
-.strip.ok{border:1px solid oklch(0.52 0.15 155);background:#fff;color:oklch(0.372 0.044 257.287)}
-.strip.info{border:1px solid oklch(0.929 0.013 255.508);background:oklch(0.968 0.007 247.896);color:oklch(0.372 0.044 257.287)}
-.strip .ic{flex:none}
-
-/* tablo */
-table.t{width:100%;border-collapse:collapse}
-table.t th{text-align:left;font-size:12px;line-height:16px;font-weight:600;color:oklch(0.554 0.046 257.417);padding:8px 16px;background:oklch(0.968 0.007 247.896);border-bottom:1px solid oklch(0.929 0.013 255.508);white-space:nowrap}
-table.t td{padding:8px 16px;font-size:14px;line-height:20px;border-top:1px solid oklch(0.968 0.007 247.896);vertical-align:top}
-table.t tr:first-child td{border-top:0}
-.r{text-align:right}
-.muted{color:oklch(0.446 0.03 256.802)}
-.sku{font-size:12px;line-height:16px;color:oklch(0.446 0.03 256.802)}
-.critrow td{background:oklch(0.96 0.03 27)}
-.critqty{color:oklch(0.55 0.21 27);font-weight:600}
-.link{text-decoration:underline;text-underline-offset:2px;text-decoration-color:oklch(0.869 0.022 252.894);font-weight:500}
-
-/* gezinme */
-.navitem{height:56px;display:flex;align-items:center;gap:12px;padding:0 14px;border-radius:6px;font-size:15px;font-weight:500}
-.navitem.on{background:oklch(0.208 0.042 265.755);color:#fff}
-.navitem.off{color:oklch(0.372 0.044 257.287)}
-.navitem .ic{width:20px;text-align:center;font-size:16px}
-.rail{width:72px;height:56px;display:flex;align-items:center;justify-content:center;border-radius:6px;font-size:16px}
-
-.pag{display:flex;align-items:center;justify-content:space-between;border-top:1px solid oklch(0.929 0.013 255.508);padding:12px 16px;font-size:14px;margin-top:6px}
-.pgbtn{height:44px;border:1px solid oklch(0.554 0.046 257.417);border-radius:6px;padding:0 16px;display:inline-flex;align-items:center;font-size:14px;background:#fff}
-.pgbtn.off{border-color:oklch(0.929 0.013 255.508);color:oklch(0.704 0.04 256.788)}
-
-/* boş durum */
-.empty{padding:26px 20px;text-align:left}
-.empty h4{margin:0;font-size:16px;line-height:22px;font-weight:600}
-.empty p{margin:6px 0 14px;font-size:14px;line-height:20px;color:oklch(0.446 0.03 256.802)}
-  </style>
-</helmet>
-<div class="rt" style="width:1280px;height:2300px">
-  <h1>Bileşenler</h1>
-  <p class="sub">Her bileşenin ölçüsü verilidir. “Biraz daha küçük olsun” bir tasarım tercihi değil, kuralın ihlalidir — kontroller <b>eldivenli elle</b> kullanılıyor.</p>
-
-  <div class="grid">
-
-    <div class="panel full">
-      <p class="cap">A · KONTROL YÜKSEKLİKLERİ — dört tane, arası yok</p>
-      <div class="ladder">
-        <div>
-          <div class="step" style="height:64px;border-width:2px">64 px</div>
-          <div class="stepnote"><b>Ana giriş.</b> Yalnız barkod ve miktar. Ekranda en fazla iki tane.</div>
-        </div>
-        <div>
-          <div class="step" style="height:56px">56 px</div>
-          <div class="stepnote"><b>Standart.</b> Girdi, seçim, düğme, menü satırı. Varsayılan bu.</div>
-        </div>
-        <div>
-          <div class="step" style="height:44px">44 px</div>
-          <div class="stepnote"><b>Alt kontrol.</b> Onay kutusu satırı, sayfalama düğmesi. Alt sınır.</div>
-        </div>
-        <div>
-          <div class="step" style="height:36px;border-style:dashed;color:oklch(0.446 0.03 256.802)">36 px</div>
-          <div class="stepnote"><b>Yalnız tablo satırı.</b> Tıklanan hedef değil — ada tıklanıyor, satıra değil.</div>
-        </div>
-      </div>
-      <p class="spec">Neden 56: PLAN.md §11 — “Depoda eldiven var, soğuk var, acele var. Minimum 56 px.” 44 px, dokunma hedefi için mutlak alt sınır ve yalnız ikincil kontrollerde geçerli.</p>
+    <div class="note">
+      <span class="lbl">Rozet dolguları ölçüldü</span>
+      <p>Görselin kendi pastel tonları dolgu/metin arasında 3:1&#39;in ALTINDA kalıyordu. Pastel his korundu, kontrast düzeltildi: <span class="mono">ok 6,08:1</span> · <span class="mono">warn 6,69:1</span> · <span class="mono">crit 6,31:1</span>.</p>
     </div>
-
-    <div class="panel">
-      <p class="cap">B · FORM ALANI (56 px)</p>
-      <label class="f" style="margin-bottom:16px">
-        <span class="l">Ürün adı<span class="req"> *</span></span>
-        <div class="inp">Kırmızı Defter A5</div>
-      </label>
-      <label class="f" style="margin-bottom:16px">
-        <span class="l">Alış fiyatı</span>
-        <div class="inp focus">12,50</div>
-        <div class="hint">Ondalık ayırıcı virgül. Alan <span class="mono">type="text" inputMode="decimal"</span> — <span class="mono">type="number"</span> virgülü reddedip değeri sessizce siliyor.</div>
-      </label>
-      <label class="f">
-        <span class="l">Stok kodu<span class="req"> *</span></span>
-        <div class="inp err ph">boş bırakılamaz</div>
-        <div class="hint" style="color:oklch(0.55 0.21 27)">⚠ Stok kodu zorunlu.</div>
-      </label>
-      <p class="spec"><b>Etiket <span class="mono">&lt;label&gt;</span> içine sarılır</b>, <span class="mono">for</span>/<span class="mono">id</span> ile eşleştirilmez: eşleştirme unutulabilir, sarmalama unutulamaz. Ekran okuyucu desteği ve etiketin tıklanabilirliği bedava gelir.</p>
-    </div>
-
-    <div class="panel">
-      <p class="cap">C · ANA GİRİŞ ALANI (64 px)</p>
-      <label class="f" style="margin-bottom:16px">
-        <span class="l">Barkod</span>
-        <div class="hero focus tab">8690123456789</div>
-        <div class="hint">Sayfa açılınca odaklı. Okuyucu satır sonu gönderince form kendiliğinden gider.</div>
-      </label>
-      <label class="f" style="margin-bottom:16px">
-        <span class="l">Miktar</span>
-        <div class="hero tab">20</div>
-      </label>
-      <div class="check" style="margin-bottom:2px"><span class="radio on"></span><span>Mal kabulü</span></div>
-      <div class="check" style="margin-bottom:2px"><span class="radio"></span><span>İade girişi</span></div>
-      <div class="check"><span class="box on">✓</span><span>Sadece kritik</span></div>
-      <p class="spec">Seçenek satırı <b>44 px</b>; kutunun kendisi 20 px ama <b>tıklanabilir alan bütün satır</b>. 20 px’lik bir kutuya eldivenle nişan alınmaz.</p>
-    </div>
-
-    <div class="panel">
-      <p class="cap">D · DÜĞMELER</p>
-      <div class="btnrow" style="margin-bottom:16px">
-        <span class="btn p">Kaydet</span>
-        <span class="btn s">Vazgeç</span>
-        <span class="btn d">Ürünü arşivle</span>
-      </div>
-      <div class="btnrow">
-        <span class="btn off">Excel indir</span>
-        <span style="font-size:12px;line-height:18px;color:oklch(0.446 0.03 256.802);align-self:center;max-width:300px">Devre dışı düğme <b>gizlenmez</b>: kullanıcı eylemin var olduğunu bilmeli. Yanında neden kapalı olduğu yazar.</span>
-      </div>
-      <p class="spec">Ekranda <b>tek birincil düğme</b> olur. İki siyah düğme yan yana geldiğinde kullanıcı hangisinin ana eylem olduğunu bilemez. Tehlikeli eylem asla dolgulu değil — kenarlıklı, çünkü yanlışlıkla basılmaması gereken şey öne çıkmamalı.</p>
-    </div>
-
-    <div class="panel">
-      <p class="cap">E · ROZET VE DURUM</p>
-      <div class="pillrow" style="margin-bottom:14px">
-        <span class="pill" style="color:oklch(0.52 0.15 155)">↑ Giriş</span>
-        <span class="pill" style="color:oklch(0.55 0.19 27)">↓ Çıkış</span>
-        <span class="pill" style="color:oklch(0.55 0.21 27)">⚠ Kritik</span>
-        <span class="pill" style="color:oklch(0.446 0.03 256.802)">Arşivde</span>
-        <span class="pill" style="color:oklch(0.446 0.03 256.802)">Koli ×6</span>
-      </div>
-      <div class="pillrow">
-        <span class="pill" style="color:oklch(0.52 0.15 155)">✓ Aktif</span>
-        <span class="pill" style="color:oklch(0.446 0.03 256.802)">Pasif</span>
-        <span class="pill" style="color:oklch(0.55 0.21 27)">⚠ 2 iş başarısız</span>
-      </div>
-      <p class="spec">Rozet <b>her zaman kenarlık + ikon + metin</b>, dolgu zemin yok, yarıçap 6 px (hap değil). Referans görseldeki pastel dolgu rozetlerde metin/zemin oranı 3:1’in altında — bir rozetin okunamaması, olmamasından beter.</p>
-    </div>
-
-    <div class="panel full">
-      <p class="cap">F · ŞERİTLER — hata, onay, bilgi</p>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">
-        <div class="strip err"><span class="ic">⚠</span><span>Elde 456 adet var, 999.999 adet çıkışı yapılamaz.</span></div>
-        <div class="strip ok"><span class="ic" style="color:oklch(0.52 0.15 155)">✓</span><span>Rapor hazırlanıyor. Hazır olunca <b>ahmet@depo.com</b> adresine gönderilecek.</span></div>
-        <div class="strip info"><span class="ic">i</span><span>Koli barkodu: girdiğiniz miktar <b class="tab">×6</b> ile çarpılacak.</span></div>
-      </div>
-      <p class="spec">Hata mesajı <b>ne olduğunu ve sayıyı</b> söyler. “İşlem başarısız” yasak: kullanıcı ne yapacağını bilemez. Hata şeridi <span class="mono">role="alert"</span> taşır — ekran okuyucu, kullanıcı odağı kaybetmeden okur.</p>
-    </div>
-
-    <div class="panel full">
-      <p class="cap">G · TABLO SATIRI — 36 px, zebra yok, kritik başta</p>
-      <div style="border:1px solid oklch(0.929 0.013 255.508);border-radius:6px;overflow:hidden">
-        <table class="t">
-          <tr>
-            <th style="width:280px">Ürün</th><th style="width:130px">Kategori</th><th style="width:110px">Konum</th>
-            <th class="r" style="width:120px">Stok</th><th class="r" style="width:100px">En az</th>
-            <th style="width:170px">Barkod</th><th>Son hareket</th>
-          </tr>
-          <tr class="critrow">
-            <td><span class="link">M6 Vida 20 mm</span><div class="sku tab">VDA-0620 · Kaya</div></td>
-            <td class="muted">Bağlantı</td><td class="muted tab">A-03-2</td>
-            <td class="r tab critqty">⚠ 12 adet</td>
-            <td class="r tab muted">50 adet</td>
-            <td class="tab muted">8690123456789</td>
-            <td class="tab muted">24.08.2026 09:14</td>
-          </tr>
-          <tr>
-            <td><span class="link">Kırmızı Defter A5</span><div class="sku tab">DFT-A5-K</div></td>
-            <td class="muted">Kırtasiye</td><td class="muted tab">B-01-1</td>
-            <td class="r tab" style="font-weight:600">456 adet</td>
-            <td class="r tab muted">100 adet</td>
-            <td class="tab muted">8690987654321</td>
-            <td class="tab muted">24.08.2026 08:52</td>
-          </tr>
-          <tr>
-            <td><span class="link">Çizgili Kalemtıraş</span><div class="sku tab">KLM-011 · arşivde</div></td>
-            <td class="muted">Kırtasiye</td><td class="muted">—</td>
-            <td class="r tab" style="font-weight:600">0 adet</td>
-            <td class="r tab muted">10 adet</td>
-            <td class="muted">—</td>
-            <td class="tab muted">21.08.2026 16:30</td>
-          </tr>
-        </table>
-      </div>
-      <p class="spec">
-        <b>Kritik satır üç işaretle</b> belli: zemin (kritik-bg), ⚠ ikonu, ve sıralamada en üstte — sıralamayı sunucu yapıyor.
-        <b>Sayısal sütunlar sağa yaslı ve tabular.</b>
-        <b>Boş değer “—”</b>, boş hücre değil: boş hücre “veri yok” ile “hücre kayıp” arasındaki farkı silerdi.
-        Tıklanabilir tek şey <b>ürün adı</b> — satırın tamamı tıklanabilir olsaydı metin seçmek imkânsızlaşırdı.
-      </p>
-    </div>
-
-    <div class="panel">
-      <p class="cap">H · BOŞ DURUM — çıkış yolu ile birlikte</p>
-      <div style="border:1px solid oklch(0.929 0.013 255.508);border-radius:6px" class="empty">
-        <h4>Henüz ürün yok</h4>
-        <p>İlk gün 800 ürün tek tek girilmez. Elinizdeki listeyi olduğu gibi yükleyin.</p>
-        <div class="btnrow"><span class="btn p">Excel’den toplu aktar</span><span class="btn s">Tek ürün ekle</span></div>
-      </div>
-      <p class="spec">Her boş liste <b>ne olduğunu + oradan çıkaran eylemi</b> söyler. “Sonuç bulunamadı” tek başına çıkmaz sokaktır; aramada boş dönen ekran “‘defter’ bulunamadı” + “Yeni ürün olarak ekle” gösterir.</p>
-    </div>
-
-    <div class="panel">
-      <p class="cap">I · GEZİNME VE SAYFALAMA</p>
-      <div style="display:flex;gap:20px">
-        <div style="width:240px">
-          <div class="navitem on"><span class="ic">▣</span>Panel</div>
-          <div class="navitem off"><span class="ic">⇅</span>Giriş / Çıkış</div>
-          <div class="navitem off"><span class="ic">☰</span>Stok</div>
-          <div style="font-size:12px;line-height:16px;color:oklch(0.446 0.03 256.802);margin-top:8px">240 px · satır 56 px</div>
-        </div>
-        <div>
-          <div class="rail" style="background:oklch(0.208 0.042 265.755);color:#fff">▣</div>
-          <div class="rail" style="color:oklch(0.372 0.044 257.287)">⇅</div>
-          <div class="rail" style="color:oklch(0.372 0.044 257.287)">☰</div>
-          <div style="font-size:12px;line-height:16px;color:oklch(0.446 0.03 256.802);margin-top:8px;width:72px">72 px ray<br>&lt;1100 px</div>
-        </div>
-      </div>
-      <div class="pag">
-        <span class="tab muted">1–50 / 1.284</span>
-        <span style="display:flex;gap:12px"><span class="pgbtn off">← Önceki</span><span class="pgbtn">Sonraki →</span></span>
-      </div>
-      <p class="spec">Sayfa numarası şeridi yok: depo verisinde kullanıcı 34. sayfaya atlamaz, <b>arar</b>. Bağlantılar gerçek <span class="mono">&lt;a href&gt;</span> — JavaScript kapalıyken çalışır, orta tıkla yeni sekmede açılır.</p>
-    </div>
-
   </div>
 </div>
 </x-dc>

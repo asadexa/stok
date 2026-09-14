@@ -2,11 +2,11 @@ import { randomUUID } from 'node:crypto'
 import { type TestTenant, seedTestTenant, testAdminDb, testAppDb } from '@stok/db/testing'
 import { sql } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import type { Actor } from './authz.js'
-import { systemHealth } from './health.js'
-import { enqueueJob } from './jobs.js'
-import { createMovement } from './movements.js'
-import { TEST_DB_NAME } from './test/db-name.js'
+import type { Actor } from './authz'
+import { systemHealth } from './health'
+import { enqueueJob } from './jobs'
+import { createMovement } from './movements'
+import { TEST_DB_NAME } from './test/db-name'
 
 /**
  * ============================================================================
@@ -126,6 +126,28 @@ describe('kuyruk', () => {
     expect(check.level).toBe('warn')
     expect(check.summary).toContain('saattir bekliyor')
     expect(check.hint).toContain('işçisi')
+  })
+
+  it('BİR KEZ PATLAMIŞ ama tekrar bekleyen iş UYARI veriyor (T111)', async () => {
+    /**
+     * Ölçülerek bulundu (T34 canlı sürüşü): SMTP'siz kurulumda gün sonu
+     * raporu patlayıp `QUEUED`'a dönüyor, `last_error_code` doluyor — ve
+     * kart "kuyrukta, işleniyor" diyordu. Hata KAYITLI ama ekranda YOK.
+     * Cron günde bir koştuğu için o satır ~24 saat öyle duruyor.
+     */
+    const fresh = await seedTestTenant(admin.db, 'health-queue-retry')
+    const a: Actor = { tenantId: fresh.tenantId, userId: fresh.adminUserId, role: 'ADMIN' }
+    const { job } = await enqueueJob(a, { kind: 'DAILY_REPORT', params: {} }, opts)
+    await admin.db.execute(sql`
+      UPDATE background_jobs
+         SET attempts = 1, last_error_code = 'MAIL_DELIVERY_FAILED'
+       WHERE id = ${job.id}
+    `)
+
+    const check = find(await systemHealth(a, opts), 'queue')
+    // `error` DEĞİL: işin bir hakkı daha var ve bir sonraki tur düzeltebilir.
+    expect(check.level, 'tekrar bekleyen iş sağlıklı görünüyor').toBe('warn')
+    expect(check.summary).toContain('bir kez başarısız')
   })
 
   it('başarısız iş HATA veriyor ve kuyruk uyarısını bastırıyor', async () => {

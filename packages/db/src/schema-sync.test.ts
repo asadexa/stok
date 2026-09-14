@@ -18,8 +18,8 @@ import {
 } from '@stok/shared'
 import { sql } from 'drizzle-orm'
 import { afterAll, describe, expect, it } from 'vitest'
-import { testAdminDb } from './testing.js'
-import { TEST_DB_NAME } from './test/db-name.js'
+import { testAdminDb } from './testing'
+import { TEST_DB_NAME } from './test/db-name'
 
 /**
  * ============================================================================
@@ -183,13 +183,20 @@ describe('şemanın taşıdığı diğer garantiler', () => {
        ORDER BY table_name, column_name
     `)
 
+    // Para sütunları TEK TEK sayılıyor, desenle değil. `%_price` gibi bir
+    // desen yazmak yeni bir para sütununu sessizce kabul ederdi; bu test
+    // tam olarak "yeni sütun yanlış ölçekle eklendi" durumunu yakalamak
+    // için var. Liste büyüdükçe elle güncellenmesi maliyet değil, amaç.
+    const MONEY_COLUMNS = new Set([
+      'unit_price',
+      'list_price',
+      'client_list_price',
+      'purchase_price',
+      'sale_price',
+    ])
+
     for (const c of rows) {
-      const expected =
-        c.column_name === 'unit_cost' ||
-        c.column_name === 'purchase_price' ||
-        c.column_name === 'sale_price'
-          ? { p: 12, s: 2 }
-          : { p: 14, s: 3 }
+      const expected = MONEY_COLUMNS.has(c.column_name) ? { p: 12, s: 2 } : { p: 14, s: 3 }
       expect(
         { p: c.numeric_precision, s: c.numeric_scale },
         `${c.table_name}.${c.column_name}`,

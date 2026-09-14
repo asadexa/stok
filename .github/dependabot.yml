@@ -1,0 +1,36 @@
+# Bağımlılık güncellemeleri.
+#
+# NEDEN VAR: bu depoda bağımlılık güncellemesi elle yapılıyordu ve bilinen
+# açık taraması hiç yoktu. `pnpm audit` çıktısına hiç bakılmamış olması,
+# açığın yokluğu anlamına gelmiyor.
+#
+# HAFTALIK, GÜNLÜK DEĞİL: günlük güncelleme tek kişilik bir projede
+# incelenemeyecek kadar çok PR üretir ve ilk çare Dependabot'u kapatmak
+# olur. Haftalık, birikimi yönetilebilir tutuyor.
+
+version: 2
+updates:
+  # GitHub Action'ları SHA'ya sabitli (T98, T103). Dependabot sabitlenmiş
+  # SHA'ları da güncelliyor ve yorumdaki sürümü birlikte tazeliyor —
+  # sabitlemenin bakım maliyetini üstlenen şey bu.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: 'ci'
+
+  # pnpm workspace: kök manifest tüm paketleri kapsıyor.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: 'chore'
+    # Küçük sürüm yükseltmeleri tek PR'da toplansın: on ayrı PR yerine
+    # bir tane incelemek, gerçekten incelenme olasılığını artırıyor.
+    groups:
+      minor-ve-yama:
+        update-types:
+          - minor
+          - patch

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { AppError, ERROR_CODES, errorText, isRetryable } from './errors.js'
-import { formatQty } from './units.js'
+import { AppError, ERROR_CODES, errorText, isRetryable } from './errors'
+import { formatQty } from './units'
 
 describe('hata sözleşmesi (D-2.2)', () => {
   it('her kodun http durumu, tekrar denenebilirlik bayrağı ve Türkçe metni var', () => {

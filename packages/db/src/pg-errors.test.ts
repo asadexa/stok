@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { withTenant } from './client.js'
+import { withTenant } from './client'
 import {
   isCheckViolation,
   isDeadlock,
@@ -9,10 +9,10 @@ import {
   isUniqueViolation,
   pgConstraint,
   pgErrorCode,
-} from './pg-errors.js'
-import { products, stockMovements } from './schema.js'
-import { type TestTenant, detUuid, seedTestTenant, testAdminDb, testAppDb } from './testing.js'
-import { TEST_DB_NAME } from './test/db-name.js'
+} from './pg-errors'
+import { products, stockMovements } from './schema'
+import { type TestTenant, detUuid, seedTestTenant, testAdminDb, testAppDb } from './testing'
+import { TEST_DB_NAME } from './test/db-name'
 
 /**
  * Bu testler GERÇEK hatalarla koşuyor, elle kurulmuş sahte nesnelerle

@@ -1,5 +1,5 @@
 import 'server-only'
-import { AppError, errorText } from '@stok/shared'
+import { AppError, ERROR_CODES, type ErrorCode, errorText } from '@stok/shared'
 
 /**
  * ============================================================================
@@ -93,11 +93,73 @@ function rethrowControlFlow(err: unknown): void {
   }
 }
 
+
+/**
+ * SUNUCU KUSURU OLAN HATALARI LOGA YAZAR.
+ *
+ * `AppError` yakalanıp bir yönlendirmeye çevrildiğinde, sunucu günlüğünde
+ * HİÇBİR İZ KALMIYORDU. Kullanıcı ekranda "Beklenmeyen bir hata oluştu"
+ * görüyor, operatör terminalde sadece `POST /giris 303` görüyor ve elinde
+ * teşhise götüren tek satır bile olmuyor.
+ *
+ * Kullanıcı testinde bu tam olarak yaşandı: eksik bir `AUTH_SECRET`'in
+ * teşhisi, hatayı fırlatan satırın kaynak kodda elle bulunmasını
+ * gerektirdi — oysa `AppError`'ın mesajı ne yapılacağını zaten yazıyordu.
+ *
+ * SADECE 5xx yazılıyor. "Parola hatalı" veya "elde yeterli stok yok"
+ * kullanıcının yaptığı bir şey, sunucunun kusuru değil; onları loga
+ * yazmak günlüğü gürültüye boğar ve gerçek arızayı görünmez kılar.
+ */
+export function logServerFault(scope: string, err: unknown): void {
+  if (!(err instanceof AppError)) return
+  const http = ERROR_CODES[err.code as ErrorCode]?.http ?? 500
+  if (http < 500) return
+  console.error(`[${scope}] ${err.code}: ${err.message}`, err.details)
+}
+
+/**
+ * ============================================================================
+ * HATA DÖNÜŞÜNDE FORMU GERİ DOLDURMA
+ *
+ * Sunucu eylemi hata verdiğinde yönlendirme yapıyoruz ve form YENİDEN
+ * kuruluyor; taşınmayan her alan varsayılanına döner.
+ *
+ * BU SESSİZ BİR YANLIŞ KAYIT ÜRETİR. Tarayıcı testinde yaşandı: kullanıcı
+ * miktara 5 yazıyor, "birim fiyat zorunlu" hatası alıyor, fiyatı dolduruyor
+ * ve kaydediyor — ama miktar bu arada varsayılana (1) dönmüş oluyor. İkinci
+ * gönderim BAŞARILI olduğu için hiçbir uyarı çıkmıyor; depoda farkı sayım
+ * gününe kadar kimse görmüyor.
+ *
+ * Alanları tek tek elle taşımak yerine bu yardımcı var: yeni bir alan
+ * eklendiğinde listeye yazılması unutulursa aynı hata sessizce geri gelir.
+ *
+ * Boş alanlar taşınmıyor — sorgu dizesini `miktar=&not=&fiyat=` diye
+ * şişirmenin faydası yok. `keepEmpty` ile istisna yapılabiliyor: gerçekten
+ * boş gönderilmiş bir alanın boş kalması gerekiyorsa.
+ * ============================================================================
+ */
+export function preserveFields(
+  form: FormData,
+  fields: readonly string[],
+  extra: Record<string, string | undefined> = {},
+): URLSearchParams {
+  const search = new URLSearchParams()
+  for (const name of fields) {
+    const value = String(form.get(name) ?? '').trim()
+    if (value !== '') search.set(name, value)
+  }
+  for (const [key, value] of Object.entries(extra)) {
+    if (value !== undefined && value !== '') search.set(key, value)
+  }
+  return search
+}
+
 /** `AppError`'ı `hata=KOD&sku=...` biçimli sorgu dizesine çevirir. */
 export function errorQuery(err: unknown): string {
   rethrowControlFlow(err)
   const search = new URLSearchParams()
   if (err instanceof AppError) {
+    logServerFault('form', err)
     search.set('hata', err.code)
     for (const [key, value] of Object.entries(err.details)) {
       if (HIDDEN_DETAIL_KEYS.has(key)) continue

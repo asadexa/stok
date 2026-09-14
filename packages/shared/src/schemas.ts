@@ -3,15 +3,39 @@ import {
   BARCODE_KIND_VALUES,
   type BarcodeKind,
   multiplierMatchesKind,
-} from './barcodes.js'
-import { MOVEMENT_REASON_VALUES, MOVEMENT_REASONS, type MovementReason } from './reasons.js'
-import { ROLE_VALUES, type Role } from './roles.js'
-import { UNIT_VALUES, type Unit } from './units.js'
+} from './barcodes'
+import {
+  PRICE_OVERRIDE_REASON_VALUES,
+  PRICE_OVERRIDE_REASONS,
+  type PriceOverrideReason,
+  type PriceSource,
+} from './prices'
+import { MOVEMENT_REASON_VALUES, MOVEMENT_REASONS, type MovementReason } from './reasons'
+import { ROLE_VALUES, type Role } from './roles'
+import { UNIT_VALUES, type Unit } from './units'
 
 const reasonEnum = z.enum(MOVEMENT_REASON_VALUES as [MovementReason, ...MovementReason[]])
 const unitEnum = z.enum(UNIT_VALUES as [Unit, ...Unit[]])
 const barcodeKindEnum = z.enum(BARCODE_KIND_VALUES as [BarcodeKind, ...BarcodeKind[]])
 const roleEnum = z.enum(ROLE_VALUES as [Role, ...Role[]])
+const priceOverrideReasonEnum = z.enum(
+  PRICE_OVERRIDE_REASON_VALUES as [PriceOverrideReason, ...PriceOverrideReason[]],
+)
+
+/**
+ * İSTEMCİNİN İDDİA EDEBİLECEĞİ FİYAT KAYNAKLARI — hepsi değil (T88).
+ *
+ * `LIST`, `MANUAL` ve `INDEXED` sunucunun TÜRETTİĞİ değerler: fiyatın liste
+ * fiyatına eşit olup olmadığını, ya da endeksle hesaplanıp hesaplanmadığını
+ * sunucu zaten biliyor. İstemcinin bunları göndermesine izin verilseydi,
+ * elle yazılmış bir fiyat `LIST` etiketiyle kaydedilebilir ve kasa açığı
+ * raporu "liste fiyatından satıldı" diye yalan söylerdi.
+ *
+ * Geriye kalan ikisi sunucunun BİLEMEYECEĞİ gözlemler — fiş okundu mu,
+ * kullanıcı tahmin mi etti — o yüzden yalnızca onlar istemciden geliyor.
+ */
+const CLIENT_PRICE_SOURCES = ['RECEIPT', 'ESTIMATED'] as const satisfies readonly PriceSource[]
+const clientPriceSourceEnum = z.enum(CLIENT_PRICE_SOURCES)
 
 /** NUMERIC(14,3): en fazla 3 ondalık basamak. */
 const MAX_DECIMALS = 3
@@ -27,9 +51,15 @@ const hasValidPrecision = (n: number) => decimalsOf(n) <= MAX_DECIMALS
  * PostgreSQL fazlasını sessizce yuvarlar — 19,999 TL girip 20,00 TL
  * kaydedilmesini kullanıcı ancak raporda fark ederdi.
  */
+/**
+ * `.finite()` YOK — `qtySchema`'daki ile aynı gerekçe ve aynı mutasyon
+ * testiyle bulundu: `+Infinity`'yi `.max()`, `-Infinity`'yi
+ * `.nonnegative()`, `NaN`'ı zod'un kendisi zaten reddediyor. Hiç
+ * ateşlenmeyen bir koruma, kaldırıldığında hiçbir testi kırmıyor ve
+ * komşusunu kaldıran birine yanlış güven veriyor.
+ */
 const moneySchema = z
   .number({ invalid_type_error: 'Tutar sayı olmalı' })
-  .finite()
   .nonnegative()
   .max(99_999_999.99)
   .refine((n) => decimalsOf(n) <= 2, { message: 'En fazla 2 ondalık basamak (kuruş)' })
@@ -38,15 +68,22 @@ const moneySchema = z
  * Miktar. Kullanıcı HER ZAMAN pozitif girer; işareti sebep belirler.
  *
  * Düşman QA testleri (PLAN.md T39) bu şemaya çarpar:
- *   1e999   → Infinity → .finite() reddeder
- *   -5      → .positive() reddeder
- *   0       → .positive() reddeder
+ *   1e999   → Infinity → .max() reddeder (Infinity her sonlu üst sınırdan büyük)
+ *   -1e999  → -Infinity → .positive() reddeder
+ *   NaN     → z.number() reddeder (emoji/harf `Number()`'dan NaN olarak gelir)
+ *   -5, 0   → .positive() reddeder
  *   0.0001  → precision refine reddeder
  *   "12"    → z.number() reddeder (coerce YOK, bilerek)
+ *
+ * `.finite()` YOK, bilerek — ve bir mutasyon testiyle kaldırıldı (T39).
+ * Kaldırıldığında HİÇBİR test kırmızı yanmıyordu: `+Infinity`'yi `.max()`,
+ * `-Infinity`'yi `.positive()`, `NaN`'ı zod'un kendisi zaten reddediyor.
+ * Yani hiç ateşlenmeyen bir koruma duruyordu. Zararsız görünüyor ama
+ * değil: bir gün biri `.max()`'ı kaldırırken "`.finite()` nasılsa tutuyor"
+ * diye düşünebilir. İspatlanamayan koruma, yanlış güven üretiyor.
  */
 export const qtySchema = z
   .number({ invalid_type_error: 'Miktar sayı olmalı' })
-  .finite()
   .positive()
   .max(1_000_000)
   .refine(hasValidPrecision, { message: `En fazla ${MAX_DECIMALS} ondalık basamak` })
@@ -78,13 +115,64 @@ export const createMovementSchema = z.object({
   }),
   note: z.string().trim().max(500).optional(),
   locationId: z.string().uuid().optional(),
-  /** Girişte alış fiyatı. Maliyet takibi (Faz 2) bu veriyi bugünden topluyor. */
-  unitCost: z.number().nonnegative().finite().optional(),
+  /**
+   * Hareketin GERÇEKLEŞEN birim fiyatı — girişte alış, çıkışta satış (T88).
+   * `moneySchema`: kuruş sınırı burada zorlanıyor, yoksa PostgreSQL fazla
+   * basamağı sessizce yuvarlar ve girilen tutar kaydedilenden farklı olur.
+   */
+  unitPrice: moneySchema.optional(),
+  /**
+   * İstemcinin o an ekranda gördüğü liste fiyatı. KARŞILAŞTIRMADA
+   * KULLANILMIYOR — sunucu liste fiyatını üründen kendisi okuyor.
+   *
+   * Ayrı sütuna yazılıyor ki uyuşmazlık GÖRÜNÜR olsun: fiş 110 ₺ yazarken
+   * sunucudaki liste 120 ₺ ise, ekranın bayat olduğu ancak bu iki sayı yan
+   * yana durduğunda anlaşılır. Sunucununkiyle sessizce değiştirilseydi
+   * müşteriye yanlış fiş kesildiği hiç fark edilmezdi.
+   */
+  clientListPrice: moneySchema.optional(),
+  /** Liste fiyatından sapma sebebi. Serbest metin değil, listeden (T88). */
+  priceOverrideReason: priceOverrideReasonEnum.optional(),
+  /** Yalnızca sunucunun bilemeyeceği kaynaklar; gerisini sunucu türetiyor. */
+  priceSource: clientPriceSourceEnum.optional(),
+  /**
+   * Fiyatın ait olduğu EKONOMİK AN — hareketin yazıldığı an değil (T89).
+   *
+   * 5 yıldır rafta duran bir malın devri bugün yazılıyor ama fiyatı 5 yıl
+   * öncesine ait. İkisi aynı sütunda tutulsaydı enflasyon düzeltmesi
+   * (T90) imkansız olurdu: sistem o fiyatı bugünün parası sanardı ve
+   * yenileme maliyeti olduğundan düşük çıkardı.
+   *
+   * Boş = hareket tarihi. `YYYY-MM-DD`; saat yok çünkü fiyatın saati
+   * diye bir şey yok ve saat dilimi tartışması gereksiz.
+   */
+  priceDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Fiyat tarihi GG.AA.YYYY biçiminde olmalı')
+    .optional(),
+  /**
+   * "Elimde fatura yok, bugün aynısını kaça alacağımı yazdım."
+   *
+   * Ayrı bir bayrak değil, `price_source = 'ESTIMATED'` oluyor. Boolean
+   * tutulsaydı fiyat kaynağı iki yerden okunurdu ve "fişten okundu ama
+   * tahmini" gibi anlamsız bir durum temsil edilebilirdi.
+   */
+  priceEstimated: z.boolean().default(false),
   /** Cihaz saati. Sunucu saatinden AYRI saklanır; sıralama sunucu saatiyle. */
   clientCreatedAt: z.string().datetime({ offset: true }),
   /** Negatif stok override. Sunucu ayrıca admin rolü arar (PLAN.md U1). */
   allowNegative: z.boolean().default(false),
 })
+  // "Diğer" sebebi TEK BAŞINA hiçbir şey anlatmıyor; açıklamasız
+  // kaydedilseydi rapor "bu ay 4.200 ₺ Diğer" derdi ve kimse nedenini
+  // öğrenemezdi. Kuralın kendisi `prices.ts`'te, veri olarak duruyor.
+  .refine(
+    (m) =>
+      m.priceOverrideReason === undefined ||
+      !PRICE_OVERRIDE_REASONS[m.priceOverrideReason].requiresNote ||
+      (m.note !== undefined && m.note !== ''),
+    { message: '"Diğer" seçildiğinde açıklama zorunlu', path: ['note'] },
+  )
 
 export type CreateMovementInput = z.infer<typeof createMovementSchema>
 
@@ -135,12 +223,35 @@ const barcodeInputSchema = z
   })
 
 /** Ürün oluşturma. Sadece admin. */
+/**
+ * Ürün görselinin adresi.
+ *
+ * SADECE `http`/`https`. `javascript:` ve `data:` şemaları bilerek dışarıda:
+ * bu adres arayüzde bir `<img src>` içine giriyor ve toplu aktarmayla
+ * DIŞARIDAN geliyor. Şema kısıtlanmasaydı, hazırladığı Excel'i yükleten
+ * biri sayfaya kendi içeriğini sokabilirdi.
+ *
+ * Boş string `undefined`'a düşüyor: Excel'de boş bırakılan hücre ile hiç
+ * olmayan sütun aynı şey — ikisi de "görsel yok".
+ */
+export const imageUrlSchema = z
+  .string()
+  .trim()
+  .max(500)
+  .optional()
+  .transform((v) => (v === '' ? undefined : v))
+  .refine(
+    (v) => v === undefined || /^https?:\/\//i.test(v),
+    { message: 'Görsel adresi http:// veya https:// ile başlamalı' },
+  )
+
 export const createProductSchema = z.object({
   sku: z.string().trim().min(1).max(64),
   name: z.string().trim().min(1).max(200),
   unit: unitEnum.default('ADET'),
   category: z.string().trim().max(100).optional(),
   brand: z.string().trim().max(100).optional(),
+  imageUrl: imageUrlSchema,
   purchasePrice: moneySchema.optional(),
   salePrice: moneySchema.optional(),
   minStock: z
@@ -174,6 +285,10 @@ export const updateProductSchema = z.object({
   unit: unitEnum.optional(),
   category: z.string().trim().max(100).nullable().optional(),
   brand: z.string().trim().max(100).nullable().optional(),
+  // Güncellemede `nullable`: kullanıcı görseli KALDIRABİLMELİ. `optional`
+  // "dokunma", `null` "sil" demek; ikisi ayrı olmazsa görsel bir kez
+  // konduktan sonra geri alınamazdı.
+  imageUrl: imageUrlSchema.nullable(),
   purchasePrice: moneySchema.nullable().optional(),
   salePrice: moneySchema.nullable().optional(),
   minStock: z
@@ -209,6 +324,22 @@ export const passwordSchema = z
   .string()
   .min(8, 'Parola en az 8 karakter olmalı')
   .max(200)
+
+/**
+ * Kendi parolasını değiştirme.
+ *
+ * MEVCUT PAROLA ZORUNLU ve bu yönetici sıfırlamasından ayıran şey.
+ * `setUserPassword` kendi parolanı doğrulama olmadan değiştirmene izin
+ * veriyor; o yol yönetici için doğru (unutan kullanıcıya sıfırlama), ama
+ * kendi hesabı için yanlış: açık kalmış bir oturumun başına geçen biri
+ * parolayı değiştirip sahibini kendi hesabından kilitleyebilirdi.
+ */
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, 'Mevcut parolanızı girin').max(200),
+  password: passwordSchema,
+})
+
+export type ChangePasswordInput = z.infer<typeof changePasswordSchema>
 
 export const createUserSchema = z.object({
   email: z.string().trim().toLowerCase().email('Geçerli bir e-posta girin').max(200),

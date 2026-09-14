@@ -21,6 +21,8 @@
  * açıkça yazmak, açık olanı zekice olana tercih etme ilkesi.
  */
 
+import { formatMoneyTr } from './prices'
+
 export type ErrorDetails = Record<string, unknown>
 
 export interface ErrorMeta {
@@ -109,6 +111,50 @@ export const ERROR_CODES = {
     retryable: false,
     tr: (d) => `${d.barcode} barkodu başka bir üründe tanımlı${d.name ? `: ${d.name}` : ''}`,
   },
+  // --- Kasa açığı kontrolü (T88) ---
+  PRICE_OVERRIDE_REASON_REQUIRED: {
+    http: 409,
+    retryable: false,
+    // İki sayı da metinde: kullanıcı "sebep seçin" uyarısını gördüğünde
+    // önce "hangi sapma?" diye sorar. Farkı burada göstermek o soruyu
+    // baştan cevaplıyor — ve bayat bir ekran yüzünden çıkan sapmayı da
+    // görünür kılıyor (listedeki fiyat kullanıcının gördüğünden farklıysa).
+    // `listPrice` YETKİSİZ ROLE HİÇ GÖNDERİLMİYOR (tehdit S7): alış
+    // fiyatından sapan bir giriş yazan çalışan, hata metninden ürünün
+    // alış fiyatını öğrenirdi. Sunucu o alanı detaylara koymuyor,
+    // metin de onsuz anlamlı kalmak zorunda.
+    tr: (d) =>
+      typeof d.listPrice === 'number'
+        ? `Liste fiyatı ${formatMoneyTr(d.listPrice)} ₺, girilen ${formatMoneyTr(Number(d.unitPrice))} ₺. Sapma sebebi seçmelisiniz.`
+        : 'Girilen fiyat liste fiyatından farklı. Sapma sebebi seçmelisiniz.',
+  },
+  PRICE_NOT_APPLICABLE: {
+    http: 400,
+    retryable: false,
+    // Fire/kullanım/sayım düzeltmesinde para el değiştirmiyor. Fiyatı
+    // sessizce yutmak yerine reddediyoruz: kullanıcı fiyatı yazdığını ve
+    // kaydedildiğini sanırdı, oysa rapora hiç girmezdi.
+    tr: (d) => `"${d.reasonLabel ?? 'Bu işlem'}" için birim fiyat girilmez`,
+  },
+
+  // --- Açılış değerlemesi (T89) ---
+  PRICE_REQUIRED: {
+    http: 400,
+    retryable: false,
+    // Devir hareketi fiyatsız yazılabilseydi, sisteme giren eski stoğun
+    // değeri SONSUZA KADAR bilinmez kalırdı: defter append-only, sonradan
+    // eklenemez. Tek şansı bu ekran.
+    tr: (d) => `"${d.reasonLabel ?? 'Bu işlem'}" için birim fiyat zorunlu`,
+  },
+  PRICE_DATE_INVALID: {
+    http: 400,
+    retryable: false,
+    tr: (d) =>
+      d.reason === 'FUTURE'
+        ? 'Fiyat tarihi bugünden ileri olamaz'
+        : 'Satış ve müşteri iadesinde fiyat tarihi bugünden eski olamaz',
+  },
+
   LAST_BARCODE: {
     http: 409,
     retryable: false,

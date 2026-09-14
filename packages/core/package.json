@@ -9,13 +9,14 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@stok/db": "workspace:*",
     "@stok/shared": "workspace:*",
-    "drizzle-orm": "^0.44.0",
+    "drizzle-orm": "^0.45.2",
     "exceljs": "^4.4.0",
     "jose": "^6.2.9",
     "nodemailer": "^9.0.5",

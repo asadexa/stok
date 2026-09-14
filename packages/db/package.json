@@ -12,16 +12,18 @@
   },
   "scripts": {
     "generate": "drizzle-kit generate",
+    "init": "tsx src/init-db.ts",
     "migrate": "drizzle-kit migrate",
-    "studio": "drizzle-kit studio",
-    "seed": "tsx src/seed.ts",
     "product-count": "tsx src/product-count.ts",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "seed": "tsx src/seed.ts",
+    "studio": "drizzle-kit studio",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@stok/shared": "workspace:*",
-    "drizzle-orm": "^0.44.0",
+    "drizzle-orm": "^0.45.2",
     "postgres": "^3.4.5"
   },
   "devDependencies": {

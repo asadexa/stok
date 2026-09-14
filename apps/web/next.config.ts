@@ -1,7 +1,9 @@
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { config as loadRootEnv } from 'dotenv'
+import { PHASE_PRODUCTION_BUILD } from 'next/constants.js'
 import type { NextConfig } from 'next'
+import { MAX_UPLOAD_BYTES, assertServerConfig, warnOptionalConfig } from './src/server/config'
 
 /**
  * KÖK `.env` DOSYASINI BURADA YÜKLÜYORUZ.
@@ -36,22 +38,62 @@ const config: NextConfig = {
   transpilePackages: ['@stok/shared', '@stok/db', '@stok/core'],
   experimental: {
     // postgres.js ve exceljs sunucu tarafı; istemci paketine sızmasınlar.
-    serverActions: { bodySizeLimit: '5mb' },
-  },
-  webpack: (webpackConfig) => {
-    // Paketler ESM ve içeride `./movements.js` diye import ediyorlar —
-    // Node'un ESM çözümlemesi uzantı zorunlu kılıyor, ama diskteki dosya
-    // `movements.ts`. tsc bu eşlemeyi kendisi yapıyor, webpack yapmıyor
-    // ve "Module not found: './movements.js'" ile derleme patlıyor.
     //
-    // Alternatif, paketleri derleyip dist yayınlamaktı: her değişiklikte
-    // build adımı, kaynak haritası derdi ve hot reload kaybı demekti.
-    webpackConfig.resolve.extensionAlias = {
-      '.js': ['.ts', '.tsx', '.js'],
-      '.mjs': ['.mts', '.mjs'],
-    }
-    return webpackConfig
+    // SINIR `src/server/config.ts`'ten geliyor (T118). Eskiden burada '5mb'
+    // yazıyordu; Vercel fonksiyonlarının istek gövdesi sınırı 4,5 MB ve
+    // platform seviyesinde uygulanıyor, yani o ayar ulaşılamaz bir sözdü.
+    // Aynı sabiti içe aktarma eylemi de okuyor: kullanıcıya söylenen sayı
+    // ile reddedilen sayı ayrı yazılsaydı biri unutulurdu.
+    serverActions: { bodySizeLimit: MAX_UPLOAD_BYTES },
   },
+  /**
+   * Next 16'da Turbopack VARSAYILAN ve `webpack()` kancası artık
+   * çalışmıyor. Boş nesne "Turbopack bilerek kullanılıyor" demek.
+   *
+   * ESKİDEN BURADA `extensionAlias` VARDI. Depo paketleri kendi içinde
+   * `./movements.js` diye import ediyordu (Node'un ESM çözümlemesi uzantı
+   * ister) ama diskteki dosya `movements.ts`; webpack'e bu eşleme elle
+   * öğretiliyordu. Turbopack'te karşılığı YOK ve Next 16 derlemesi
+   * "packages/core/src/index.ts'in hiç export'u yok" diye patlıyordu.
+   *
+   * ÇÖZÜM AYARA DEĞİL KAYNAĞA UYGULANDI: paketlerin içindeki 159 göreli
+   * import uzantısız yazıldı (`moduleResolution: "Bundler"` bunu zaten
+   * destekliyor; tsx ve vitest de öyle çözüyor). Böylece derleyiciye özel
+   * bir kanca kalmadı — bir sonraki paketleyici değişikliğinde yeniden
+   * yazılacak bir hack de yok.
+   */
+  turbopack: {},
+
+  /**
+   * Next 16 açılışta `apps/web/AGENTS.md` ve `apps/web/CLAUDE.md` ÜRETİYOR.
+   * Kapatıldı: bu depoda kök `CLAUDE.md` elle yazılmış ve proje kararlarını
+   * anlatıyor. `apps/web/` altında ikinci, otomatik üretilen bir dosya
+   * bulunması, aynı soruya iki farklı cevap veren iki kaynak demek — ve
+   * üretilen dosya her `next dev` çalıştırmasında geri gelip depoyu kirli
+   * gösteriyor.
+   */
+  agentRules: false,
 }
 
-export default config
+/**
+ * Yapılandırma kontrolü DERLEMEDE koşmuyor: `next build` hiçbir yere
+ * bağlanmıyor ve gizli anahtarları olmayan bir derleme ortamında (imaj
+ * kurma adımı gibi) çalışabilmeli.
+ *
+ * BURASI TEK YER DEĞİL. Bu dosya yalnızca `next dev` / `next start`
+ * açılışında yükleniyor; Vercel'de hiç yüklenmiyor. Üretimdeki karşılığı
+ * `src/instrumentation.ts` (T116) ve ikisi de aynı `src/server/config.ts`
+ * fonksiyonlarını çağırıyor — mantık tek yerde duruyor.
+ *
+ * Yerelde ikisi birden koşuyor, yani uyarılar iki kez yazılabiliyor. Bu
+ * kabul edildi: alternatifi, hangi ortamda hangi kontrolün koştuğunu
+ * bilen bir bayrak ve onun yanlış ayarlandığı gün kontrolün sessizce
+ * kaybolması.
+ */
+export default function nextConfig(phase: string): NextConfig {
+  if (phase !== PHASE_PRODUCTION_BUILD) {
+    assertServerConfig()
+    warnOptionalConfig()
+  }
+  return config
+}

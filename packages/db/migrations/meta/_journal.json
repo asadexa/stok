@@ -57,6 +57,34 @@
       "when": 1787468577881,
       "tag": "0007_barcode_archive",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1787643598096,
+      "tag": "0008_product_image_url",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1788166493865,
+      "tag": "0009_price_ledger",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1788166553865,
+      "tag": "0010_cron_tenants",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1788166613865,
+      "tag": "0011_health_alarm_job",
+      "breakpoints": true
     }
   ]
 }

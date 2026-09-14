@@ -1,4 +1,12 @@
-import { AppError, type Permission, type Role, can, roleLabel } from '@stok/shared'
+import {
+  AppError,
+  type MovementReason,
+  type Permission,
+  type Role,
+  can,
+  reasonPriceBasis,
+  roleLabel,
+} from '@stok/shared'
 
 /**
  * ============================================================================
@@ -78,7 +86,7 @@ export function actorCan(actor: Actor, permission: Permission): boolean {
  * GÖRMEMELİ. Arayüzde gizlemek yetmez: cevabın içinde giderse tarayıcı
  * ağ sekmesinde, mobilde de proxy'de görünür.
  */
-export const PRICE_FIELDS = ['purchasePrice', 'salePrice', 'unitCost'] as const
+export const PRICE_FIELDS = ['purchasePrice', 'salePrice', 'unitPrice'] as const
 
 export type PriceField = (typeof PRICE_FIELDS)[number]
 
@@ -103,6 +111,65 @@ export function redactPrices<T extends object>(actor: Actor, row: T): Omit<T, Pr
 export function redactPricesAll<T extends object>(actor: Actor, rows: T[]): Omit<T, PriceField>[] {
   if (canSeePrices(actor.role)) return rows
   return rows.map((r) => redactPrices(actor, r))
+}
+
+/**
+ * ---------------------------------------------------------------------------
+ * HAREKET SATIRINDA FİYAT: KURAL SATIR BAZINDA (T88, D7)
+ * ---------------------------------------------------------------------------
+ *
+ * `unit_price` artık iki farklı şey tutuyor: girişte ALIŞ, çıkışta SATIŞ.
+ * Sütunu topluca silmek bu yüzden yanlış cevap verir.
+ *
+ *   satış fiyatı  → ticari sır DEĞİL. Müşteri zaten biliyor, fiyatı
+ *                   çalışanın kendisi söyledi. Gizlemek, çalışanın kendi
+ *                   yazdığı satırı okuyamaması demek olurdu.
+ *   alış fiyatı   → ticari sır (tehdit S7). `OPENING` de dahil: devir bir
+ *                   alış değerlemesidir.
+ *
+ * Ayrım `reason === 'SALE'` ile değil `reasonPriceBasis(reason) === 'SALE'`
+ * ile yapılıyor. İkisi satışta aynı sonucu veriyor ama müşteri iadesinde
+ * (`RETURN_IN`) ayrışıyor: iade edilen tutar da satış fiyatıdır, müşteri
+ * onu da biliyor. Sebebe bakan bir liste burada ikinci bir yerde
+ * güncellenmeyi beklerdi; `priceBasis` tek kaynak (`reasons.ts`).
+ *
+ * ALAN SİLİNİYOR, null'a ÇEVRİLMİYOR — `redactPrices` ile aynı gerekçe:
+ * `null` "fiyat girilmemiş" demek, yokluk ise "göremezsin". Ekran ikisini
+ * ayırt edebilmeli.
+ */
+export const MOVEMENT_PRICE_FIELDS = [
+  'unitPrice',
+  'listPrice',
+  'clientListPrice',
+  'priceOverrideReason',
+  // Fiyatın tarihi ve kaynağı da fiyat bilgisidir: "5 yıl önceki faturadan"
+  // demek, alış fiyatının nereden geldiğini söylemektir (T89).
+  'priceDate',
+  'priceSource',
+] as const
+
+export type MovementPriceField = (typeof MOVEMENT_PRICE_FIELDS)[number]
+
+/** Satırın fiyatı yetkisiz role de açık mı: yalnızca satış dayanaklı olanlar. */
+export function movementPriceIsPublic(reason: string): boolean {
+  return reasonPriceBasis(reason as MovementReason) === 'SALE'
+}
+
+/**
+ * Dönüş tipi UNION: alanın varlığı artık satıra bağlı, `Omit` yalan olurdu.
+ * Çağıran `'unitPrice' in row` ile ayırt ediyor — tam da istenen davranış.
+ */
+export function redactMovementPricesAll<T extends { reason: string }>(
+  actor: Actor,
+  rows: T[],
+): (T | Omit<T, MovementPriceField>)[] {
+  if (canSeePrices(actor.role)) return rows
+  return rows.map((row) => {
+    if (movementPriceIsPublic(row.reason)) return row
+    const copy = { ...row } as Record<string, unknown>
+    for (const field of MOVEMENT_PRICE_FIELDS) delete copy[field]
+    return copy as Omit<T, MovementPriceField>
+  })
 }
 
 // ---------------------------------------------------------------------------

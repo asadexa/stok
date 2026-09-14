@@ -9,9 +9,9 @@ import {
   testAppDb,
 } from '@stok/db/testing'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { checkStockInvariant, createMovement, getStockQty } from './movements.js'
-import type { Actor } from './authz.js'
-import { TEST_DB_NAME } from './test/db-name.js'
+import { checkStockInvariant, createMovement, getStockQty } from './movements'
+import type { Actor } from './authz'
+import { TEST_DB_NAME } from './test/db-name'
 
 /**
  * T9 doğrulaması: `createMovement()` tek yazma kapısının HER hata yolu.
@@ -118,17 +118,17 @@ describe('createMovement - mutlu yol', () => {
         reason: 'PURCHASE',
         note: 'Cuma sevkiyatı',
         locationId: tenant.locationId,
-        unitCost: 12.5,
+        unitPrice: 12.5,
       }),
     )
 
-    const [row] = await admin.db.execute<{ note: string; location_id: string; unit_cost: string }>(
-      // biome-ignore lint: test doğrulaması, ham SQL en okunaklısı
-      `SELECT note, location_id, unit_cost FROM stock_movements WHERE id = '${res.movementId}'`,
+    const [row] = await admin.db.execute<{ note: string; location_id: string; unit_price: string }>(
+      // Test doğrulaması: ham SQL en okunaklısı.
+      `SELECT note, location_id, unit_price FROM stock_movements WHERE id = '${res.movementId}'`,
     )
     expect(row?.note).toBe('Cuma sevkiyatı')
     expect(row?.location_id).toBe(tenant.locationId)
-    expect(row?.unit_cost).toBe('12.50')
+    expect(row?.unit_price).toBe('12.50')
   })
 })
 
@@ -373,7 +373,10 @@ describe('createMovement - ilk hareket', () => {
         idempotencyKey: randomUUID(),
         barcode: fresh.products['F-1']!.barcode,
         qty: 3,
-        reason: 'OPENING',
+        // `OPENING` değil: T89 devirde birim fiyat zorunlu kıldı ve bu test
+        // "projeksiyon satırı yokken ilk hareket yazılabiliyor mu" diye
+        // soruyor, fiyat kuralını değil.
+        reason: 'PURCHASE',
         clientCreatedAt: new Date().toISOString(),
       },
       { db: app.db },
