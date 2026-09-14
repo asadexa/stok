@@ -77,7 +77,7 @@ jobs:
 
     steps:
       # v5.1.0 — SHA sabit, etiket taşınabilir (T98, T103)
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
       # v5.0.0 — anotasyonlu etiketin altındaki COMMIT SHA (T98, T103)
       - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320
@@ -182,7 +182,7 @@ jobs:
 
     steps:
       # v5.1.0 — SHA sabit, etiket taşınabilir (T98, T103)
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
       # v5.0.0 — anotasyonlu etiketin altındaki COMMIT SHA (T98, T103)
       - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320
@@ -268,7 +268,7 @@ jobs:
 
     steps:
       # v5.1.0 — SHA sabit, etiket taşınabilir (T98, T103)
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
       # v5.0.0 — anotasyonlu etiketin altındaki COMMIT SHA (T98, T103)
       - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320
