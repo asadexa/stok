@@ -19,7 +19,7 @@
     "drizzle-orm": "^0.45.2",
     "exceljs": "^4.4.0",
     "jose": "^6.2.9",
-    "nodemailer": "^9.0.5",
+    "nodemailer": "^10.0.7",
     "postgres": "^3.4.5",
     "zod": "^3.24.1"
   },
