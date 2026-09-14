@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url'
 import { config as loadRootEnv } from 'dotenv'
 import { PHASE_PRODUCTION_BUILD } from 'next/constants.js'
 import type { NextConfig } from 'next'
+import { assertServerConfig, warnOptionalConfig } from './src/server/config'
 
 /**
  * KÖK `.env` DOSYASINI BURADA YÜKLÜYORUZ.
@@ -30,88 +31,6 @@ import type { NextConfig } from 'next'
  * her zaman kazanıyor.
  */
 loadRootEnv({ path: join(dirname(fileURLToPath(import.meta.url)), '../../.env') })
-
-/**
- * SUNUCU EKSİK YAPILANDIRMAYLA AÇILMIYOR.
- *
- * Bunlar olmadan uygulama derleniyor, açılıyor ve İLK GİRİŞ DENEMESİNDE
- * düşüyor. Kullanıcı ekranda "SERVER_ERROR" görüyor: ne eksik olduğunu
- * söylemeyen, kurulum hatasını çalışma hatası gibi gösteren bir mesaj.
- * Kullanıcı testinde bu iki kez oldu — önce DATABASE_URL, sonra
- * AUTH_SECRET.
- *
- * Doğru an bu: sorun kurulumda çıktı, kurulumda söylenmeli. Ve operatörün
- * konsolunda söylenmeli, giriş ekranında değil — kimliği doğrulanmamış bir
- * sayfaya sunucunun neyi eksik olduğunu yazmak gereksiz bilgi verir.
- *
- * HEPSİ BİRDEN listeleniyor. Tek tek söylemek, kullanıcıyı birini düzeltip
- * diğerini keşfetme turuna sokardı.
- */
-function assertServerConfig(): void {
-  const problems: string[] = []
-
-  const url = process.env.DATABASE_URL
-  if (!url) {
-    problems.push('DATABASE_URL tanımlı değil.')
-  } else {
-    try {
-      new URL(url)
-    } catch {
-      problems.push('DATABASE_URL geçerli bir bağlantı adresi değil.')
-    }
-  }
-
-  // 32 karakter sınırı auth.ts'teki `signingKey()` ile aynı; orası da
-  // varsayılana düşmüyor. İki yerde kontrol var çünkü mobil/cron yolları
-  // bu dosyadan geçmiyor.
-  const secret = process.env.AUTH_SECRET
-  if (!secret) problems.push('AUTH_SECRET tanımlı değil.')
-  else if (secret.length < 32) {
-    problems.push(`AUTH_SECRET ${secret.length} karakter, en az 32 olmalı.`)
-  }
-
-  if (problems.length > 0) {
-    throw new Error(
-      [
-        '',
-        'Stok Takip açılamadı — yapılandırma eksik:',
-        '',
-        ...problems.map((p) => `  • ${p}`),
-        '',
-        '  Kök dizinde .env dosyası olmalı. Yoksa:',
-        '      .env.example dosyasını .env adıyla kopyalayın',
-        '  Örnek dosyadaki değerler yerel geliştirme için hazır gelir.',
-        '  Kendi anahtarınızı üretmek için: openssl rand -base64 32',
-        '',
-      ].join('\n'),
-    )
-  }
-
-  // APP_URL bir hata değil ama sessiz kalırsa teşhisi en zor arızayı
-  // üretiyor: çerez `secure` bayrağı buradan türüyor ve APP_URL yoksa
-  // AÇIK kalıyor (fail closed). LAN'da düz HTTP ile servis edilen bir
-  // kurulumda tarayıcı o çerezi saklamıyor ve giriş ekranı hiçbir hata
-  // göstermeden kendini tekrar ediyor. Bkz. src/server/session.ts.
-  // CRON_SECRET yoksa uygulama çalışır ama gün sonu raporu ve kritik stok
-  // taraması HİÇ ÇIKMAZ — kimse de fark etmez (G4'ün tam tanımı). Hata
-  // değil çünkü zamanlayıcısı olmayan bir kurulum (tek depo, elle bakan
-  // yönetici) geçerli; ama sessiz de kalmamalı.
-  if (!process.env.CRON_SECRET) {
-    console.warn(
-      'UYARI: CRON_SECRET tanımlı değil. POST /api/cron kapalı kalacak,\n' +
-        '       yani gün sonu raporu ve kritik stok taraması hiç çalışmaz.\n' +
-        '       Üret: openssl rand -base64 32',
-    )
-  }
-
-  if (!process.env.APP_URL) {
-    console.warn(
-      'UYARI: APP_URL tanımlı değil. Oturum çerezi Secure olarak işaretlenecek,\n' +
-        '       yani uygulamaya düz HTTP ile (örn. http://192.168.1.20:3000) erişilirse\n' +
-        '       giriş sessizce başarısız olur. .env içinde APP_URL ayarlayın.',
-    )
-  }
-}
 
 const config: NextConfig = {
   // Monorepo paketleri TypeScript kaynağı olarak yayınlanıyor (derlenmiş
@@ -153,10 +72,22 @@ const config: NextConfig = {
 /**
  * Yapılandırma kontrolü DERLEMEDE koşmuyor: `next build` hiçbir yere
  * bağlanmıyor ve gizli anahtarları olmayan bir derleme ortamında (imaj
- * kurma adımı gibi) çalışabilmeli. Kontrol sunucunun açıldığı anda,
- * yani `next dev` ve `next start` fazlarında yapılıyor.
+ * kurma adımı gibi) çalışabilmeli.
+ *
+ * BURASI TEK YER DEĞİL. Bu dosya yalnızca `next dev` / `next start`
+ * açılışında yükleniyor; Vercel'de hiç yüklenmiyor. Üretimdeki karşılığı
+ * `src/instrumentation.ts` (T116) ve ikisi de aynı `src/server/config.ts`
+ * fonksiyonlarını çağırıyor — mantık tek yerde duruyor.
+ *
+ * Yerelde ikisi birden koşuyor, yani uyarılar iki kez yazılabiliyor. Bu
+ * kabul edildi: alternatifi, hangi ortamda hangi kontrolün koştuğunu
+ * bilen bir bayrak ve onun yanlış ayarlandığı gün kontrolün sessizce
+ * kaybolması.
  */
 export default function nextConfig(phase: string): NextConfig {
-  if (phase !== PHASE_PRODUCTION_BUILD) assertServerConfig()
+  if (phase !== PHASE_PRODUCTION_BUILD) {
+    assertServerConfig()
+    warnOptionalConfig()
+  }
   return config
 }

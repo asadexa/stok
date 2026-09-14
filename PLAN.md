@@ -2765,7 +2765,7 @@ kullanıyor, cron ucu `runtime = 'nodejs'` + `dynamic = 'force-dynamic'`.
     kararı T42'de verilecek.
   - Kaynak: T42 üretime hazırlık denetimi
 
-- [ ] **T116 (P2, human: ~1sa / CC: ~20dk)** - deploy - **`assertServerConfig()` Vercel'de HİÇ koşmuyor**
+- [x] **T116 (P2, human: ~1sa / CC: ~20dk)** - deploy - **`assertServerConfig()` Vercel'de HİÇ koşmuyor**
   - `next.config.ts:159` kontrolü `phase !== PHASE_PRODUCTION_BUILD`
     koşuluna bağlıyor, yani yalnızca `next dev` ve `next start` açılışında.
     **Vercel'de `next start` yok:** her istek serverless fonksiyonu doğrudan
@@ -2781,6 +2781,23 @@ kullanıyor, cron ucu `runtime = 'nodejs'` + `dynamic = 'force-dynamic'`.
     `src/server/` altında bir modül yükleme yan etkisi olarak).
   - Doğrula: `AUTH_SECRET`'i sil, uygulamanın İLK İSTEKTE ne söylediğine
     bak — "SERVER_ERROR" değil, ne eksik olduğunu söyleyen bir kayıt.
+  - **Yapıldı:** mantık `src/server/config.ts`'e TAŞINDI (kopyalanmadı) ve
+    iki yerden çağrılıyor: `next.config.ts` (yerel `next dev`/`next start`)
+    ve `src/instrumentation.ts` (sunucu örneği başlarken — Vercel dahil).
+    Next'in `register()` kancası tam bu iş için var.
+  - **Gerçek derlemede izole edilerek doğrulandı.** `next.config.ts`
+    kontrolü geçici olarak kapatıldı, `AUTH_SECRET=cok-kisa` ile
+    `next start` koşuldu: tam Türkçe mesaj ("AUTH_SECRET 8 karakter, en az
+    32 olmalı") operatörün logunda çıktı ve istek 500 aldı. Yani kancayı
+    çalıştıran şey gerçekten instrumentation, `next.config.ts` değil.
+  - **YOL BOYUNCA İKİNCİ BİR AÇIK BULUNDU ve kapatıldı.** Eski kontrol
+    `new URL(url)` fırlatıyor mu diye bakıyordu; `new URL('localhost:5433/stok')`
+    FIRLATMIYOR çünkü `localhost:` geçerli bir şema sayılıyor. `merhaba:dunya`
+    da geçiyordu. Yani mesaj "geçerli bir bağlantı adresi değil" derken
+    kontrol yalnızca iki nokta üst üste arıyordu. Artık şema
+    `postgres:`/`postgresql:` olmak zorunda — gerçek hata biçimleri tam
+    olarak bunlar: öneki unutulmuş `host:port/db` ve panelden kopyalanmış
+    `https://` adresi.
   - Kaynak: T42 üretime hazırlık denetimi
 
 - [ ] **T117 (P2, human: ~1sa / CC: ~20dk)** - deploy - **Serverless'ta bağlantı havuzu ayarları yerel varsayımla yazılmış**
