@@ -24,6 +24,34 @@
  */
 
 /**
+ * ============================================================================
+ * T118 — YÜKLEME BOYUTU SINIRI, TEK KAYNAK
+ *
+ * `bodySizeLimit` 5 MB'tı. VERCEL FONKSİYONLARININ İSTEK GÖVDESİ SINIRI
+ * 4,5 MB ve platform seviyesinde uygulanıyor: istek uygulamaya hiç
+ * ulaşmadan reddediliyor. Yani 5 MB'lık ayar ulaşılamaz bir sözdü.
+ *
+ * Sınırı 4,5'in altına çekmek TEK BAŞINA YETMEZDİ. Uygulama kodunda
+ * boyut kontrolü yoktu; büyük bir dosya seçen depo çalışanı Türkçe bir
+ * hata değil, platformun ham 413'ünü görürdü — ekranda "bir şeyler ters
+ * gitti" bile yazmayan, sebebi söylemeyen bir arıza.
+ *
+ * Bu yüzden değer BURADA duruyor ve iki yer birden okuyor:
+ *   next.config.ts                      → Next'in reddettiği sınır
+ *   (panel)/urunler/aktar/actions.ts    → kullanıcıya söylenen sınır
+ *
+ * İkisi ayrı yazılsaydı biri değiştirilip diğeri unutulur ve kullanıcıya
+ * yanlış sayı söylenirdi.
+ *
+ * 4 MB seçildi, 4,4 değil: platform sınırına yapışmak, çok parçalı form
+ * kodlamasının eklediği ek yük yüzünden "bizim kontrolümüz geçirdi ama
+ * Vercel reddetti" aralığı bırakırdı.
+ * ============================================================================
+ */
+export const MAX_UPLOAD_BYTES = 4 * 1024 * 1024
+export const MAX_UPLOAD_LABEL = '4 MB'
+
+/**
  * Eksik olan HER ŞEYİ birden listeliyor. Tek tek söylemek, kullanıcıyı
  * birini düzeltip diğerini keşfetme turuna sokardı.
  */

@@ -2852,7 +2852,7 @@ kullanıyor, cron ucu `runtime = 'nodejs'` + `dynamic = 'force-dynamic'`.
     üretir ve sürüm yükseltmesinde sessizce anlamsızlaşırdı.
   - Kaynak: T42 üretime hazırlık denetimi
 
-- [ ] **T118 (P3, human: ~30dk / CC: ~10dk)** - deploy - **`bodySizeLimit: '5mb'` Vercel'in 4,5 MB sınırının ÜSTÜNDE**
+- [x] **T118 (P3, human: ~30dk / CC: ~10dk)** - deploy - **`bodySizeLimit: '5mb'` Vercel'in 4,5 MB sınırının ÜSTÜNDE**
   - `next.config.ts:122` sunucu eylemleri için 5 MB'a izin veriyor. Vercel
     fonksiyonlarının istek gövdesi sınırı 4,5 MB ve platform seviyesinde,
     yani uygulamanın haberi olmadan reddediyor.
@@ -2862,6 +2862,20 @@ kullanıyor, cron ucu `runtime = 'nodejs'` + `dynamic = 'force-dynamic'`.
   - Sınırı 4,5 MB'ın altına çekmek TEK BAŞINA yetmez: kullanıcı yine
     sebebini bilmeden reddedilir. Yükleme formunda boyut kontrolü ve
     "dosya çok büyük, N satırlık parçalara bölün" mesajı gerekiyor.
+  - **Yapıldı:** `MAX_UPLOAD_BYTES` (4 MB) `src/server/config.ts`'te TEK
+    KAYNAK; `next.config.ts` ve `aktar/actions.ts` ikisi de onu okuyor.
+    Ayrı yazılsalardı biri değiştirilip diğeri unutulur, kullanıcıya yanlış
+    sayı söylenirdi.
+  - **4 MB seçildi, 4,4 değil:** platform sınırına yapışmak, çok parçalı
+    form kodlamasının ek yükü yüzünden "bizim kontrol geçirdi ama Vercel
+    reddetti" aralığı bırakırdı.
+  - **Mesaj ne yapılacağını söylüyor:** boyut, izin verilen sınır ve
+    "parçalara bölüp sırayla aktarın". Test üçünü birden arıyor.
+  - **İki mutasyonla doğrulandı:** (a) boyut kontrolü hiç tetiklenmeyecek
+    hale getirilince "çok büyük" testi kırmızı, (b) sınır 5 MB'a geri
+    çekilince platform tavanı testi kırmızı.
+  - **Ters yön de sınandı:** sınır altındaki dosya çözümleyiciye ULAŞIYOR.
+    Her dosyayı reddeden bir kontrol tek yönlü testten geçerdi.
   - Kaynak: T42 üretime hazırlık denetimi
 
 - [ ] **T119 (P1, human: ~2sa / CC: ~40dk)** - deploy - **Üretim runbook'u yok: rol kurulumu, migration ve geri alma yazılı değil**

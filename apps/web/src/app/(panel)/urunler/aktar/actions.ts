@@ -11,6 +11,7 @@ import {
   previewImport,
 } from '@stok/core'
 import { appDb } from '@stok/db'
+import { MAX_UPLOAD_BYTES, MAX_UPLOAD_LABEL } from '@/server/config'
 import { currentActor } from '@/server/session'
 
 /**
@@ -56,6 +57,23 @@ export async function analyzeAction(
   const upload = form.get('dosya')
   if (!(upload instanceof File) || upload.size === 0) {
     return { error: 'Önce bir dosya seçin.' }
+  }
+
+  /**
+   * BOYUT KONTROLÜ BURADA, ÇÖZÜMLEMEDEN ÖNCE (T118).
+   *
+   * Yapılmasaydı sınırı aşan dosya Vercel'in ham 413'üne takılırdı:
+   * ekranda sebebi söylemeyen bir arıza. Kullanıcıya NE YAPACAĞI
+   * söyleniyor — dosyayı bölmek, bu ekranda işe yarayan tek çözüm.
+   *
+   * Sunucu tarafında: istemciye güvenilmiyor, `upload.size` gövdeden
+   * okunan gerçek boyut.
+   */
+  if (upload.size > MAX_UPLOAD_BYTES) {
+    const mb = (upload.size / (1024 * 1024)).toFixed(1)
+    return {
+      error: `Dosya çok büyük (${mb} MB). En fazla ${MAX_UPLOAD_LABEL} yükleyebilirsiniz — dosyayı daha küçük parçalara bölüp sırayla aktarın.`,
+    }
   }
 
   try {

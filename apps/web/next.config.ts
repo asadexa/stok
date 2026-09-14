@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url'
 import { config as loadRootEnv } from 'dotenv'
 import { PHASE_PRODUCTION_BUILD } from 'next/constants.js'
 import type { NextConfig } from 'next'
-import { assertServerConfig, warnOptionalConfig } from './src/server/config'
+import { MAX_UPLOAD_BYTES, assertServerConfig, warnOptionalConfig } from './src/server/config'
 
 /**
  * KÖK `.env` DOSYASINI BURADA YÜKLÜYORUZ.
@@ -38,7 +38,13 @@ const config: NextConfig = {
   transpilePackages: ['@stok/shared', '@stok/db', '@stok/core'],
   experimental: {
     // postgres.js ve exceljs sunucu tarafı; istemci paketine sızmasınlar.
-    serverActions: { bodySizeLimit: '5mb' },
+    //
+    // SINIR `src/server/config.ts`'ten geliyor (T118). Eskiden burada '5mb'
+    // yazıyordu; Vercel fonksiyonlarının istek gövdesi sınırı 4,5 MB ve
+    // platform seviyesinde uygulanıyor, yani o ayar ulaşılamaz bir sözdü.
+    // Aynı sabiti içe aktarma eylemi de okuyor: kullanıcıya söylenen sayı
+    // ile reddedilen sayı ayrı yazılsaydı biri unutulurdu.
+    serverActions: { bodySizeLimit: MAX_UPLOAD_BYTES },
   },
   /**
    * Next 16'da Turbopack VARSAYILAN ve `webpack()` kancası artık
