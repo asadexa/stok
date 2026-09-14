@@ -83,7 +83,7 @@ jobs:
       - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320
 
       # v5.0.0 (T98, T103)
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           # Sürüm .nvmrc'de, iş akışında değil: geliştirme makinesiyle
           # CI aynı sürümde koşsun ve tek yerden değişsin.
@@ -188,7 +188,7 @@ jobs:
       - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320
 
       # v5.0.0 (T98, T103)
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           # Sürüm .nvmrc'de, iş akışında değil: geliştirme makinesiyle
           # CI aynı sürümde koşsun ve tek yerden değişsin.
@@ -274,7 +274,7 @@ jobs:
       - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320
 
       # v5.0.0 (T98, T103)
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version-file: .nvmrc
           cache: pnpm
