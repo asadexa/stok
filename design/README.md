@@ -21,7 +21,8 @@ işaretlendi. Kaynak dosyalar:
 - `apps/web/src/app/globals.css` — 28 token × 2 tema, yarıçap ölçeği
 - `apps/web/src/app/layout.tsx` — yazı tipleri (`next/font`, `latin-ext`)
 - `apps/web/src/components/` — bileşenlerin gerçek ölçüleri
-- `PLAN.md` Bölüm 11 ve Faz 9 — bilgi hiyerarşisi, 3 dokunuş kuralı
+- `PROJECT_BRAIN.md` §13: tasarım ilkeleri; `DECISIONS.md` `UX-*`: açık tasarım
+  kararları (tarihsel kaynak: `docs/archive/PLAN-2026-09.md` Bölüm 11 ve Faz 9)
 
 ## Statik ekran kopyası neden yok
 
@@ -64,6 +65,10 @@ ve her tohumlamada baştan üretiliyor.
 
 ## Tasarım incelemesi kayıtları
 
-Kararların gerekçeleri ve mockup'lar PLAN.md Faz 9'da (TD1–TD6) ve ayrı
-bir belgede:
+Tasarım ilkeleri `PROJECT_BRAIN.md` §13'te. Tarihsel gerekçeler
+`docs/archive/PLAN-2026-09.md` Faz 9'da (TD1–TD6). Mockup'lar önceki
+geliştiricinin hesabındaki bir artifact'te; erişim devri TODOS T120:
 <https://claude.ai/code/artifact/5579f41a-2794-4146-862b-114c9469c7a8>
+
+Açık tasarım kararı: dokunma hedefi (`UX-04`). Bu tuval kademeli kuralı
+(48 / 52 / 64 px) gösteriyor; karar verilene kadar bağlayıcı değil.

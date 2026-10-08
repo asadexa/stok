@@ -1,35 +1,53 @@
 # Stok Takip
 
-Küçük ve orta ölçekli depolar için barkod tabanlı stok takip sistemi.
-Türkçe arayüz, çok kiracılı (multi-tenant), append-only stok defteri.
+Küçük ve orta ölçekli depolar ve perakende işletmeler için barkod tabanlı stok
+takip sistemi. Türkçe arayüz, çok kiracılı (multi-tenant), değiştirilemez
+(append-only) stok defteri: stok bir sayı olarak tutulmaz, hareketlerin toplamıdır.
 
-Ürün kararları ve gerekçeleri **[PLAN.md](PLAN.md)** içinde; bu dosya
-sadece "nasıl çalıştırırım" sorusunu cevaplıyor.
+## Temel özellikler
 
----
+- **Giriş / çıkış**: barkod (USB okuyucu ya da elle) → ürün ve mevcut stok →
+  miktar + sebep; koli barkodunda çarpan uygulanır
+- **Kasa açığı kontrolü**: liste fiyatından sapan satışta sebep zorunlu; fark gün
+  sonu raporunda kullanıcı bazında
+- **Stok tablosu**: Türkçe arama (`ısıtıcı` → `Isıtıcı Şerit`), kategori / kritik / arşiv filtreleri
+- **Hareket logu**: kim, ne zaman, neden; çalışan yalnız kendi kayıtlarını görür
+- **Ürün yönetimi**: çoklu barkod, arşivleme, Excel/CSV toplu aktarma (önizleme + hata raporu)
+- **Raporlar**: stok ve hareket Excel'i; büyük raporlar e-postayla
+- **Kullanıcılar ve roller**: yönetici / çalışan; alış fiyatı çalışana gösterilmez
+- **Sistem sağlığı**: defter tutarlılığı, iş kuyruğu, hareketsizlik
+- **Kiracı izolasyonu**: PostgreSQL Row Level Security ile veritabanı seviyesinde
 
-## Demo
+Mobil uygulama ve dış REST API henüz yok.
 
-Tek komut:
+## Teknoloji
+
+pnpm monorepo · TypeScript · Next.js 16 (App Router, Turbopack) · React 19 ·
+Tailwind 4 · PostgreSQL 17 + RLS · Drizzle ORM · zod · jose (JWT) · exceljs ·
+nodemailer · Vitest (gerçek PostgreSQL ile) · Playwright · Biome.
+
+```
+packages/shared   sözleşme: zod şemaları, sebep/rol/birim/fiyat sözlükleri, hata kodları
+packages/db       şema, migration'lar, RLS, bağlantılar, seed, test altyapısı
+packages/core     iş mantığı: tek yazma kapısı, auth, yetki, import/export, cron
+apps/web          Next.js arayüzü
+```
+
+## Kurulum ve çalıştırma
+
+Gerekenler: Node 22 (`.nvmrc`; 22–24 desteklenir), pnpm 11, PostgreSQL 17.
+Docker zorunlu değil.
+
+**Tek komut (demo):**
 
 ```bash
 pnpm demo
 ```
 
-Veritabanını ayağa kaldırır, şemayı uygular, örnek veriyi yükler ve
-`http://localhost:3000` adresinde sunucuyu başlatır. Her adımda ne yaptığını
-yazar; bir şey eksikse ne yapmanız gerektiğini söyler.
-
-Windows, macOS ve Linux'ta aynı komut. Windows'ta CMD veya PowerShell yeter —
-Git Bash veya WSL gerekmiyor.
-
-Veritabanını sıfırlayıp örnek veriyi yeniden yüklemek için:
-
-```bash
-pnpm demo --seed
-```
-
-### Giriş bilgileri
+Veritabanını hazırlar (Docker varsa kaldırır; 5433'te kendi PostgreSQL'iniz
+varsa onu kullanır), şemayı uygular, örnek veriyi yükler ve sunucuyu
+`http://localhost:3000`'de açar. Windows (CMD/PowerShell), macOS ve Linux'ta
+aynı komut. Veriyi sıfırlayıp yeniden yüklemek için `pnpm demo --seed`.
 
 | Rol | E-posta | Parola |
 |---|---|---|
@@ -37,129 +55,69 @@ pnpm demo --seed
 | Çalışan | `ahmet@yilmazkirtasiye.example` | `calisan123` |
 | Başka işletme | `admin@demir.example` | `admin123` |
 
-Örnek veri: 2 işletme, 240 ürün, ~5000 stok hareketi.
-
-### Neyi deneyebilirsiniz
-
-- **Giriş/Çıkış** — barkod okutup mal kabulü veya satış girin; ürün adı ve
-  mevcut stok onaydan önce görünür, kayıttan sonra "439 → 446" gösterilir
-- **Panel** — kritik stok uyarısı, günün giriş/çıkış özeti, son hareketler
-- **Stok tablosu** — Türkçe arama (`ısıtıcı` yazın, `Isıtıcı Şerit` gelsin),
-  kategori/kritik/arşiv filtreleri, sayfalama
-- **Ürün yönetimi** — ekleme, düzenleme, arşivleme, çoklu barkod, koli çarpanı
-- **Toplu aktarma** — Excel/CSV yükleyip önizleyip onaylama, hata raporu
-- **Excel export** — stok ve hareket raporu, ekrandaki filtreyle birebir
-- **Hareket logu** — kullanıcı/tarih/ürün/sebep filtreleri
-- **Kullanıcı yönetimi** — ekleme, rol verme, pasifleştirme, parola sıfırlama
-- **Sistem sağlığı** — defter tutarlılığı, kuyruk durumu, hareketsizlik
-
-Rol farkını görmek için çalışan hesabıyla girin: fiyatlar kaybolur, ürün
-düzenleme ve kullanıcı yönetimi ekranları görünmez, hareket logunda yalnızca
-kendi kayıtları listelenir.
-
-İşletme izolasyonunu görmek için `admin@demir.example` ile girin: diğer
-işletmenin tek bir ürününü bile göremezsiniz (veritabanı seviyesinde RLS).
-
-### Neyi DENEYEMEZSİNİZ — bilerek
-
-- **Barkod okuyucu ile okutamazsınız** — kamera mobilde (Faz 5). Web'deki
-  Giriş/Çıkış ekranı barkodu elle yazmayı veya USB okuyucu (klavye
-  emülasyonu) kullanmayı bekliyor.
-- **Mobil uygulama yok.** Barkod okutma, offline kuyruk, PIN ile hızlı
-  kullanıcı geçişi — hepsi Faz 5.
-- **Gün sonu raporu kendiliğinden çıkmaz.** Kod hazır (T34) ama demoda
-  zamanlayıcı yok. Elle tetiklemek için `.env` içine `CRON_SECRET` yazın
-  (`openssl rand -base64 32`) ve şunu çalıştırın:
-
-  ```bash
-  curl -X POST -H "Authorization: Bearer $CRON_SECRET" \
-       http://localhost:3000/api/cron
-  ```
-
-  Aynı tur kuyruktaki export işlerini de işler ve stok invariant'ını
-  denetler. Turun cevabı JSON; invariant kırıksa ya da bir işin deneme
-  hakkı bittiyse HTTP 500 döner.
-- **E-posta gönderilmiyor.** SMTP ayarlanmadı, yani yukarıdaki tur çalışır
-  ama rapor teslim edilemez ve iş "başarısız" olarak Sistem Sağlığı
-  kartında görünür — bu bilerek: gönderilemeyen rapor sessiz kalmamalı.
-
----
-
-## Üretime alma
-
-Vercel + Supabase adımları, sırası ve gerekçeleriyle:
-**[`docs/uretim-runbook.md`](docs/uretim-runbook.md)**
-
-Deneme yanılmayla bulunacak bir şey değil — `stok_app` rolü kurulmadan
-uygulama bağlanamaz, ve telaşla `postgres` rolüyle bağlanmak tenant
-izolasyonunu SESSİZCE kapatır.
-
-## Geliştirme
-
-`.env` yoksa önce `.env.example` dosyasını `.env` adıyla kopyalayın
-(`pnpm demo` bunu kendisi yapar).
+**Adım adım:**
 
 ```bash
 pnpm install
-docker compose up -d              # veya 5433 portunda kendi Postgres'iniz
-pnpm --filter @stok/db run init   # pg_trgm eklentisi + stok_app rolü
+docker compose up -d                # veya 5433 portunda kendi PostgreSQL'iniz
+pnpm --filter @stok/db run init     # pg_trgm eklentisi + stok_app rolü (idempotent)
 pnpm --filter @stok/db run migrate
-pnpm --filter @stok/db run seed
+pnpm --filter @stok/db run seed     # DİKKAT: bütün veriyi siler, yalnız yerel geliştirme
 pnpm --filter @stok/web run dev
 ```
 
-**Docker zorunlu değil.** Kendi PostgreSQL kurulumunuz 5433 portunda
-çalışıyorsa `docker compose up -d` adımını atlayın; `init` adımı eklentiyi
-ve rolü oraya da uygular. Docker kullanıyorsanız bu adım zaten uygulanmış
-olanı tekrar uygular — üç ifade de idempotent, zararı yok.
+`.env` yoksa `.env.example` dosyasını `.env` adıyla kopyalayın (`pnpm demo` bunu
+kendisi yapar). Sunucu, `DATABASE_URL` veya `AUTH_SECRET` eksik ya da geçersizse
+açılmaz ve neyin eksik olduğunu konsola yazar.
 
-Sunucu, `DATABASE_URL` veya `AUTH_SECRET` eksikse **açılmıyor** ve neyin
-eksik olduğunu konsola yazıyor. Bunlar olmadan uygulama açılıp ilk giriş
-denemesinde düşerdi ve ekranda sadece "SERVER_ERROR" görünürdü.
+`--filter` ile çağırırken **`run` kelimesi zorunlu**: onsuz pnpm, Windows'ta
+`'migrate' is not recognized` hatası verir.
 
-`--filter` ile çağırırken **`run` kelimesi zorunlu**: pnpm onsuz ilk kelimeyi
-script değil çalıştırılabilir sayıyor ve Windows'ta
-`'migrate' is not recognized` hatası veriyor.
+**Gün sonu turunu elle tetiklemek** (`.env`'de `CRON_SECRET` tanımlı olmalı):
+
+```bash
+curl -X POST -H "Authorization: Bearer <CRON_SECRET>" http://localhost:3000/api/cron
+```
+
+## Test ve kalite kapıları
 
 | Komut | Ne yapar |
 |---|---|
-| `pnpm db:up` | Veritabanını açar ve **hazır olana kadar bekler** |
-| `pnpm db:reset` | Veriyi silip veritabanını sıfırdan kurar |
-| `pnpm test` | Tüm testler (gerçek PostgreSQL gerekir) |
+| `pnpm lint` | Biome |
 | `pnpm typecheck` | Dört paketin tip kontrolü |
-| `pnpm --filter @stok/db run generate` | Şema değişikliğinden migration üretir |
+| `pnpm test` | Birim + entegrasyon. Gerçek PostgreSQL gerekir; her paket kendi `stok_test_*` veritabanını sıfırdan kurar |
+| `pnpm --filter @stok/db exec drizzle-kit generate` | Şema ile migration'lar senkron mu ("No schema changes" beklenir) |
 | `pnpm --filter @stok/web run build` | Üretim derlemesi |
+| `pnpm --filter @stok/web run test:e2e` | Playwright; önce build gerekir, port 3000 boş olmalı, demo veritabanını kullanır |
+| `pnpm db:up` / `pnpm db:reset` | Docker veritabanını aç ve hazır olana kadar bekle / sıfırla |
 
-### Paketler
+CI (GitHub Actions): lint, typecheck, gerçek PostgreSQL ile testler, migration
+drift, derleme, temiz checkout'tan `pnpm demo` + Playwright, ve Windows'ta
+lint/typecheck/derleme.
 
-```
-packages/shared   Tek kaynak: roller, sebep kodları, birimler, hata sözleşmesi,
-                  zod şemaları. DB CHECK constraint metinleri buradan ÜRETİLİR.
-packages/db       Drizzle şeması, migration'lar, RLS, bağlantı havuzu, test fixture'ı
-packages/core     İş mantığı: tek yazma kapısı, auth, yetki, export, import, sağlık
-apps/web          Next.js 15 App Router arayüzü
-```
+## Ortam değişkenleri
 
-### Bilmeniz gereken üç kural
+Tam liste ve açıklamalar `.env.example`'da.
 
-1. **Stok defteri append-only.** `stock_movements` üzerinde `UPDATE`/`DELETE`
-   yok — veritabanı seviyesinde engelli. Düzeltme, ters kayıt yazarak yapılır.
-2. **`current_stock` türetilmiş veri.** Gerçeğin kaynağı defter; projeksiyon
-   trigger ile güncelleniyor. `SUM(delta) == qty` invariant'ı testlerle ve
-   Sistem Sağlığı sayfasıyla sürekli doğrulanıyor.
-3. **Her sorgu `withTenant()` içinden geçer.** RLS `app.tenant_id` ayarına
-   bakıyor; ayarı kurmadan yapılan sorgu sıfır satır döndürür.
+| Değişken | Zorunlu | Açıklama |
+|---|---|---|
+| `DATABASE_URL` | evet | Uygulama bağlantısı, `stok_app` rolü (RLS uygulanır) |
+| `MIGRATION_DATABASE_URL` | migration/seed için | Tablo sahibi (RLS'i atlar). **Uygulama çalışma ortamına konmaz** |
+| `AUTH_SECRET` | evet | JWT imza anahtarı, en az 32 karakter (`openssl rand -base64 32`). Üretimde örnek değer kullanılmaz |
+| `APP_URL` | önerilir | Oturum çerezinin `Secure` bayrağı bu adresin şemasından türer; üretimde `https://` |
+| `CRON_SECRET` | cron için | En az 32 karakter; tanımsızsa `/api/cron` kapalı |
+| `SMTP_URL`, `REPORT_FROM_EMAIL` | e-posta için | Rapor ve alarm e-postaları |
+| `DB_POOL_MAX`, `DB_IDLE_TIMEOUT` | serverless'ta | Havuz boyutu ve boşta kapanma süresi |
 
-### Ortam değişkenleri
+`NODE_ENV` bilerek tanımlanmaz: Next kendisi ayarlar.
 
-`.env.example` her satırın neden orada olduğunu açıklıyor. İki tanesi
-kolayca yanlış anlaşılıyor:
+## Dokümantasyon
 
-- **`DATABASE_URL` ile `MIGRATION_DATABASE_URL` farklı roller.** İlki RLS'e
-  tabi uygulama rolü, ikincisi tabloların sahibi. Uygulama kodundan asla
-  ikincisi kullanılmaz.
-- **`APP_URL` sadece bağlantı üretmiyor.** Oturum çerezinin `Secure` bayrağı
-  bu adresin şemasından türüyor. Üretimde `https://` olmalı.
-
-`NODE_ENV` bilerek tanımlı değil: Next kendisi ayarlıyor ve dışarıdan
-verilen değer `next build`'i bozuyor.
+- [`PROJECT_BRAIN.md`](PROJECT_BRAIN.md): amaç, mimari, veri modeli, invariant'lar
+- [`CURRENT_STATE.md`](CURRENT_STATE.md): güncel durum
+- [`DECISIONS.md`](DECISIONS.md): geçerli kararlar · [`docs/ADR/`](docs/ADR/): karar gerekçeleri
+- [`docs/SECURITY_MODEL.md`](docs/SECURITY_MODEL.md): tehdit modeli ve korumalar
+- [`docs/designs/`](docs/designs/): henüz uygulanmamış özelliklerin aktif tasarımları
+- [`TODOS.md`](TODOS.md): backlog
+- [`docs/uretim-runbook.md`](docs/uretim-runbook.md): üretime alma (Vercel + Supabase)
+- [`docs/archive/`](docs/archive/): tarihsel plan ve inceleme kayıtları

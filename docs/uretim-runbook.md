@@ -4,7 +4,15 @@ Bu dosya deneme yanılmayla bulunacak şeyleri yazıyor. Yanlış rolle **bir
 kez** bağlanmak tenant izolasyonunu kapatıyor ve kimse fark etmiyor; o
 yüzden sıra ve gerekçeler burada.
 
-Kaynak: `PLAN.md` Bölüm 9 (dağıtım) ve "T42 ÜRETİME HAZIRLIK DENETİMİ".
+Kaynak (tarihsel): `docs/archive/PLAN-2026-09.md` Bölüm 9 (dağıtım) ve "T42
+ÜRETİME HAZIRLIK DENETİMİ". Bu dosyadaki "PLAN" göndermeleri o arşivi gösterir.
+
+> **Üretime çıkmadan önce:** `TODOS.md` → T42'nin önkoşulları kapanmalı. Bu
+> runbook'ta henüz yazılı olmayan bilinen eksikler:
+> - Supabase'te `anon`/`authenticated` fonksiyon yetkileri ve pooler kullanıcı adı biçimi (T124)
+> - Saat dilimi (T122)
+> - Komutlar POSIX `VAR=… komut` söz dizimiyle yazılı; PowerShell'de
+>   `$env:VAR="…"; pnpm …` (T143)
 
 ---
 

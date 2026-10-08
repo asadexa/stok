@@ -1,3 +1,10 @@
+> **Durum (2026-10-08): AKTİF referans.** Faz 10'un Adım 1'i (kasa açığı, T88/T88.1) ve
+> Adım 2'si (açılış değerlemesi, T89) uygulandı. Adım 3 (yenileme maliyeti, T90) ve "Görev"
+> bölümündeki kullanıcı gözlemi (T91) açık; bu belge onların tasarım kaynağı. T90 ve T91
+> kapanınca `docs/archive/`'a taşınır. Uygulamada farklılaşanlar: "Yetki" ayrımı
+> `reason === 'SALE'` değil `priceBasis` ile (müşteri iadesi dahil); "Açık sorular" #3 kodda
+> "fiyat yok" olarak uygulandı. T90'ın mühendislik incelemesi kararları: `DECISIONS.md` → `PRC-08`.
+
 # Tasarım: Fiyat defteri — hareketin kendi fiyatı
 
 /office-hours ile üretildi · 2026-08-30
