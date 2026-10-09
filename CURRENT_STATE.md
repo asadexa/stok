@@ -13,7 +13,7 @@ kararlar → `DECISIONS.md`, model → `PROJECT_BRAIN.md`.
 ya da release kaydı yok. Kod tarafı hazırlığı (vercel.json, `/api/v1/health`,
 runbook) var; önkoşullar TODOS T42.
 
-## Doğrulanmış baseline — 2026-10-10, WS-B (`ea91617` üzerine, commit öncesi), Windows 11, Node 24.20
+## Doğrulanmış baseline — 2026-10-10, WS-B (`e1dc9a1`), Windows 11, Node 24.20
 
 | Kontrol | Sonuç |
 |---|---|
@@ -37,8 +37,8 @@ koruması çalışıyor, "Bağlantıyı kes" telefon oturumunu kapatıyor. Andro
 denenmedi. Yerelde ayrıca Edge + sahte kamera aygıtı + sentetik EAN-13 ile
 uçtan uca geçti (kamera yolu CI'da yok: T169).
 
-GitHub CI: `development` `ea91617` koşu #59 yeşil (WS-SCAN `2dd09cd` #58); WS-B
-henüz commit edilmedi, CI'da koşmadı. master'daki son koşu #44 (2026-09-14) yeşil.
+GitHub CI: `development` `e1dc9a1` (WS-B) koşu #60 yeşil.
+master'daki son koşu #44 (2026-09-14) yeşil.
 9 Dependabot PR açık, 3'ü kırmızı (T140).
 
 ## Çalışan ana kapsam (web)
@@ -88,7 +88,7 @@ işaretli (öne çıkanlar `DAT-15`, `DAT-16`, `SEC-14`, `OPS-01`, `OPS-02`, `UX
 
 ## Son tamamlanan workstream
 
-**WS-B — Birim hassasiyeti + içe aktarmada açılış stoğu** (commit bekliyor):
+**WS-B — Birim hassasiyeti + içe aktarmada açılış stoğu** (`e1dc9a1`, CI #60):
 adet tam sayı, efektif miktarda ve `createMovement`'ta (T130, `DAT-17`); `1e-7` artık
 500 değil anlaşılır hata. İçe aktarmada "Açılış Stoğu" sütunu, devir `createMovement`
 ile OPENING, yalnız ilk hareket olarak ve ürün başına tek (T128, `DAT-18`). Migration yok.
