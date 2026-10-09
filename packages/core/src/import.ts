@@ -1,4 +1,5 @@
 import {
+  ADET_MULTIPLIER_MESSAGE,
   AppError,
   type BarcodeKind,
   type Unit,
@@ -7,15 +8,21 @@ import {
   UNIT_VALUES,
   createProductSchema,
   errorText,
+  formatQty,
   multiplierMatchesKind,
+  qtyFitsUnit,
+  qtySchema,
+  unitDecimals,
   updateProductSchema,
 } from '@stok/shared'
-import { type Db, products, withTenant } from '@stok/db'
-import { and, eq, inArray } from 'drizzle-orm'
+import { type Db, productBarcodes, products, stockMovements, withTenant } from '@stok/db'
+import { and, eq, inArray, isNull } from 'drizzle-orm'
 import ExcelJS from 'exceljs'
 import { type Actor, requirePermission } from './authz'
 import type { SheetColumn } from './excel'
+import { createMovement } from './movements'
 import { addBarcode, createProduct, listBarcodes, updateProduct } from './products'
+import { uuidV5 } from './uuid-v5'
 import { issuesOf, validationError } from './validate'
 import { z } from 'zod'
 
@@ -71,11 +78,29 @@ export interface PreviewRow {
   data?: ParsedRow
   /** Güncellenecek ürünün kimliği. `action === 'update'` ise dolu. */
   productId?: string
+  /**
+   * Yazılacak açılış stoğu (T128). Fiyat ve barkod önizlemede çözülüyor;
+   * karar yine de yazma anında `createMovement`'ta veriliyor.
+   */
+  opening?: OpeningPlan
+  /** Hata DEĞİL, satır yine işlenir: "devir atlanacak: üründe hareket var". */
+  warnings?: string[]
+}
+
+export interface OpeningPlan {
+  qty: number
+  unit: Unit
+  /** Ürünün tekli (çarpanı 1) barkodu: koli barkoduyla yazılsa miktar çarpılırdı. */
+  barcode: string
+  /** Alış fiyatı (PRC-05): liste fiyatına eşit, sapma sebebi gerekmiyor. */
+  unitPrice: number
 }
 
 export interface ImportPreview {
   rows: PreviewRow[]
   counts: { create: number; update: number; error: number }
+  /** Dosya düzeyi uyarılar (okunmayan "Miktar" sütunu gibi). */
+  notices: string[]
 }
 
 export interface ParsedRow {
@@ -91,6 +116,8 @@ export interface ParsedRow {
   barcode?: string
   barcodeKind?: BarcodeKind
   qtyMultiplier?: number
+  /** Açılış stoğu, ürünün biriminde (T128). Boş ya da 0: devir yok. */
+  openingQty?: number
 }
 
 /**
@@ -116,6 +143,7 @@ export const parsedFileSchema = z.object({
     )
     .max(IMPORT_ROW_LIMIT),
   columns: z.array(z.string()),
+  ignoredQtyColumns: z.array(z.string().max(200)).max(50).optional(),
 })
 
 export function parseFileBlob(raw: unknown): ParsedFile {
@@ -158,7 +186,28 @@ const COLUMN_ALIASES: Record<keyof ParsedRow, string[]> = {
   barcode: ['barkod', 'barcode'],
   barcodeKind: ['barkod turu', 'barkod tipi', 'tur'],
   qtyMultiplier: ['koli ici adet', 'carpan', 'koli adedi', 'koli ici'],
+  // YALNIZ AÇIK ADLAR (T128). "Miktar", "Stok", "Adet" bilerek yok: stok
+  // raporunun mevcut stok sütununun adı "Miktar" ve raporu düzenleyip geri
+  // yükleyen kullanıcının o sütunu devir sayılsaydı, elde zaten kayıtlı olan
+  // stok ikinci kez girerdi.
+  openingQty: ['acilis stogu', 'acilis stok', 'acilis miktari', 'devir', 'devir miktari', 'devir stogu'],
 }
+
+/**
+ * Açılış stoğu SANILABİLECEK ama okunmayan başlıklar. Sessizce yok sayılmıyor:
+ * önizleme "bu sütun okunmadı, adı Açılış Stoğu olmalı" diyor. Demeseydi
+ * kullanıcı stoklarının aktarıldığını sanırdı.
+ */
+const AMBIGUOUS_QTY_HEADERS = [
+  'miktar',
+  'stok',
+  'adet',
+  'mevcut stok',
+  'stok miktari',
+  'eldeki stok',
+  'qty',
+  'quantity',
+]
 
 /**
  * Başlığı karşılaştırılabilir hâle getirir: Türkçe harfler sadeleşiyor,
@@ -208,6 +257,8 @@ export interface ParsedFile {
   rows: RawRow[]
   /** Dosyada bulunan sütunlar. Ekranda "şunları gördüm" diye gösteriliyor. */
   columns: (keyof ParsedRow)[]
+  /** Açılış stoğu sanılabilecek ama okunmayan başlıklar (dosyadaki yazımıyla). */
+  ignoredQtyColumns?: string[]
 }
 
 /**
@@ -263,7 +314,11 @@ export async function parseProductFile(
     rows.push({ rowNumber: i + 1, cells })
   }
 
-  return { rows, columns: Object.keys(columns) as (keyof ParsedRow)[] }
+  const ignoredQtyColumns = headerRow
+    .map((h) => h.trim())
+    .filter((h) => AMBIGUOUS_QTY_HEADERS.includes(normalizeHeader(h)))
+
+  return { rows, columns: Object.keys(columns) as (keyof ParsedRow)[], ignoredQtyColumns }
 }
 
 async function parseXlsx(buffer: Buffer): Promise<string[][]> {
@@ -381,6 +436,7 @@ const COLUMN_LABELS: Record<keyof ParsedRow, string> = {
   barcode: 'Barkod',
   barcodeKind: 'Barkod Türü',
   qtyMultiplier: 'Koli İçi Adet',
+  openingQty: 'Açılış Stoğu',
 }
 
 /**
@@ -438,7 +494,7 @@ export async function previewImport(
   requirePermission(actor, 'product:create')
 
   const skus = [...new Set(file.rows.map((r) => r.cells.sku?.trim()).filter(Boolean))] as string[]
-  const existing = await findExistingSkus(actor, skus, options)
+  const existing = await findExistingProducts(actor, skus, options)
 
   const seen = new Map<string, number>()
   const rows: PreviewRow[] = file.rows.map((raw) => evaluateRow(raw, file, existing, seen))
@@ -450,13 +506,17 @@ export async function previewImport(
       update: rows.filter((r) => r.action === 'update').length,
       error: rows.filter((r) => r.action === 'error').length,
     },
+    notices: (file.ignoredQtyColumns ?? []).map(
+      (header) =>
+        `"${header}" sütunu açılış stoğu olarak okunmadı. Açılış stoğu girmek için sütunun adı "Açılış Stoğu" olmalı.`,
+    ),
   }
 }
 
 function evaluateRow(
   raw: RawRow,
   file: ParsedFile,
-  existing: Map<string, string>,
+  existing: Map<string, ExistingProduct>,
   seen: Map<string, number>,
 ): PreviewRow {
   const issues: ImportIssue[] = []
@@ -528,7 +588,22 @@ function evaluateRow(
   if (Number.isNaN(multiplier)) push('qtyMultiplier', 'Sayı olarak okunamadı')
   else if (multiplier !== undefined) data.qtyMultiplier = multiplier
 
-  const productId = existing.get(sku)
+  if (file.columns.includes('openingQty')) {
+    const opening = parseTurkishNumber(raw.cells.openingQty ?? '')
+    // Boş ya da 0: devir yok. Hata değil; dosyaların çoğunda boş hücre olur.
+    if (opening !== undefined && opening !== 0) {
+      if (Number.isNaN(opening)) push('openingQty', 'Açılış stoğu sayı olarak okunamadı')
+      else if (opening < 0) push('openingQty', 'Açılış stoğu sıfırdan büyük olmalı')
+      else {
+        const checked = qtySchema.safeParse(opening)
+        if (checked.success) data.openingQty = opening
+        else push('openingQty', checked.error.issues[0]?.message ?? 'Açılış stoğu geçersiz')
+      }
+    }
+  }
+
+  const existingProduct = existing.get(sku)
+  const productId = existingProduct?.id
   const isUpdate = productId !== undefined
 
   // Yeni üründe barkod ZORUNLU: barkodsuz ürün depoda okutulamaz, yani
@@ -538,6 +613,58 @@ function evaluateRow(
   if (data.barcodeKind && data.qtyMultiplier !== undefined) {
     if (!multiplierMatchesKind(data.barcodeKind, data.qtyMultiplier)) {
       push('qtyMultiplier', 'Barkod türü ile çarpan uyuşmuyor')
+    }
+  }
+
+  // Yeni üründe bu kural şemada; mevcut ürüne eklenecek barkodda birim DB'den
+  // geliyor ve kayıt anında `addBarcode` reddederdi. Burada erken söyleniyor.
+  const productUnit: Unit = data.unit ?? existingProduct?.unit ?? 'ADET'
+  if (
+    isUpdate &&
+    data.qtyMultiplier !== undefined &&
+    unitDecimals(productUnit) === 0 &&
+    !Number.isInteger(data.qtyMultiplier)
+  ) {
+    push('qtyMultiplier', ADET_MULTIPLIER_MESSAGE)
+  }
+
+  // AÇILIŞ STOĞU (T128). Şartlar yalnız devir yazılacak satırda aranıyor:
+  // devirsiz satır ve normal ürün aktarımı bu yüzden asla reddedilmiyor.
+  const warnings: string[] = []
+  let opening: OpeningPlan | undefined
+  if (data.openingQty !== undefined) {
+    const qty = data.openingQty
+    // Erken uyarı; karar yazma anında `createMovement`'ta (T130).
+    if (!qtyFitsUnit(qty, productUnit)) {
+      push('openingQty', 'Bu ürün adetle sayılıyor; açılış stoğu tam sayı olmalı')
+    }
+
+    // PRC-05: devir fiyatsız yazılamaz. Satırda Alış Fiyatı sütunu varsa o
+    // (boş hücre "fiyatı temizle" demek), yoksa üründe kayıtlı alış fiyatı.
+    const unitPrice =
+      data.purchasePrice !== undefined ? data.purchasePrice : (existingProduct?.purchasePrice ?? null)
+    if (unitPrice === null) {
+      push('openingQty', 'Açılış stoğu için alış fiyatı gerekli (Alış Fiyatı sütunu ya da üründe kayıtlı)')
+    }
+
+    // Tekli barkod: koli barkoduyla yazılsaydı devir çarpanla çarpılırdı.
+    const rowHasUnitBarcode =
+      barcode !== '' && (data.barcodeKind ?? 'UNIT') === 'UNIT' && (data.qtyMultiplier ?? 1) === 1
+    const openingBarcode = rowHasUnitBarcode ? barcode : (existingProduct?.unitBarcode ?? null)
+    if (openingBarcode === null && (isUpdate || barcode !== '')) {
+      push(
+        'openingQty',
+        isUpdate
+          ? 'Açılış stoğu için üründe tekli barkod yok; Barkod sütununa tekli barkod yazın'
+          : 'Açılış stoğu için tekli barkod gerekli; bu satırdaki barkod koli barkodu',
+      )
+    }
+
+    if (existingProduct?.hasMovements) {
+      warnings.push('Devir atlanacak: üründe hareket var; ürün bilgisi güncellenecek')
+    }
+    if (unitPrice !== null && openingBarcode !== null) {
+      opening = { qty, unit: productUnit, barcode: openingBarcode, unitPrice }
     }
   }
 
@@ -560,6 +687,8 @@ function evaluateRow(
     issues: [],
     data,
     ...(productId ? { productId } : {}),
+    ...(opening ? { opening } : {}),
+    ...(warnings.length > 0 ? { warnings } : {}),
   }
 }
 
@@ -612,23 +741,87 @@ function labelForPath(path: string): string {
   return COLUMN_LABELS[head] ?? path
 }
 
-async function findExistingSkus(
+interface ExistingProduct {
+  id: string
+  unit: Unit
+  purchasePrice: number | null
+  /** Aktif, çarpanı 1 olan bir barkod; yoksa null. */
+  unitBarcode: string | null
+  /** Önizleme için danışma bilgisi; yazma anındaki karar kilit altında. */
+  hasMovements: boolean
+}
+
+/**
+ * Dosyadaki stok kodlarının mevcut ürünlerini TEK sorguyla okur: 2.000 satırlık
+ * dosyada satır başına sorgu önizlemeyi saniyelerce uzatırdı.
+ */
+async function findExistingProducts(
   actor: Actor,
   skus: string[],
   options: ImportOptions,
-): Promise<Map<string, string>> {
+): Promise<Map<string, ExistingProduct>> {
   if (skus.length === 0) return new Map()
 
-  const rows = await withTenant(
+  // Üç toplu sorgu, satır başına sorgu değil. Korelasyonlu alt sorgu
+  // denendi ve dış tabloya referans nitelenmeden basıldığı için alt sorgunun
+  // kendi sütununa çözülüyordu: tekli barkod hiç bulunmuyordu. Tipli
+  // sorgu kurucusu bu sınıf hatayı kapatıyor.
+  const { rows, unitBarcodes, moved } = await withTenant(
     actor.tenantId,
-    (tx) =>
-      tx
-        .select({ id: products.id, sku: products.sku })
+    async (tx) => {
+      const rows = await tx
+        .select({
+          id: products.id,
+          sku: products.sku,
+          unit: products.unit,
+          purchasePrice: products.purchasePrice,
+        })
         .from(products)
-        .where(and(eq(products.tenantId, actor.tenantId), inArray(products.sku, skus))),
+        .where(and(eq(products.tenantId, actor.tenantId), inArray(products.sku, skus)))
+      const ids = rows.map((r) => r.id)
+      if (ids.length === 0) return { rows, unitBarcodes: [], moved: [] }
+
+      const unitBarcodes = await tx
+        .select({ productId: productBarcodes.productId, barcode: productBarcodes.barcode })
+        .from(productBarcodes)
+        .where(
+          and(
+            eq(productBarcodes.tenantId, actor.tenantId),
+            inArray(productBarcodes.productId, ids),
+            isNull(productBarcodes.archivedAt),
+            eq(productBarcodes.qtyMultiplier, '1'),
+          ),
+        )
+        .orderBy(productBarcodes.barcode)
+      const moved = await tx
+        .selectDistinct({ productId: stockMovements.productId })
+        .from(stockMovements)
+        .where(
+          and(eq(stockMovements.tenantId, actor.tenantId), inArray(stockMovements.productId, ids)),
+        )
+      return { rows, unitBarcodes, moved }
+    },
     options.db,
   )
-  return new Map(rows.map((r) => [r.sku, r.id]))
+
+  const firstUnitBarcode = new Map<string, string>()
+  for (const b of unitBarcodes) {
+    if (!firstUnitBarcode.has(b.productId)) firstUnitBarcode.set(b.productId, b.barcode)
+  }
+  const hasMovements = new Set(moved.map((m) => m.productId))
+
+  return new Map(
+    rows.map((r) => [
+      r.sku,
+      {
+        id: r.id,
+        unit: r.unit as Unit,
+        purchasePrice: r.purchasePrice === null ? null : Number(r.purchasePrice),
+        unitBarcode: firstUnitBarcode.get(r.id) ?? null,
+        hasMovements: hasMovements.has(r.id),
+      },
+    ]),
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -641,7 +834,35 @@ export interface CommitResult {
   failed: number
   /** Uygulanamayan satırlar. Önizlemedeki hatalar + kayıt sırasında çıkanlar. */
   errors: PreviewRow[]
+  /** Açılış stoğu (T128): ürün sayımlarından ayrı, çünkü ürün yazılıp devir atlanabiliyor. */
+  openings: { written: number; skipped: number; failed: number }
+  /** Ürünü işlenmiş ama devri yazılmamış satırların açıklaması. */
+  notices: RowNotice[]
 }
+
+export interface RowNotice {
+  rowNumber: number
+  sku: string
+  name: string
+  message: string
+}
+
+/**
+ * Açılış stoğunun idempotency anahtarı: UUID v5 (RFC 9562), ad `tenant:ürün`.
+ * Aynı ürün için her zaman aynı anahtar, yani içe aktarma ne kadar tekrar
+ * çalıştırılırsa çalıştırılsın ürün başına en fazla bir içe aktarma devri
+ * yazılıyor (INV-6, `movements_tenant_idem_uq`).
+ *
+ * AD ALANI DEĞİŞMEZ. Değişirse daha önce yazılmış devirler tanınmaz ve hareketsiz
+ * kalmış ürünlerde ikinci kez yazılabilir.
+ */
+const OPENING_KEY_NAMESPACE = '5f3c2b1e-8a47-4d6e-9c21-7b0e4f1a6d38'
+
+export function openingKey(tenantId: string, productId: string): string {
+  return uuidV5(`${tenantId}:${productId}`, OPENING_KEY_NAMESPACE)
+}
+
+const OPENING_NOTE = 'Toplu içe aktarma: açılış stoğu'
 
 /**
  * Önizlemede geçerli bulunan satırları uygular.
@@ -669,14 +890,18 @@ export async function commitImport(
     updated: 0,
     failed: 0,
     errors: preview.rows.filter((r) => r.action === 'error'),
+    openings: { written: 0, skipped: 0, failed: 0 },
+    notices: [],
   }
   result.failed = result.errors.length
 
   for (const row of preview.rows) {
     if (row.action === 'error' || !row.data) continue
+    let productId: string
     try {
       if (row.action === 'create') {
-        await createProduct(actor, createPayload(row.data), options)
+        const created = await createProduct(actor, createPayload(row.data), options)
+        productId = created.productId
         result.created += 1
       } else {
         await updateProduct(actor, row.productId!, updatePatch(row.data), options)
@@ -684,6 +909,7 @@ export async function commitImport(
         // güncellemek YOK: bir barkodun hangi ürüne ait olduğunu
         // değiştirmek toplu dosyayla yapılacak bir iş değil.
         if (row.data.barcode) await attachIfMissing(actor, row, options)
+        productId = row.productId!
         result.updated += 1
       }
     } catch (err) {
@@ -693,10 +919,71 @@ export async function commitImport(
         action: 'error',
         issues: [{ column: '', message: messageOf(err) }],
       })
+      // Ürün işi başarısızsa devir DENENMİYOR: barkod başka bir ürüne aitse
+      // devir o ürüne yazılırdı.
+      continue
     }
+
+    if (row.opening) await writeOpening(actor, row, row.opening, productId, result, options)
   }
 
   return result
+}
+
+/**
+ * Açılış stoğunu TEK YAZMA KAPISINDAN yazar (DAT-02): fiyat kuralı (PRC-05),
+ * birim hassasiyeti (T130), kilit ve idempotency `createMovement`'ta.
+ *
+ * `requireFirstMovement`: ürünün hareketi varsa devir yazılmıyor, ürün
+ * bilgisi yine güncellenmiş oluyor. Kontrol önizlemede değil kilit altında:
+ * önizleme ile onay arasında satış girilmiş olabilir.
+ *
+ * Devir yazılamazsa ürün işi geri alınmıyor (satır satır ilkesi); satır notu
+ * ne olduğunu söylüyor, tekrar çalıştırma eksik devri tamamlıyor.
+ */
+async function writeOpening(
+  actor: Actor,
+  row: PreviewRow,
+  plan: OpeningPlan,
+  productId: string,
+  result: CommitResult,
+  options: ImportOptions,
+): Promise<void> {
+  const done = row.action === 'create' ? 'Ürün eklendi' : 'Ürün güncellendi'
+  const note = (message: string) =>
+    result.notices.push({ rowNumber: row.rowNumber, sku: row.sku, name: row.name, message })
+
+  try {
+    const written = await createMovement(
+      actor,
+      {
+        idempotencyKey: openingKey(actor.tenantId, productId),
+        barcode: plan.barcode,
+        qty: plan.qty,
+        reason: 'OPENING',
+        unitPrice: plan.unitPrice,
+        note: OPENING_NOTE,
+        clientCreatedAt: new Date().toISOString(),
+      },
+      { db: options.db, requireFirstMovement: true },
+    )
+    if (written.duplicate) {
+      result.openings.skipped += 1
+      note(
+        `${done}, devir daha önce yazılmış (${formatQty(Math.abs(written.delta), plan.unit)}); dosyadaki değer yazılmadı`,
+      )
+    } else {
+      result.openings.written += 1
+    }
+  } catch (err) {
+    if (err instanceof AppError && err.code === 'PRODUCT_HAS_MOVEMENTS') {
+      result.openings.skipped += 1
+      note(`${done}, devir atlandı: üründe hareket var`)
+    } else {
+      result.openings.failed += 1
+      note(`${done}, devir yazılamadı: ${messageOf(err)}`)
+    }
+  }
 }
 
 function createPayload(data: ParsedRow): Record<string, unknown> {
@@ -815,6 +1102,9 @@ export function templateRows(): Record<string, string | number>[] {
       Barkod: '8690000000011',
       'Barkod Türü': 'Tekli',
       'Koli İçi Adet': 1,
+      // Devir ürünün biriminde (adet tam sayı) ve Alış Fiyatı'yla yazılıyor.
+      // Koli satırında boş: devir tekli barkodla yazılır (T128).
+      'Açılış Stoğu': 120,
       'Görsel URL': 'https://ornek-tedarikci.com/gorseller/kal-001.jpg',
     },
     {

@@ -30,6 +30,9 @@ const MOVEMENT_COUNT = 1000
 
 let tenant: TestTenant
 
+/** Ürün tanımı ile miktar üretimi aynı kuralı okusun. */
+const isKgIndex = (i: number) => i % 3 === 0
+
 beforeAll(async () => {
   tenant = await seedTestTenant(
     admin.db,
@@ -39,7 +42,7 @@ beforeAll(async () => {
       name: `Rastgele Ürün ${i}`,
       // Her üçüncü ürün ondalıklı birimde: kayan nokta hatası varsa
       // invariant'ı en hızlı bunlar kırar.
-      unit: i % 3 === 0 ? ('KG' as const) : ('ADET' as const),
+      unit: isKgIndex(i) ? ('KG' as const) : ('ADET' as const),
       caseMultiplier: i % 4 === 0 ? '6' : undefined,
     })),
   )
@@ -82,7 +85,8 @@ describe('T11 - invariant', () => {
     let rejected = 0
 
     for (let i = 0; i < MOVEMENT_COUNT; i++) {
-      const product = tenant.products[skus[Math.floor(rng() * skus.length)]!]!
+      const sku = skus[Math.floor(rng() * skus.length)]!
+      const product = tenant.products[sku]!
       const isIn = rng() < 0.55 // girişler biraz ağır bassın, stok tükenmesin
       const reasons = isIn ? IN_REASONS : OUT_REASONS
       const reason = reasons[Math.floor(rng() * reasons.length)]!
@@ -91,7 +95,14 @@ describe('T11 - invariant', () => {
       // Tam sayı bin'de bir üretiliyor: `x/1000 + 0.001` yazsaydık kayan
       // nokta 3.5720000000000005 üretir ve şemanın üç ondalık kuralına
       // takılırdı — testin kendisi gerçek bir hata gibi görünürdü.
-      const qty = (Math.floor(rng() * 7999) + 1) / 1000 // 0.001 - 8.000
+      //
+      // Ondalık YALNIZ kiloluk üründe. Adetli üründe kesir artık birim kuralı
+      // reddi (T130): yazılsaydı test defter/projeksiyon eşitliğini değil birim
+      // kuralını ölçerdi. Adetliye 1-8 arası tam sayı.
+      const thousandths = Math.floor(rng() * 7999) + 1 // 1 - 7999
+      const qty = isKgIndex(Number(sku.slice('INV-'.length)))
+        ? thousandths / 1000 // 0.001 - 7.999
+        : Math.ceil(thousandths / 1000) // 1 - 8
 
       try {
         await createMovement(

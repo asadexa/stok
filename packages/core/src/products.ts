@@ -1,9 +1,12 @@
 import {
+  ADET_MULTIPLIER_MESSAGE,
   AppError,
   type AddBarcodeInput,
   type BarcodeKind,
+  type Unit,
   addBarcodeSchema,
   createProductSchema,
+  unitDecimals,
   updateProductSchema,
 } from '@stok/shared'
 import {
@@ -20,7 +23,7 @@ import { and, asc, eq, sql } from 'drizzle-orm'
 import { type Actor, requirePermission } from './authz'
 import { formatScaled, parseScaled, scaledFromNumber, scaledToNumber } from './numeric'
 import { getProduct, type StockRow } from './stock'
-import { parseOrThrow } from './validate'
+import { parseOrThrow, validationError } from './validate'
 
 /**
  * ============================================================================
@@ -356,7 +359,12 @@ export async function addBarcode(
   await withTenant(
     actor.tenantId,
     async (tx) => {
-      await assertProductExists(tx, actor.tenantId, productId)
+      const unit = await productUnit(tx, actor.tenantId, productId)
+      // Adetle sayılan üründe koli çarpanı tam sayı (T130); gerekçe
+      // `createProductSchema`'da. Birim burada DB'den, barkod yükünde yok.
+      if (unitDecimals(unit) === 0 && !Number.isInteger(input.qtyMultiplier)) {
+        throw validationError([{ path: 'qtyMultiplier', message: ADET_MULTIPLIER_MESSAGE }])
+      }
 
       await tx
         .insert(productBarcodes)
@@ -468,9 +476,10 @@ async function assertLocation(tx: Tx, tenantId: string, locationId: string): Pro
   }
 }
 
-async function assertProductExists(tx: Tx, tenantId: string, productId: string): Promise<void> {
+/** Ürünün birimi; ürün yoksa (ya da başka kiracınınsa) NOT_FOUND. */
+async function productUnit(tx: Tx, tenantId: string, productId: string): Promise<Unit> {
   const [row] = await tx
-    .select({ id: products.id })
+    .select({ unit: products.unit })
     .from(products)
     .where(and(eq(products.tenantId, tenantId), eq(products.id, productId)))
     .limit(1)
@@ -478,6 +487,7 @@ async function assertProductExists(tx: Tx, tenantId: string, productId: string):
   if (!row) {
     throw new AppError('NOT_FOUND', `product ${productId} not found`, { productId })
   }
+  return row.unit as Unit
 }
 
 /**

@@ -43,7 +43,8 @@ ve sunucuda zorlanır; arayüzde düğmeyi gizlemek yetki kontrolü değildir.
 - **Fire / kullanım / tedarikçiye iade**: çıkış sebepleri; fire ve kullanımda fiyat yok.
 - **Devir (açılış)**: elde zaten olan malın sisteme ilk girişi; fiyat zorunlu,
   fiyatın ekonomik tarihi ayrı tutulur.
-- **İlk kurulum**: ürün kataloğunu Excel/CSV'den toplu aktarmak (önizle → onayla).
+- **İlk kurulum**: ürün kataloğunu Excel/CSV'den toplu aktarmak (önizle → onayla);
+  "Açılış Stoğu" sütunu devri yine tek yazma kapısından, ürünün ilk hareketi olarak yazar (`DAT-18`).
 - **Gözetim**: panel (uyarılar, bugün, son hareketler), kritik stok, hareket logu
   (kim / ne zaman / neden), sistem sağlığı.
 - **Rapor**: stok ve hareket Excel'i; gün sonu raporu ve alarm e-postaları (cron).

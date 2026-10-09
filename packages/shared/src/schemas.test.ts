@@ -133,3 +133,65 @@ describe('ürün oluşturma: koli çarpanı (D7)', () => {
     expect(createProductSchema.safeParse({ ...base, barcodes: [] }).success).toBe(false)
   })
 })
+
+/**
+ * T130 — ÜSTEL GÖSTERİM. `toString()` küçük sayıları `1e-7` diye yazıyor; eski
+ * basamak sayımı nokta aradığı için onları 0 basamak sayıyordu. Değer şemadan
+ * geçip 0.000'a ölçekleniyor ve veritabanında 500 üretiyordu.
+ */
+describe('ondalık basamak: üstel gösterim (T130)', () => {
+  it.each([1e-7, 1.5e-7, 2.5e-4])('miktar %s reddediliyor', (qty) => {
+    const r = qtySchema.safeParse(qty)
+    expect(r.success).toBe(false)
+    if (!r.success) expect(r.error.issues[0]?.message).toBe('En fazla 3 ondalık basamak')
+  })
+
+  it('üstel ama tam sayı olan değer basamaksız sayılıyor', () => {
+    // 1e21 "1e+21" yazılıyor; basamak 0, red sebebi yalnız üst sınır.
+    const r = qtySchema.safeParse(1e21)
+    expect(r.success).toBe(false)
+    if (!r.success) expect(r.error.issues[0]?.message).toBe('Miktar en fazla 1.000.000 olabilir')
+  })
+
+  it('fiyatta 1e-7 sessizce 0,00 olmuyor, reddediliyor', () => {
+    expect(createMovementSchema.safeParse({ ...validMovement, unitPrice: 1e-7 }).success).toBe(
+      false,
+    )
+  })
+
+  it('koli çarpanında 1e-7 reddediliyor', () => {
+    const r = createProductSchema.safeParse({
+      sku: 'X-1',
+      name: 'X',
+      unit: 'KG',
+      barcodes: [{ barcode: '8690000000003', kind: 'CASE', qtyMultiplier: 1 + 1e-7 }],
+    })
+    expect(r.success).toBe(false)
+  })
+
+  it('miktar mesajları Türkçe', () => {
+    const zero = qtySchema.safeParse(0)
+    expect(zero.success).toBe(false)
+    if (!zero.success) expect(zero.error.issues[0]?.message).toBe('Miktar sıfırdan büyük olmalı')
+  })
+})
+
+describe('adetli ürünün koli çarpanı tam sayı (T130)', () => {
+  const koli = (qtyMultiplier: number) => ({ barcode: '8690000000002', kind: 'CASE', qtyMultiplier })
+
+  it('adetli üründe 2,5 reddediliyor, mesaj çarpan alanında', () => {
+    const r = createProductSchema.safeParse({ sku: 'A-1', name: 'A', barcodes: [koli(2.5)] })
+    expect(r.success).toBe(false)
+    if (!r.success) {
+      expect(r.error.issues[0]?.message).toBe('Adetle sayılan üründe koli içi adet tam sayı olmalı')
+      expect(r.error.issues[0]?.path).toEqual(['barcodes', 0, 'qtyMultiplier'])
+    }
+  })
+
+  it('kiloyla satılan üründe 2,5 kabul ediliyor', () => {
+    expect(
+      createProductSchema.safeParse({ sku: 'K-1', name: 'K', unit: 'KG', barcodes: [koli(2.5)] })
+        .success,
+    ).toBe(true)
+  })
+})

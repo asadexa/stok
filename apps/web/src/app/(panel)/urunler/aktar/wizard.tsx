@@ -1,6 +1,6 @@
 'use client'
 
-import type { ImportPreview, PreviewRow } from '@stok/core'
+import type { ImportPreview, PreviewRow, RowNotice } from '@stok/core'
 import { useActionState } from 'react'
 import type { AnalyzeState } from './actions'
 
@@ -90,6 +90,12 @@ function PreviewPanel({
 }) {
   const { create, update, error } = preview.counts
   const errorRows = preview.rows.filter((r) => r.action === 'error')
+  // Açılış stoğu (T128): kaç üründe yazılacak, kaçında atlanacak. Atlanma
+  // kararı kayıt anında kilit altında yeniden veriliyor; burası ön bilgi.
+  const openingRows = preview.rows.filter((r) => r.opening && !r.warnings?.length)
+  const warningNotes = preview.rows.flatMap((r) =>
+    (r.warnings ?? []).map((message) => ({ rowNumber: r.rowNumber, sku: r.sku, name: r.name, message })),
+  )
 
   return (
     <section aria-label="Önizleme" className="space-y-4">
@@ -98,6 +104,24 @@ function PreviewPanel({
         <Count label="Güncellenecek" value={update} />
         <Count label="Atlanacak (hatalı)" value={error} tone={error > 0 ? 'kritik' : undefined} />
       </div>
+
+      {preview.notices.length > 0 ? (
+        <div role="status" className="space-y-1 rounded-control border border-warn bg-warn-soft p-3 text-sm text-warn-soft-ink">
+          {preview.notices.map((notice) => (
+            <p key={notice}>⚠ {notice}</p>
+          ))}
+        </div>
+      ) : null}
+
+      {openingRows.length > 0 || warningNotes.length > 0 ? (
+        <p className="text-sm">
+          Açılış stoğu: <span className="font-semibold">{openingRows.length}</span> üründe yazılacak
+          {warningNotes.length > 0 ? `, ${warningNotes.length} üründe atlanacak` : ''}. Her devir
+          ayrı bir “Devir / açılış” hareketi olarak, alış fiyatıyla yazılır.
+        </p>
+      ) : null}
+
+      {warningNotes.length > 0 ? <NoteTable title="Devri atlanacak satırlar" rows={warningNotes} /> : null}
 
       {errorRows.length > 0 ? (
         <div className="rounded-card border border-kritik bg-surface">
@@ -158,6 +182,22 @@ function ResultPanel({ result }: { result: NonNullable<AnalyzeState['result']> }
         />
       </div>
 
+      {result.openings.written + result.openings.skipped + result.openings.failed > 0 ? (
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Count label="Devir yazıldı" value={result.openings.written} tone="giris" />
+          <Count label="Devir atlandı" value={result.openings.skipped} />
+          <Count
+            label="Devir yazılamadı"
+            value={result.openings.failed}
+            tone={result.openings.failed > 0 ? 'kritik' : undefined}
+          />
+        </div>
+      ) : null}
+
+      {result.notices.length > 0 ? (
+        <NoteTable title="Devir notları" rows={result.notices.slice(0, 50)} />
+      ) : null}
+
       {result.errors.length > 0 ? (
         <div className="rounded-card border border-kritik bg-surface">
           <h2 className="border-b border-line px-4 py-3 font-semibold text-kritik">
@@ -174,6 +214,37 @@ function ResultPanel({ result }: { result: NonNullable<AnalyzeState['result']> }
         Yeni dosya yükle
       </a>
     </section>
+  )
+}
+
+/** Hata olmayan satır notları: ürün işlendi ama devir yazılmadı ya da yazılmayacak. */
+function NoteTable({ title, rows }: { title: string; rows: RowNotice[] }) {
+  return (
+    <div className="rounded-card border border-warn bg-surface">
+      <h2 className="border-b border-line px-4 py-3 font-semibold">{title}</h2>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="text-left text-ink-3">
+            <tr>
+              <th className="px-4 py-2 font-medium">Satır</th>
+              <th className="px-4 py-2 font-medium">Stok Kodu</th>
+              <th className="px-4 py-2 font-medium">Ürün</th>
+              <th className="px-4 py-2 font-medium">Not</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={`${row.rowNumber}-${row.message}`} className="border-t border-line align-top">
+                <td className="tabular px-4 py-2">{row.rowNumber}</td>
+                <td className="tabular px-4 py-2">{row.sku || '—'}</td>
+                <td className="px-4 py-2">{row.name || '—'}</td>
+                <td className="px-4 py-2 text-ink-2">{row.message}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   )
 }
 

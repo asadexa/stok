@@ -40,8 +40,12 @@ import { TEST_DB_NAME } from './test/db-name'
 const app = testAppDb(TEST_DB_NAME)
 const admin = testAdminDb(TEST_DB_NAME)
 
+// KİLOGRAM: bu dosya NUMERIC(14,3) sınırını sınıyor ve sınırdaki 0,001'in
+// KABUL edildiğini de doğruluyor. Adetli ürün olsaydı 0,001 birim kuralına
+// (T130: adet tam sayı) takılır, test ölçek sınırını değil birim kuralını
+// ölçerdi.
 const URUNLER: TestProductSpec[] = [
-  { sku: 'QA-001', name: 'Düşman QA Ürünü', purchasePrice: '10.00', salePrice: '20.00' },
+  { sku: 'QA-001', name: 'Düşman QA Ürünü', unit: 'KG', purchasePrice: '10.00', salePrice: '20.00' },
 ]
 
 let tenant: TestTenant

@@ -4,7 +4,7 @@ Yalnız BUGÜNÜN gerçeği. Her merge'te ya da durum değiştiğinde güncellen
 satırlar silinir (tarihçe git'te). Ayrıntı yazılmaz: işler → `TODOS.md`,
 kararlar → `DECISIONS.md`, model → `PROJECT_BRAIN.md`.
 
-**Tarih:** 2026-10-09 · **Çalışma branch'i:** `development` · **Stabil referans:** `master`
+**Tarih:** 2026-10-10 · **Çalışma branch'i:** `development` · **Stabil referans:** `master`
 (`master` = `dac05ff`, devralma öncesi son kod; geliştirme `development`'ta yapılır)
 
 ## Deploy
@@ -13,16 +13,22 @@ kararlar → `DECISIONS.md`, model → `PROJECT_BRAIN.md`.
 ya da release kaydı yok. Kod tarafı hazırlığı (vercel.json, `/api/v1/health`,
 runbook) var; önkoşullar TODOS T42.
 
-## Doğrulanmış baseline — 2026-10-09, WS-SCAN (`2dd09cd`), Windows 11, Node 24.20
+## Doğrulanmış baseline — 2026-10-10, WS-B (`ea91617` üzerine, commit öncesi), Windows 11, Node 24.20
 
 | Kontrol | Sonuç |
 |---|---|
-| lint (Biome) | PASS — 189 dosya, 0 tanı |
+| lint (Biome) | PASS — 195 dosya, 0 tanı |
 | typecheck (4 paket) | PASS |
-| test | PASS — **796/796** (shared 56, db 85, core 493, web 162), atlanan yok |
+| test | PASS — **856/856** (shared 69, db 85, core 540, web 162), `TZ=UTC` ile |
 | migration drift | PASS — "No schema changes", dosya üretilmedi |
 | `next build` | PASS — 29 rota |
-| Playwright | PASS — **22/22** |
+| Playwright | PASS — **24/24** |
+
+Yerel saatle 00:00–03:00 arasında `cron.test.ts`'in üç testi kırmızı: T122'nin
+yeniden üretimi (yerel UTC+3, DB UTC), WS-B'den bağımsız; `TZ=UTC` ile yeşil.
+
+İçe aktarma, 2.000 satır (ayrı test veritabanı): devirli ilk koşu 47,1 sn, tekrar
+32,5 sn (ikinci devir yazılmadı), önizleme 125–305 ms; devirsiz taban 23,5 sn (T171).
 
 Gerçek cihaz kabulü (WS-SCAN, iPhone Safari, HTTPS tünel, laptop `next start`):
 gerçek barkod telefon kamerasıyla okunuyor, ürün laptopta `/hareket`te açılıyor,
@@ -31,14 +37,15 @@ koruması çalışıyor, "Bağlantıyı kes" telefon oturumunu kapatıyor. Andro
 denenmedi. Yerelde ayrıca Edge + sahte kamera aygıtı + sentetik EAN-13 ile
 uçtan uca geçti (kamera yolu CI'da yok: T169).
 
-GitHub CI: `development` `2dd09cd` (WS-SCAN) koşu #58 yeşil.
-master'daki son koşu #44 (2026-09-14) yeşil.
+GitHub CI: `development` `ea91617` koşu #59 yeşil (WS-SCAN `2dd09cd` #58); WS-B
+henüz commit edilmedi, CI'da koşmadı. master'daki son koşu #44 (2026-09-14) yeşil.
 9 Dependabot PR açık, 3'ü kırmızı (T140).
 
 ## Çalışan ana kapsam (web)
 
 Giriş · panel · stok tablosu (Türkçe arama) · barkodla elle hareket girişi ve
-fiyat defteri · hareket logu · ürün/barkod yönetimi · Excel/CSV ürün aktarma ·
+fiyat defteri · hareket logu · ürün/barkod yönetimi · Excel/CSV ürün aktarma
+(açılış stoğuyla, `DAT-18`) · birim hassasiyeti (`DAT-17`) ·
 Excel export · kullanıcı yönetimi · ayarlar · kategoriler · raporlar · sistem
 sağlığı · Ctrl+K · bildirim zili. RLS çok kiracılı veri katmanı, append-only
 defter, kaba kuvvet kilidi, elle tetiklenen `/api/cron`, `/api/v1/health`,
@@ -52,8 +59,8 @@ okutup `/hareket`te açma (`ENABLE_PHONE_SCANNER`, `PRD-12`, `ARC-14`).
 - **Çok kiracıda aynı e-posta**: web'de giriş çıkmazı (T123).
 - **Sağlık alarmı**: bir kez FAILED olan iş kalıcı, alarm her saat tekrar eder (T126).
 - **Düzeltme / ters hareket**: akış yok (T127).
-- **Açılış stoğu**: toplu girilemiyor (T128).
-- **Birim hassasiyeti**: zorlanmıyor; çok küçük miktar 500 veriyor (T130).
+- **İçe aktarma**: büyük dosya tek istekte uzun sürüyor (2.000 devirli satır 47 sn; T171);
+  devirde geçmiş tarihli fiyat yok (T172); birim değişimi sonrası eski veri denetlenmiyor (T170).
 - **Ürün görseli**: yalnız URL; yükleme yok (T136).
 - **Kritik stok**: yalnız e-posta, push yok.
 - **Konum yönetimi**: arayüz yok.
@@ -73,7 +80,6 @@ okutup `/hareket`te açma (`ENABLE_PHONE_SCANNER`, `PRD-12`, `ARC-14`).
 | T124 | Supabase SECURITY DEFINER yetkileri — deploy öncesi doğrulama |
 | T126 | Kalıcı FAILED işler / alarm tekrarı |
 | T127 | Düzeltme (ters hareket) akışı |
-| T128 | Açılış stoğu toplu girişi |
 | T129 | Harici izleme + yedek geri yükleme tatbikatı |
 | T167 | Telefon pilotunun tüneli bütün uygulamayı internete açıyor |
 
@@ -82,20 +88,18 @@ işaretli (öne çıkanlar `DAT-15`, `DAT-16`, `SEC-14`, `OPS-01`, `OPS-02`, `UX
 
 ## Son tamamlanan workstream
 
-**WS-SCAN — Telefon kamerası → laptop** (`2dd09cd`, CI #58): `/hareket`te
-"Telefonla Barkod Okut" paneli (tünel adresi, QR, durum, Kes); telefonda `/tara`
-(QR ile eşleşme, okut, gönder, "Sonraki Ürünü Tara"); `/api/tara/*` dört uç.
-`lookupBarcode` ve `createMovement` değişmedi, migration yok. Güvenlik `SECURITY_MODEL`
-S18; kararlar `PRD-12`, `ARC-14`. Gerçek iPhone kabul testi geçti (baseline'a bak).
+**WS-B — Birim hassasiyeti + içe aktarmada açılış stoğu** (commit bekliyor):
+adet tam sayı, efektif miktarda ve `createMovement`'ta (T130, `DAT-17`); `1e-7` artık
+500 değil anlaşılır hata. İçe aktarmada "Açılış Stoğu" sütunu, devir `createMovement`
+ile OPENING, yalnız ilk hareket olarak ve ürün başına tek (T128, `DAT-18`). Migration yok.
 
-Öncesinde WS-A (`1ddfd2a`, CI #57): `pnpm tenant:create` (T162), seed hedef
-koruması (T125), üretimde örnek `AUTH_SECRET` reddi (T133).
+Öncesinde WS-SCAN (`2dd09cd`, CI #58): telefon kamerası → laptop `/hareket`
+(`PRD-12`, `ARC-14`, S18); gerçek iPhone kabul testi geçti (baseline'a bak).
 
-## Sıradaki workstream: WS-B
+## Sıradaki workstream: WS-C-lite
 
-Birim hassasiyeti (T130) ve açılış stoğu / içe aktarma (T128). Ardından WS-C-lite:
-saha testinde görülebilecek export/Excel saat sorunu (tam saat dilimi işi T122,
-`DAT-16`, bulut öncesi).
+Saha testinde görülebilecek export/Excel saat sorunu. Tam saat dilimi işi (T122,
+`DAT-16`) bulut öncesi ayrıca.
 
 ## Production blocker düzeltmeleri
 
@@ -106,5 +110,5 @@ saha testinde görülebilecek export/Excel saat sorunu (tam saat dilimi işi T12
 Paralelde, insan işi ve kod dışı: T120 (sahiplik), T140 (Dependabot triyajı +
 branch koruması + zorunlu CI kontrolleri).
 
-Ardından ürün hazırlığı (T127, T128, T130; kapsam kararıyla), en son staging deploy
+Ardından ürün hazırlığı (T127; kapsam kararıyla), en son staging deploy
 (T42, T129, T144).

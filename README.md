@@ -14,7 +14,7 @@ takip sistemi. Türkçe arayüz, çok kiracılı (multi-tenant), değiştirileme
   sonu raporunda kullanıcı bazında
 - **Stok tablosu**: Türkçe arama (`ısıtıcı` → `Isıtıcı Şerit`), kategori / kritik / arşiv filtreleri
 - **Hareket logu**: kim, ne zaman, neden; çalışan yalnız kendi kayıtlarını görür
-- **Ürün yönetimi**: çoklu barkod, arşivleme, Excel/CSV toplu aktarma (önizleme + hata raporu)
+- **Ürün yönetimi**: çoklu barkod, arşivleme, Excel/CSV toplu aktarma (önizleme + hata raporu; "Açılış Stoğu" sütunuyla devir)
 - **Raporlar**: stok ve hareket Excel'i; büyük raporlar e-postayla
 - **Kullanıcılar ve roller**: yönetici / çalışan; alış fiyatı çalışana gösterilmez
 - **Sistem sağlığı**: defter tutarlılığı, iş kuyruğu, hareketsizlik

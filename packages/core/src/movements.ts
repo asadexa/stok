@@ -11,6 +11,7 @@ import {
   reasonLabel,
   reasonPriceBasis,
   toDelta,
+  unitDecimals,
 } from '@stok/shared'
 import {
   type Db,
@@ -35,7 +36,16 @@ import {
   requirePermission,
 } from './authz'
 import { issuesOf, parseOrThrow, validationError } from './validate'
-import { formatScaled, multiplyScaled, parseScaled, scaledFromNumber, scaledToNumber } from './numeric'
+import {
+  NumericFormatError,
+  QTY_SCALE,
+  fitsDecimals,
+  formatScaled,
+  multiplyScaled,
+  parseScaled,
+  scaledFromNumber,
+  scaledToNumber,
+} from './numeric'
 
 /**
  * ============================================================================
@@ -52,7 +62,9 @@ import { formatScaled, multiplyScaled, parseScaled, scaledFromNumber, scaledToNu
  *   3. idempotency okuması   → duplicate:true   (kullanıcı hiçbir şey görmez)
  *   4. barkod → ürün         → BARCODE_UNKNOWN  (depoda EN SIK yaşanan olay)
  *   5. arşiv kontrolü        → PRODUCT_ARCHIVED
+ *   5b. birim hassasiyeti    → INVALID_QUANTITY (efektif miktar, T130)
  *   6. SATIR KİLİDİ + kontrol→ INSUFFICIENT_STOCK
+ *      (+ istenirse ilk hareket → PRODUCT_HAS_MOVEMENTS, T128)
  *   7. ledger insert         → trigger projeksiyonu günceller
  *
  * 6. adım neden kilitli (D-1.2): stok okuyup sonra yazmak klasik bir TOCTOU
@@ -71,6 +83,16 @@ interface CreateMovementOptions {
    * iki katı" sorusu ancak kanal ayrıysa sorulabilir.
    */
   source?: 'web' | 'mobile'
+  /**
+   * Hareket yalnız ürünün İLK hareketi olabilir; değilse `PRODUCT_HAS_MOVEMENTS`
+   * (T128, toplu açılış stoğu). Kullanıcı girdisi DEĞİL, sunucudaki çağıranın
+   * seçeneği: istemci bu kapıyı açıp kapatamaz.
+   *
+   * Kontrol satır kilidinden SONRA, aynı transaction'da yapılıyor. Önce
+   * yapılsaydı kontrol "hareket yok" der, araya bir satış girer ve devir
+   * satıştan sonra yazılırdı: satılan mal stoğa ikinci kez girerdi.
+   */
+  requireFirstMovement?: boolean
 }
 
 /** Deadlock ve serileştirme hatalarında kaç kez tekrar denenir. */
@@ -136,7 +158,11 @@ async function createMovementInner(
 
   for (let attempt = 1; ; attempt++) {
     try {
-      return await withTenant(actor.tenantId, (tx) => writeMovement(tx, actor, input), options.db)
+      return await withTenant(
+        actor.tenantId,
+        (tx) => writeMovement(tx, actor, input, options.requireFirstMovement === true),
+        options.db,
+      )
     } catch (err) {
       // Aynı idempotency_key ikinci kez geldi. 3. adımdaki okuma bunu
       // yakalayamadıysa iki istek aynı anda gelmiş demektir; yarışı
@@ -159,6 +185,53 @@ async function createMovementInner(
 
 // ---------------------------------------------------------------------------
 
+/**
+ * ============================================================================
+ * BİRİM HASSASİYETİ — EFEKTİF MİKTARDA (T130)
+ *
+ * Kural YAZILAN sayıya bakıyor: girilen miktar × barkod çarpanı, ürünün
+ * biriminde. Adetli üründe 0,5 tekli barkodla reddediliyor; 0,5 koli × 12 =
+ * 6 adet geçiyor, 0,1 koli × 12 = 1,2 adet reddediliyor. Kontrol ölçekli
+ * bigint üzerinde (INV-8) ve satır kilidinden ÖNCE: reddedilen istek kilit
+ * tutmuyor, defterde iz bırakmıyor.
+ *
+ * ŞEMADA DEĞİL, BURADA: birim ürünün özelliği ve barkod çözülmeden
+ * bilinmiyor. İçe aktarma önizlemesi aynı kuralı erken gösteriyor ama karar
+ * burada veriliyor; ikisi çelişirse geçerli olan bu.
+ *
+ * Çarpım 3 ondalığı aşarsa (`multiplyScaled` fırlatır) bu da kullanıcı
+ * girdisi hatası: eskiden ham hata olarak 500'e düşüyordu.
+ * ============================================================================
+ */
+function effectiveQuantity(qty: number, qtyMultiplier: string, unit: Unit): bigint {
+  const multiplier = parseScaled(qtyMultiplier)
+  let effective: bigint
+  try {
+    effective = multiplyScaled(scaledFromNumber(qty), multiplier)
+  } catch (err) {
+    if (!(err instanceof NumericFormatError)) throw err
+    throw validationError(
+      [{ path: 'qty', message: `En fazla ${QTY_SCALE} ondalık basamak` }],
+      'INVALID_QUANTITY',
+    )
+  }
+
+  const decimals = unitDecimals(unit)
+  if (!fitsDecimals(effective, decimals)) {
+    throw new AppError(
+      'INVALID_QUANTITY',
+      `effective qty ${formatScaled(effective)} does not fit unit ${unit}`,
+      {
+        unit,
+        decimals,
+        multiplier: scaledToNumber(multiplier),
+        effectiveQty: scaledToNumber(effective),
+      },
+    )
+  }
+  return effective
+}
+
 function parseInput(raw: unknown): CreateMovementInput {
   const parsed = createMovementSchema.safeParse(raw)
   if (parsed.success) return parsed.data
@@ -174,6 +247,7 @@ async function writeMovement(
   tx: Tx,
   actor: Actor,
   input: CreateMovementInput,
+  requireFirstMovement: boolean,
 ): Promise<CreateMovementResponse> {
   const duplicate = await findByIdempotencyKey(tx, actor.tenantId, input.idempotencyKey)
   if (duplicate) return duplicate
@@ -189,14 +263,36 @@ async function writeMovement(
 
   if (input.locationId) await assertLocationExists(tx, actor.tenantId, input.locationId)
 
-  const effectiveQty = multiplyScaled(
-    scaledFromNumber(input.qty),
-    parseScaled(target.qtyMultiplier),
-  )
+  const effectiveQty = effectiveQuantity(input.qty, target.qtyMultiplier, target.unit as Unit)
   const delta = toDelta(1, input.reason) === 1 ? effectiveQty : -effectiveQty
 
   const before = await lockStockRow(tx, actor.tenantId, target.productId)
   const expected = before + delta
+
+  if (requireFirstMovement) {
+    const [prior] = await tx
+      .select({ id: stockMovements.id })
+      .from(stockMovements)
+      .where(
+        and(
+          eq(stockMovements.tenantId, actor.tenantId),
+          eq(stockMovements.productId, target.productId),
+        ),
+      )
+      .limit(1)
+    if (prior) {
+      // Aynı anahtarla eşzamanlı ikinci çağrı (iki sekme, çift tıklama):
+      // önceki hareket İLK çağrının yazdığı devirin kendisi. Hata değil,
+      // duplicate (INV-6). Kilit altındayız ve ilk çağrı COMMIT etti; arama
+      // onu görüyor. Bu satır olmasaydı aynı istek iki farklı cevap alırdı.
+      const same = await findByIdempotencyKey(tx, actor.tenantId, input.idempotencyKey)
+      if (same) return same
+      throw new AppError('PRODUCT_HAS_MOVEMENTS', `product ${target.productId} already has movements`, {
+        productId: target.productId,
+        name: target.productName,
+      })
+    }
+  }
 
   // Kontrol SADECE çıkışlara uygulanıyor. `expected < 0` tek başına
   // yetmez: stok zaten -5 iken +3'lük bir MAL KABULÜ de -2'de kalır ve
@@ -608,6 +704,8 @@ async function resolveBarcode(tx: Tx, tenantId: string, barcode: string) {
       qtyMultiplier: productBarcodes.qtyMultiplier,
       productId: products.id,
       productName: products.name,
+      // Birim hassasiyeti (T130) ürünün biriminden.
+      unit: products.unit,
       archivedAt: products.archivedAt,
       // Liste fiyatları SUNUCUDA okunuyor, istemciden gelmiyor (T88).
       purchasePrice: products.purchasePrice,

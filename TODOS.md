@@ -7,7 +7,7 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
 **Kurallar**
 
 - ID `T<n>`. Arşivdeki görevler numaralarını korur. Yeni görev en büyük
-  numaradan devam eder — **sıradaki boş numara: T170**. Numara yeniden
+  numaradan devam eder — **sıradaki boş numara: T173**. Numara yeniden
   kullanılmaz.
 - Biçim: `- [ ] **T<n> (P0–P3)** - <alan> - **Başlık**`. Altında kısa
   **Neden / Kanıt / Bağlı / Doğrula / Kaynak** satırları.
@@ -57,6 +57,9 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
     `SHOW timezone` = UTC (2026-10-08).
   - Bağlı: `DAT-16` (Open), T121.
   - Doğrula: TZ=UTC ve TZ=Europe/Istanbul altında 23:30 / 00:30 / 02:59 vakaları.
+  - Yeniden üretildi (2026-10-10 00:25 ve 01:36, yerel UTC+3, DB UTC): `cron.test.ts`'in
+    üç testi (T88.1 kasa açığı ×2, T36 sağlık alarmı) yerel saatle kırmızı, `TZ=UTC` ile
+    19/19 yeşil. Gece 00:00–03:00 arası yerel test koşusu bu yüzden kırılıyor.
 
 - [ ] **T123 (P1)** - auth - **Aynı e-posta birden fazla kiracıda: web'de çıkmaz + kiracılar arası kilitleme**
   - Neden: `login()` `TENANT_AMBIGUOUS` döndürüyor ve `tenantId` kabul ediyor, ama
@@ -102,13 +105,6 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
   - Kanıt: `reversesId` yalnız `schema.ts` ve `rls.test.ts`'te geçiyor.
   - Doğrula: ters hareket sonrası invariant ve kasa açığı raporu testleri.
 
-- [ ] **T128 (P1)** - import - **Açılış stoğu toplu girilemiyor**
-  - Neden: toplu içe aktarma yalnız ürün yaratıyor, miktar sütunu yok; OPENING her
-    hareket için fiyat istiyor. 800 ürünlük bir müşteri 800 ayrı devir hareketi
-    girmek zorunda. E1'in "bu olmadan ilk gün kurulamaz" gerekçesi yarım kalmış.
-  - Kanıt: `packages/core/src/import.ts:148-161`.
-  - Not: yazım `createMovement`'tan geçmeli (`DAT-02`); fiyat ve tarih `PRC-05`.
-
 - [ ] **T129 (P1)** - operasyon - **Harici izleme ve yedek geri yükleme tatbikatı yok**
   - Neden: `/api/v1/health`'i yoklayan uptime izleyici yok; cron'un 500'ü yalnız
     platform loglarında; hata takibi (Sentry vb.) yok. HEALTH_ALARM SMTP'ye bağlı:
@@ -144,12 +140,16 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
 
 ## P2
 
-- [ ] **T130 (P2)** - doğrulama - **Birim hassasiyeti zorlanmıyor; çok küçük miktar 500 veriyor**
-  - Neden: `UNITS.ADET.decimals = 0` hiçbir yerde kullanılmıyor, "0,5 adet" kabul
-    ediliyor. `decimalsOf` `toString()` kullandığı için `0,0000001` (`1e-7`) zod'dan
-    geçiyor, 0.000'a ölçekleniyor ve DB `delta <> 0` CHECK'i yakalıyor; kullanıcı
-    500 görüyor (2026-10-08'de çalıştırılarak doğrulandı).
-  - Kanıt: `packages/shared/src/schemas.ts:42`, `packages/shared/src/units.ts`.
+- [ ] **T171 (P2)** - import - **Büyük içe aktarma tek istekte uzun sürüyor (2.000 satır devirli 47 sn)**
+  - Neden: satırlar tek tek, her devir kendi `createMovement` transaction'ında yazılıyor
+    (bilinçli: tek yazma kapısı ve satır bazlı hata). Yerel `next start`'ta sorun değil;
+    Vercel'de sunucu eylemi fonksiyon süre sınırına takılabilir, kullanıcı yarım
+    aktarım görür (tekrar çalıştırma eksik devirleri tamamlıyor, ikinci kez yazmıyor).
+  - Kanıt: WS-B ölçümü 2026-10-10, ayrı test veritabanı: devirsiz ilk koşu 23,5 sn,
+    devirli ilk koşu 47,1 sn, tekrar 32,5 sn; önizleme 125–305 ms.
+  - Bağlı: T42, T138 (aynı sınıf: uzun iş tek istekte), `OPS-01`.
+  - Doğrula: üretim platformunda 2.000 satırlık devirli dosya; gerekirse iş kuyruğuna
+    alma ya da parçalama (tek kapıdan geçme kuralı korunarak).
 
 - [ ] **T132 (P2)** - defter - **`current_stock` uygulama rolünce yazılabilir**
   - Neden: `stok_app`'ten yalnız DELETE geri alınmış; INSERT/UPDATE serbest (trigger
@@ -284,6 +284,8 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
 - [ ] **T78 (P3)** - performans - Aylık stok değeri özet tablosu. BLOKE: `DAT-15`.
 - [ ] **T166 (P3)** - operasyon - Kalan `openssl` önerileri: `CRON_SECRET` uyarısı (`apps/web/src/server/config.ts:173`, `.env.example:72`) ve runbook'taki `stok_app` parolası (`docs/uretim-runbook.md:47`). openssl Windows'ta varsayılan olarak yok; `AUTH_SECRET` için node komutuna geçildi (T133), bunlar WS-A kapsamı dışında kaldı.
 - [ ] **T169 (P3)** - ci - Telefon kamerası ve çözücü yolu otomatik testte yok. `e2e/telefon-tarama.spec.ts` telefonu API istemcisiyle taklit ediyor; Playwright'ın headless shell'inde `getUserMedia` yok (`NotSupportedError`), geliştirme makinesinde Playwright'ın tam Chromium'u açılmıyor (`spawn UNKNOWN`). Yerelde kurulu Edge + sahte kamera aygıtı + sentetik EAN-13 Y4M ile uçtan uca geçti (2026-10-09, repoda değil). Seçenek: CI'da (Linux) tam Chromium + `--use-file-for-fake-video-capture` ile tek senaryo. Tetikleyici: çözücü ya da Next/Turbopack yükseltmesi.
+- [ ] **T170 (P3)** - ürün - Ürünün birimi sonradan değiştirilince (KG → ADET) eski koli çarpanları ve kesirli hareketler denetlenmiyor; birim kuralı (T130, `DAT-17`) yalnız yeni yazımlarda. Kritik seviye (`minStock`) da birim hassasiyetine bağlı değil (adetli üründe 0,5 kabul). Kaynak: WS-B, 2026-10-10.
+- [ ] **T172 (P3)** - import - İçe aktarma devrinde fiyatın ekonomik tarihi ("Açılış Fiyat Tarihi", `PRC-05`) ve "Tahmini" sütunu yok; devir bugünün alış fiyatıyla yazılıyor. Satır notları (devir atlandı / yazılamadı) ekranda ilk 50 satır, indirilebilir raporda yok. Plan polish'i; tetikleyici: eski stoğu geçmiş fiyatla değerlemek isteyen müşteri. Kaynak: WS-B, 2026-10-10.
 
 ## Product / Future
 
@@ -324,6 +326,29 @@ FIFO maliyet.
 ## Kapananlar
 
 _(Bu dosyada açılıp kapanan görevler buraya iner. T1–T119'un kapanış kayıtları arşivde.)_
+
+- [x] **T130 (P2)** - doğrulama - **Birim hassasiyeti zorlanmıyor; çok küçük miktar 500 veriyor**
+  - Sorun: "0,5 adet" kabul ediliyordu; `decimalsOf` `toString()` ile `1e-7`'yi 0 basamak
+    sayıyor, değer 0.000'a ölçeklenip DB CHECK'ine 500 olarak çarpıyordu; hata metni her
+    durumda "sıfırdan büyük olmalı" diyordu.
+  - Kapanış (WS-B, 2026-10-10): `decimalsOf` üstel gösterime dayanıklı (miktar, para,
+    çarpan); birim kuralı efektif miktarda (miktar × çarpan) `createMovement`'ta, ölçekli
+    bigint üzerinde, kilitten önce (`DAT-17`); adetli üründe koli çarpanı tam sayı
+    (oluşturma, `addBarcode`, içe aktarma); `INVALID_QUANTITY` metni sebebi söylüyor.
+    Kanıt: `unit-precision.test.ts` 8/8, `schemas.test.ts`, `errors.test.ts`,
+    `products.test.ts`; `dogrula` dört koruma kırmızıya döndü; E2E `birim-ve-devir.spec.ts`
+    (0,5 adet Türkçe hata, miktar korunuyor, stok değişmiyor).
+
+- [x] **T128 (P1)** - import - **Açılış stoğu toplu girilemiyor**
+  - Sorun: içe aktarma yalnız ürün yaratıyordu; 800 ürünlük müşteri 800 ayrı devir girmek zorundaydı.
+  - Kapanış (WS-B, 2026-10-10): "Açılış Stoğu" sütunu (`DAT-18`); "Miktar/Stok/Adet" okunmuyor
+    ve önizlemede söyleniyor; devir `createMovement` ile OPENING (fiyat Alış Fiyatı, tekli
+    barkod, kilit altında `requireFirstMovement`, UUID v5 deterministik anahtar); tekrar
+    çalıştırma ikinci devri yazmıyor, hareketli üründe devir atlanıp ürün güncelleniyor.
+    Kanıt: `opening-import.test.ts` 21/21, `first-movement.test.ts` 8/8, `uuid-v5.test.ts`
+    4/4 (RFC 9562 vektörü); `dogrula` sekiz koruma kırmızıya döndü; eşzamanlı aynı-anahtar
+    çağrısının `duplicate` yerine `PRODUCT_HAS_MOVEMENTS` aldığı yarış bulunup düzeltildi;
+    E2E devirli CSV; 2.000 satır devirli ilk koşu 47,1 sn (T171).
 
 - [x] **T131 (P2)** - CI - **Migration drift adımı sessizce geçebiliyor**
   - Sorun: adım başarıyı yalnız çıkış kodu + temiz `migrations` ile ölçüyordu; araç

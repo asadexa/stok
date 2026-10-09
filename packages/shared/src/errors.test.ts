@@ -52,6 +52,35 @@ describe('hata sözleşmesi (D-2.2)', () => {
   })
 })
 
+/**
+ * T130 — miktar hatası SEBEBİ söylüyor. Eskiden her durumda "sıfırdan büyük
+ * olmalı" yazıyordu; 1,2345 ya da adetli ürüne 0,5 giren neden reddedildiğini
+ * anlamıyordu.
+ */
+describe('INVALID_QUANTITY metni (T130)', () => {
+  it('şemanın Türkçe mesajını taşıyor', () => {
+    expect(
+      errorText('INVALID_QUANTITY', { issues: [{ path: 'qty', message: 'En fazla 3 ondalık basamak' }] }),
+    ).toBe('En fazla 3 ondalık basamak')
+  })
+
+  it('adetli üründe tam sayı olması gerektiğini söylüyor', () => {
+    expect(errorText('INVALID_QUANTITY', { unit: 'ADET', decimals: 0, multiplier: 1, effectiveQty: 0.5 })).toBe(
+      'Bu ürün adetle sayılıyor; miktar tam sayı olmalı',
+    )
+  })
+
+  it('koli barkodunda efektif miktarı Türkçe sayıyla gösteriyor', () => {
+    expect(errorText('INVALID_QUANTITY', { unit: 'ADET', decimals: 0, multiplier: 12, effectiveQty: 1.2 })).toBe(
+      'Bu ürün adetle sayılıyor; koli içi 12 ile 1,2 adet ediyor, tam sayı olmalı',
+    )
+  })
+
+  it('ayrıntı yoksa eski genel metne düşüyor', () => {
+    expect(errorText('INVALID_QUANTITY')).toBe('Miktar sıfırdan büyük bir sayı olmalı')
+  })
+})
+
 describe('tanınmayan kod (eski istemci, yeni sunucu)', () => {
   it('genel bir mesaja düşer, patlamaz', () => {
     expect(errorText('SOME_FUTURE_CODE')).toBe('Beklenmeyen bir hata oluştu')

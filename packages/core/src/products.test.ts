@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { type TestTenant, seedTestTenant, testAdminDb, testAppDb } from '@stok/db/testing'
-import { AppError } from '@stok/shared'
+import { AppError, errorText } from '@stok/shared'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { Actor } from './authz'
 import { createMovement } from './movements'
@@ -360,6 +360,44 @@ describe('çoklu barkod', () => {
     await expect(archiveBarcode(staff, product.barcodes[0]!.id, opts)).rejects.toMatchObject({
       code: 'FORBIDDEN',
     })
+  })
+})
+
+/**
+ * T130 — adetle sayılan üründe koli çarpanı tam sayı. Kesirli çarpanlı barkod
+ * tanımlansaydı her okutması tek yazma kapısında reddedilirdi.
+ */
+describe('birim ve koli çarpanı (T130)', () => {
+  const koli = (qtyMultiplier: number) => ({
+    barcode: `kc-${randomUUID()}`,
+    kind: 'CASE',
+    qtyMultiplier,
+  })
+
+  it('adetli ürüne 2,5 çarpanlı koli barkodu eklenemiyor', async () => {
+    const product = await createProduct(boss, draft(), opts)
+    const err = await addBarcode(boss, product.productId, koli(2.5), opts).then(
+      () => undefined,
+      (e: unknown) => e,
+    )
+
+    expect(err).toBeInstanceOf(AppError)
+    expect(errorText((err as AppError).code, (err as AppError).details)).toBe(
+      'Adetle sayılan üründe koli içi adet tam sayı olmalı',
+    )
+  })
+
+  it('adetli ürün 2,5 çarpanlı koliyle oluşturulamıyor', async () => {
+    await expect(
+      createProduct(boss, draft({ barcodes: [koli(2.5)] }), opts),
+    ).rejects.toBeInstanceOf(AppError)
+  })
+
+  it('kiloyla satılan üründe 2,5 çarpan kabul ediliyor', async () => {
+    const product = await createProduct(boss, draft({ unit: 'KG' }), opts)
+    const list = await addBarcode(boss, product.productId, koli(2.5), opts)
+
+    expect(list.some((b) => b.qtyMultiplier === 2.5)).toBe(true)
   })
 })
 

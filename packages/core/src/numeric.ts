@@ -65,6 +65,14 @@ export function scaledFromNumber(value: number): bigint {
   return parseScaled(value.toFixed(QTY_SCALE))
 }
 
+/**
+ * Ölçekli değer en fazla `decimals` ondalık basamak mı taşıyor. Birim
+ * hassasiyeti (adet → 0) için; bigint üzerinde, kayan nokta yok (INV-8).
+ */
+export function fitsDecimals(value: bigint, decimals: number): boolean {
+  return value % 10n ** BigInt(QTY_SCALE - decimals) === 0n
+}
+
 /** Ölçekli bigint'i veritabanına yazılacak ondalık metne çevirir. */
 export function formatScaled(value: bigint): string {
   const neg = value < 0n

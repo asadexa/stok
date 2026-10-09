@@ -29,6 +29,16 @@ export function unitDecimals(unit: Unit): number {
   return UNITS[unit].decimals
 }
 
+/**
+ * Miktar bu birime uyuyor mu (adet → tam sayı). YALNIZ ERKEN UYARI için
+ * (içe aktarma önizlemesi): nihai karar `createMovement`'ta, ölçekli bigint
+ * üzerinde veriliyor. İkisi çelişirse geçerli olan oradaki karar.
+ * 3 ondalık sınırı ayrıca `qtySchema`'da.
+ */
+export function qtyFitsUnit(qty: number, unit: Unit): boolean {
+  return unitDecimals(unit) !== 0 || Number.isInteger(qty)
+}
+
 /** "55 adet", "3,5 kg". Türkçe ondalık ayırıcı virgül. */
 export function formatQty(qty: number, unit: Unit): string {
   const d = unitDecimals(unit)

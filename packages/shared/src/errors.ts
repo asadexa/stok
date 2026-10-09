@@ -53,6 +53,11 @@ function firstIssueMessage(details: ErrorDetails): string | undefined {
   return undefined
 }
 
+/** Hata metnindeki sayı Türkçe yazılsın: 1.2 değil 1,2. */
+function trNumber(value: unknown): string {
+  return typeof value === 'number' ? String(value).replace('.', ',') : String(value)
+}
+
 export const ERROR_CODES = {
   // --- İş kuralı: tekrar denemek işe yaramaz, kullanıcı müdahalesi gerek ---
   BARCODE_UNKNOWN: {
@@ -73,7 +78,17 @@ export const ERROR_CODES = {
   INVALID_QUANTITY: {
     http: 400,
     retryable: false,
-    tr: () => 'Miktar sıfırdan büyük bir sayı olmalı',
+    // Metin SEBEBİ söylüyor (T130). Eskiden her durumda "sıfırdan büyük
+    // olmalı" yazıyordu: 1,2345 girene de, adetli ürüne 0,5 girene de. Kullanıcı
+    // girdiği sayının neden reddedildiğini anlamadan tekrar deniyordu.
+    tr: (d) => {
+      if (d.decimals === 0) {
+        return typeof d.multiplier === 'number' && d.multiplier !== 1
+          ? `Bu ürün adetle sayılıyor; koli içi ${trNumber(d.multiplier)} ile ${trNumber(d.effectiveQty)} adet ediyor, tam sayı olmalı`
+          : 'Bu ürün adetle sayılıyor; miktar tam sayı olmalı'
+      }
+      return firstIssueMessage(d) ?? 'Miktar sıfırdan büyük bir sayı olmalı'
+    },
   },
   VALIDATION_FAILED: {
     http: 400,
@@ -283,6 +298,14 @@ export const ERROR_CODES = {
     http: 426,
     retryable: false,
     tr: () => 'Uygulamanın yeni sürümü gerekli',
+  },
+
+  // Açılış stoğu yalnız ürünün İLK hareketi olabilir (T128): sonradan yazılan
+  // devir, arada satılan malı ikinci kez stoğa koyardı.
+  PRODUCT_HAS_MOVEMENTS: {
+    http: 409,
+    retryable: false,
+    tr: () => 'Bu ürünün zaten hareketi var; açılış stoğu yazılmadı',
   },
 
   // --- Telefonla okutma (WS-SCAN) ---

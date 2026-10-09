@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   NumericFormatError,
+  fitsDecimals,
   formatScaled,
   multiplyScaled,
   parseScaled,
@@ -113,5 +114,23 @@ describe('multiplyScaled (koli çarpanı)', () => {
     expect(() => multiplyScaled(parseScaled('1000000'), parseScaled('1000000'))).toThrow(
       NumericFormatError,
     )
+  })
+})
+
+describe('fitsDecimals (birim hassasiyeti, T130)', () => {
+  it('adet için yalnız tam sayı', () => {
+    expect(fitsDecimals(parseScaled('6'), 0)).toBe(true)
+    expect(fitsDecimals(parseScaled('0.5'), 0)).toBe(false)
+    expect(fitsDecimals(parseScaled('1.001'), 0)).toBe(false)
+  })
+
+  it('3 ondalıklı birimde ölçekli her değer uyar', () => {
+    expect(fitsDecimals(parseScaled('0.001'), 3)).toBe(true)
+    expect(fitsDecimals(parseScaled('12.345'), 3)).toBe(true)
+  })
+
+  it('negatif değerde de doğru karar (çıkış miktarı)', () => {
+    expect(fitsDecimals(-parseScaled('6'), 0)).toBe(true)
+    expect(fitsDecimals(-parseScaled('0.5'), 0)).toBe(false)
   })
 })

@@ -60,6 +60,8 @@ Kaynak `PLAN` = `docs/archive/PLAN-2026-09.md`.
 | DAT-13 | Migration'lar yalnız ileri uyumlu (additive); kolon silme, tip değiştirme, NOT NULL ekleme iki sürümde. DB'de geri alma yolu yok | Active | runbook §2, §7 | 0009 ihlal etmiş; zorlama yok: T146 |
 | DAT-15 | Maliyet yöntemi: FIFO mu ağırlıklı ortalama mı | Open | ADR-004 · U2 | Varsayılan ağırlıklı ortalama, bağlayıcı değil; karar muhasebeciye ait |
 | DAT-16 | Saat dilimi: gün sınırı ve mesai neye göre (sabit Europe/Istanbul mu, kiracı ayarı mı) | Open | denetim 2026-10-08 | Kod bugün sunucu yerel saatini varsayıyor: T121, T122 |
+| DAT-17 | Birim hassasiyeti YAZILAN miktarda (girilen × barkod çarpanı) ve ürünün biriminde: adet tam sayı, kg/metre/litre ≤3 ondalık. Karar `createMovement`'ta, ölçekli bigint üzerinde, kilitten önce; önizleme ve formlar yalnız erken uyarı. Adetli üründe koli çarpanı tam sayı | Active | WS-B, 2026-10-10 · T130 | 0,5 koli × 12 = 6 adet geçer. Birim değişimi sonrası eski veri: T170 |
+| DAT-18 | İçe aktarmada açılış stoğu yalnız "Açılış Stoğu" (ve açık eş adları) sütunundan; "Miktar/Stok/Adet" okunmaz, uyarılır. Devir `createMovement` ile OPENING, ürünün tekli barkodu ve Alış Fiyatı'yla; yalnız ürünün İLK hareketi olabilir (kilit altında); idempotency anahtarı UUID v5 (`tenant:ürün`), ürün başına tek içe aktarma devri | Active | WS-B, 2026-10-10 · T128 | Hareketli üründe devir atlanır, ürün güncellenir. Ad alanı UUID'si değiştirilemez (`import.ts`) |
 
 ## Fiyat defteri
 
@@ -68,7 +70,7 @@ Model `PROJECT_BRAIN.md` §7'de; tasarım `docs/designs/fiyat-defteri.md`.
 | ID | Karar | Durum | Kaynak · Eski ID | Not |
 |---|---|---|---|---|
 | PRC-03 | Liste fiyatından sapma sebebi zorunlu, listeden seçilir ("Diğer"de not zorunlu); DB CHECK'te epsilon yok | Active | PLAN T88 · "D6 iptal" | Ayarlanabilir tolerans tasarlanıp reddedildi: fiyat barkod/fişten gelir, kazara sapma yoktur |
-| PRC-05 | Devirde (OPENING) fiyat zorunlu (append-only: sonradan eklenemez); fiyatın ekonomik tarihi `price_date` ayrı; geçmiş tarih yalnız satış dayanaklı OLMAYAN sebeplerde | Active | PLAN T89 | Açılış stoğu içe aktarma (T128) da buna uymalı |
+| PRC-05 | Devirde (OPENING) fiyat zorunlu (append-only: sonradan eklenemez); fiyatın ekonomik tarihi `price_date` ayrı; geçmiş tarih yalnız satış dayanaklı OLMAYAN sebeplerde | Active | PLAN T89 | İçe aktarma devri buna uyuyor (`DAT-18`); geçmiş tarihli devir fiyatı içe aktarmada yok: T172 |
 | PRC-08 | Yenileme maliyeti: hesap SQL `numeric` ile (TS'te kayan nokta ya da ikinci bigint seti yok); kaynak sırası son alış → Yİ-ÜFE endeksli → alış fiyatı; `price_index` = ENABLE+FORCE RLS + `SELECT USING (true)` + yazma REVOKE; `(tenant_id, product_id, created_at DESC) WHERE reason='PURCHASE'` kısmi indeksi | Active (uygulanmadı) | PLAN T90 · Faz 10 "D5, D6, D9" | `USING (true)` deseni yalnız ulusal açık veri için; kiracı tablosuna kopyalanmaz |
 | PRC-11 | T90 / T91 açık soruları ve teyit bekleyen varsayımlar: "son alış yeterince yeni" eşiği (öneri 90 gün); Yİ-ÜFE'yi kim, ne sıklıkla günceller ve bayatlık uyarısı; `client_list_price` uyuşmazlığı raporda nasıl görünür; sapma sebebi listesinin içeriği; fire/kullanımda fiyat olmaması (kodda uygulandı) | Open | `docs/designs/fiyat-defteri.md` "Açık sorular" · PLAN Faz 10 | T90'ı blokluyor |
 

@@ -12,7 +12,10 @@ import {
 } from './prices'
 import { MOVEMENT_REASON_VALUES, MOVEMENT_REASONS, type MovementReason } from './reasons'
 import { ROLE_VALUES, type Role } from './roles'
-import { UNIT_VALUES, type Unit } from './units'
+import { UNIT_VALUES, type Unit, unitDecimals } from './units'
+
+/** Ürün oluşturma, barkod ekleme ve içe aktarma aynı cümleyi söylesin. */
+export const ADET_MULTIPLIER_MESSAGE = 'Adetle sayılan üründe koli içi adet tam sayı olmalı'
 
 const reasonEnum = z.enum(MOVEMENT_REASON_VALUES as [MovementReason, ...MovementReason[]])
 const unitEnum = z.enum(UNIT_VALUES as [Unit, ...Unit[]])
@@ -39,10 +42,20 @@ const clientPriceSourceEnum = z.enum(CLIENT_PRICE_SOURCES)
 
 /** NUMERIC(14,3): en fazla 3 ondalık basamak. */
 const MAX_DECIMALS = 3
+/**
+ * Ondalık basamak sayısı: mantisin basamakları eksi üs.
+ *
+ * `toString()` çok küçük ve çok büyük sayıları ÜSTEL yazıyor (`1e-7`,
+ * `1.5e-7`). Eski hâli yalnız nokta arıyordu ve `1e-7`'yi 0 basamak sayıyordu:
+ * değer şemadan geçip 0.000'a ölçekleniyor, veritabanının `delta <> 0`
+ * CHECK'ine 500 olarak çarpıyordu (T130). Aynı açık para ve koli çarpanında da
+ * vardı.
+ */
 const decimalsOf = (n: number) => {
-  const s = n.toString()
-  const dot = s.indexOf('.')
-  return dot === -1 ? 0 : s.length - dot - 1
+  const [mantissa = '', exponent = '0'] = n.toString().split('e')
+  const dot = mantissa.indexOf('.')
+  const mantissaDecimals = dot === -1 ? 0 : mantissa.length - dot - 1
+  return Math.max(0, mantissaDecimals - Number(exponent))
 }
 const hasValidPrecision = (n: number) => decimalsOf(n) <= MAX_DECIMALS
 
@@ -84,8 +97,10 @@ const moneySchema = z
  */
 export const qtySchema = z
   .number({ invalid_type_error: 'Miktar sayı olmalı' })
-  .positive()
-  .max(1_000_000)
+  // Mesajlar Türkçe ve açık: `INVALID_QUANTITY` metni bunlardan üretiliyor
+  // (errors.ts). Varsayılan bırakılsaydı ekrana zod'un İngilizcesi düşerdi.
+  .positive('Miktar sıfırdan büyük olmalı')
+  .max(1_000_000, 'Miktar en fazla 1.000.000 olabilir')
   .refine(hasValidPrecision, { message: `En fazla ${MAX_DECIMALS} ondalık basamak` })
 
 /**
@@ -264,6 +279,21 @@ export const createProductSchema = z.object({
   locationId: z.string().uuid().optional(),
   barcodes: z.array(barcodeInputSchema).min(1, 'En az bir barkod gerekli'),
 })
+  // Adetle sayılan üründe koli çarpanı tam sayı (T130). 2,5 çarpanlı bir
+  // koli barkodu tanımlansaydı her okutması kesirli adet üretir ve tek yazma
+  // kapısında reddedilirdi: barkod tanımlı görünür ama hiç kullanılamazdı.
+  .superRefine((product, ctx) => {
+    if (unitDecimals(product.unit) !== 0) return
+    product.barcodes.forEach((barcode, index) => {
+      if (!Number.isInteger(barcode.qtyMultiplier)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: ADET_MULTIPLIER_MESSAGE,
+          path: ['barcodes', index, 'qtyMultiplier'],
+        })
+      }
+    })
+  })
 
 export type CreateProductInput = z.infer<typeof createProductSchema>
 
