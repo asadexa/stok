@@ -88,7 +88,7 @@ pnpm --filter @stok/web run build
 pnpm --filter @stok/web run test:e2e               # UI değiştiyse; önce build, port 3000 boş olmalı
 ```
 
-- drizzle-kit hata verse de 0 ile çıkabiliyor (T131): çıktıyı oku ve `git status`'a bak.
+- Drift kontrolü fail-closed: yalnız çıkış koduna güvenme; "No schema changes" satırına ve `git status`'a birlikte bak, CI da böyle yapıyor. Hatada 0 dönme gözlemi 2026-10-09'da yeniden üretilemedi (T131).
 - E2E demo veritabanına yazar (T150).
 
 ## Doküman senkronu

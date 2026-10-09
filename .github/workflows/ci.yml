@@ -22,7 +22,10 @@ name: CI
 
 on:
   push:
-    branches: [master]
+    # `development` normal geliştirme dalı (CLAUDE.md). Onun push'u CI'sız
+    # kalsaydı akıştaki "commit/push → CI" adımı boşa geçer, kırmızı kod
+    # ancak master'a PR açıldığında görünürdü.
+    branches: [master, development]
   pull_request:
 
 # GITHUB_TOKEN yalnızca okuyabilsin. Varsayılan izinler repo ve
@@ -117,14 +120,32 @@ jobs:
       # Şema dosyası değişip migration üretilmediyse kod ile veritabanı
       # sessizce ayrışır: uygulama yeni sütunu bekler, üretimde yoktur.
       # `generate` yeni bir dosya yazıyorsa çalışma ağacı kirlenir.
+      #
+      # YEŞİL İÇİN OLUMLU KANIT ŞART (T131). Çıkış kodu 0 ve temiz ağaç,
+      # araç HİÇBİR ŞEY YAPMADAN dönse de sağlanır; yalnız onlara bakan
+      # adım o durumu "senkron" sayardı. Bu yüzden drizzle-kit'in kendi
+      # no-op satırı da aranıyor, yoksa adım kırmızı (fail closed). Bir
+      # sürüm yükseltmesi o satırı değiştirirse adım kırmızı yanar ve
+      # aşağıdaki metin güncellenir; sessizce yeşil kalmasından iyidir.
       - name: Migration'lar şema ile senkron mu
         run: |
-          pnpm --filter @stok/db exec drizzle-kit generate
+          # Çıktı aranmak için yakalanıyor ve başarısızlıkta da basılıyor:
+          # basılmasaydı `bash -e` adımı keser, logda sebep görünmezdi.
+          if ! out="$(pnpm --filter @stok/db exec drizzle-kit generate 2>&1)"; then
+            printf '%s\n' "$out"
+            echo "::error::drizzle-kit generate başarısız oldu (çıktı yukarıda)."
+            exit 1
+          fi
+          printf '%s\n' "$out"
           if [ -n "$(git status --porcelain packages/db/migrations)" ]; then
             echo "::error::schema.ts değişmiş ama migration üretilmemiş."
             echo "Yerelde çalıştır: pnpm --filter @stok/db run generate"
             git status --porcelain packages/db/migrations
             git diff -- packages/db/migrations
+            exit 1
+          fi
+          if ! printf '%s\n' "$out" | grep -qF 'No schema changes'; then
+            echo "::error::drizzle-kit 'No schema changes' yazmadı; şemanın senkron olduğu kanıtlanamadı."
             exit 1
           fi
 

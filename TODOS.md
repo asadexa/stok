@@ -147,13 +147,6 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
     500 görüyor (2026-10-08'de çalıştırılarak doğrulandı).
   - Kanıt: `packages/shared/src/schemas.ts:42`, `packages/shared/src/units.ts`.
 
-- [ ] **T131 (P2)** - CI - **Migration drift adımı sessizce geçebiliyor**
-  - Neden: `drizzle-kit generate` (0.31.10) çöktüğünde de 0 koduyla çıkıyor
-    (2026-10-08'de bozuk config'le doğrulandı). CI adımı yalnız `git status`'a
-    baktığı için drizzle-kit patlarsa "drift yok" der. Yan not: drizzle-kit
-    Windows'ta mutlak `out` yolunu çalışma dizinine ekliyor.
-  - Kanıt: `.github/workflows/ci.yml` → "Migration'lar şema ile senkron mu".
-
 - [ ] **T132 (P2)** - defter - **`current_stock` uygulama rolünce yazılabilir**
   - Neden: `stok_app`'ten yalnız DELETE geri alınmış; INSERT/UPDATE serbest (trigger
     çağıranın yetkisiyle çalışıyor). Tek yazma kapısı (`DAT-02`) bir konvansiyon;
@@ -301,3 +294,12 @@ FIFO maliyet.
 ## Kapananlar
 
 _(Bu dosyada açılıp kapanan görevler buraya iner. T1–T119'un kapanış kayıtları arşivde.)_
+
+- [x] **T131 (P2)** - CI - **Migration drift adımı sessizce geçebiliyor**
+  - Sorun: adım başarıyı yalnız çıkış kodu + temiz `migrations` ile ölçüyordu; araç
+    sonuç üretmeden 0 dönerse yeşil kalırdı (yanlış pozitif). "Çökmede 0" önceki
+    gözlemdi, 2026-10-09'da yeniden üretilemedi (eksik ve hata fırlatan config: çıkış 1).
+  - Kapanış (PRE, 2026-10-09): adım drizzle-kit'in no-op satırını da istiyor (fail
+    closed). Kanıt: `dogrula`, çıktısız stub'da eski adım yeşil, yeni adım kırmızı;
+    scratch depoda gerçek drift kırmızı. Yan not, doğrulanmadı: drizzle-kit
+    Windows'ta mutlak `out` yolunu çalışma dizinine ekliyor.
