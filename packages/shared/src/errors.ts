@@ -285,6 +285,21 @@ export const ERROR_CODES = {
     tr: () => 'Uygulamanın yeni sürümü gerekli',
   },
 
+  // --- Telefonla okutma (WS-SCAN) ---
+  // Metin kullanıcıya ne yapacağını söylüyor: iki durumda da çare laptopta
+  // yeni QR oluşturmak. Sunucu yeniden başlayınca bütün telefon token'ları
+  // bilinmez olur; o durum da "bağlantı kapandı" sayılıyor, çünkü çare aynı.
+  SCAN_PAIRING_INVALID: {
+    http: 410,
+    retryable: false,
+    tr: () => 'Bu QR kodunun süresi dolmuş ya da kullanılmış. Laptopta yeni QR oluşturun',
+  },
+  SCAN_SESSION_CLOSED: {
+    http: 410,
+    retryable: false,
+    tr: () => 'Laptop bağlantısı kapandı. Laptopta yeni QR oluşturup tekrar okutun',
+  },
+
   // --- Rapor ve donanım ---
   EXPORT_TOO_LARGE: {
     http: 413,

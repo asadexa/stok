@@ -62,7 +62,22 @@ const config: NextConfig = {
    * bir kanca kalmadı — bir sonraki paketleyici değişikliğinde yeniden
    * yazılacak bir hack de yok.
    */
-  turbopack: {},
+  turbopack: {
+    rules: {
+      /**
+       * WS-SCAN: ZXing çözücüsünün WASM'ı modül olarak değil DOSYA olarak
+       * derlemeye giriyor; import onun `/_next/static/media/...` adresini
+       * veriyor (src/app/tara/scanner.tsx). Turbopack `.wasm`'ı varsayılan
+       * olarak WebAssembly modülü sayıyor ve adres yerine dışa aktarımları
+       * veriyor. Aynı ayarı tek import'a yazan öznitelik (`with {
+       * turbopackModuleType: 'asset' }`) bu sürümde WASM'ta etkisiz kaldı:
+       * derleme "export default yok" ile durdu (2026-10-09, Next 16.3.4).
+       * Kalıp yalnız bu dosyanın adına uyuyor: başka bir `.wasm` modül olarak
+       * kalsın.
+       */
+      'zxing_reader.wasm': { type: 'asset' },
+    },
+  },
 
   /**
    * Next 16 açılışta `apps/web/AGENTS.md` ve `apps/web/CLAUDE.md` ÜRETİYOR.

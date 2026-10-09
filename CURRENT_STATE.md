@@ -13,25 +13,27 @@ kararlar → `DECISIONS.md`, model → `PROJECT_BRAIN.md`.
 ya da release kaydı yok. Kod tarafı hazırlığı (vercel.json, `/api/v1/health`,
 runbook) var; önkoşullar TODOS T42.
 
-## Doğrulanmış baseline — 2026-10-09, WS-A (`a230c18` üzerine), Windows 11, Node 24.20
+## Doğrulanmış baseline — 2026-10-09, WS-SCAN (`1ddfd2a` üzerine, commit öncesi), Windows 11, Node 24.20
 
 | Kontrol | Sonuç |
 |---|---|
-| lint (Biome) | PASS — 174 dosya, 0 tanı |
+| lint (Biome) | PASS — 189 dosya, 0 tanı |
 | typecheck (4 paket) | PASS |
-| test | PASS — **719/719** (shared 56, db 85, core 493, web 85), atlanan yok |
+| test | PASS — **796/796** (shared 56, db 85, core 493, web 162), atlanan yok |
 | migration drift | PASS — "No schema changes", dosya üretilmedi |
-| `next build` | PASS — 24 rota |
-| Playwright | PASS — **21/21** |
+| `next build` | PASS — 29 rota |
+| Playwright | PASS — **22/22** |
 
-Ek duman testi: `pnpm tenant:create` ile ayrı test veritabanında açılan iki
-sentetik işletmenin yöneticileri üretim derlemesinde (`next start`, rastgele
-`AUTH_SECRET`) giriyor, ürün izolasyonu korunuyor; örnek sırlarla `next start`
-açılmıyor; `pnpm demo --seed` ayrı veritabanında temizken geçiyor, pilot işletme
-varken duruyor.
+Gerçek cihaz kabulü (WS-SCAN, iPhone Safari, HTTPS tünel, laptop `next start`):
+gerçek barkod telefon kamerasıyla okunuyor, ürün laptopta `/hareket`te açılıyor,
+Kaydet ile stok güncelleniyor, aynı ürün yeniden okutulabiliyor, kirli form
+koruması çalışıyor, "Bağlantıyı kes" telefon oturumunu kapatıyor. Android
+denenmedi. Yerelde ayrıca Edge + sahte kamera aygıtı + sentetik EAN-13 ile
+uçtan uca geçti (kamera yolu CI'da yok: T169).
 
-GitHub CI: `development` `a230c18` yeşil; master'daki son koşu #44 (2026-09-14)
-yeşil. 9 Dependabot PR açık, 3'ü kırmızı (T140).
+GitHub CI: `development` `1ddfd2a` (WS-A) koşu #57 yeşil; WS-SCAN henüz commit
+edilmedi, CI'da koşmadı. master'daki son koşu #44 (2026-09-14) yeşil.
+9 Dependabot PR açık, 3'ü kırmızı (T140).
 
 ## Çalışan ana kapsam (web)
 
@@ -40,7 +42,8 @@ fiyat defteri · hareket logu · ürün/barkod yönetimi · Excel/CSV ürün akt
 Excel export · kullanıcı yönetimi · ayarlar · kategoriler · raporlar · sistem
 sağlığı · Ctrl+K · bildirim zili. RLS çok kiracılı veri katmanı, append-only
 defter, kaba kuvvet kilidi, elle tetiklenen `/api/cron`, `/api/v1/health`,
-`pnpm demo` (Windows/macOS/Linux).
+`pnpm demo` (Windows/macOS/Linux). Pilot, varsayılan kapalı: telefon kamerasıyla
+okutup `/hareket`te açma (`ENABLE_PHONE_SCANNER`, `PRD-12`, `ARC-14`).
 
 ## Kısmi / bozuk
 
@@ -55,6 +58,9 @@ defter, kaba kuvvet kilidi, elle tetiklenen `/api/cron`, `/api/v1/health`,
 - **Kritik stok**: yalnız e-posta, push yok.
 - **Konum yönetimi**: arayüz yok.
 - **Mobil ve `/api/v1` REST**: yok (Faz 5, en sona bırakıldı).
+- **Telefonla okutma pilotu**: oturum süreç belleğinde (yeniden başlatmada düşer,
+  yalnız tek süreçli `next start`, `ARC-14`); tünel açıkken bütün uygulama dışarıda
+  (T167); UPC-A 12/13 hane ölçülmedi (T168).
 
 ## P0 / P1 blocker'lar
 
@@ -69,20 +75,27 @@ defter, kaba kuvvet kilidi, elle tetiklenen `/api/cron`, `/api/v1/health`,
 | T127 | Düzeltme (ters hareket) akışı |
 | T128 | Açılış stoğu toplu girişi |
 | T129 | Harici izleme + yedek geri yükleme tatbikatı |
+| T167 | Telefon pilotunun tüneli bütün uygulamayı internete açıyor |
 
 Kullanıcı kararı bekleyen `Open` kararlar: `DECISIONS.md`'de `Open` olarak
 işaretli (öne çıkanlar `DAT-15`, `DAT-16`, `SEC-14`, `OPS-01`, `OPS-02`, `UX-04`, `UX-08`).
 
 ## Son tamamlanan workstream
 
-**WS-A — Güvenli kurulum**: `pnpm tenant:create` ile işletme + ilk yönetici
-(T162), seed hedef koruması (T125), üretimde örnek `AUTH_SECRET` reddi ve
-`pnpm demo`'nun rastgele anahtar üretmesi (T133). Parola kurtarma kapsam dışı (T163).
-Öncesinde PRE (`a230c18`): CI `development`'ta da koşuyor, drift adımı fail closed (T131).
+**WS-SCAN — Telefon kamerası → laptop** (commit bekliyor): `/hareket`te
+"Telefonla Barkod Okut" paneli (tünel adresi, QR, durum, Kes); telefonda `/tara`
+(QR ile eşleşme, okut, gönder, "Sonraki Ürünü Tara"); `/api/tara/*` dört uç.
+`lookupBarcode` ve `createMovement` değişmedi, migration yok. Güvenlik `SECURITY_MODEL`
+S18; kararlar `PRD-12`, `ARC-14`. Gerçek iPhone kabul testi geçti (baseline'a bak).
 
-## Sıradaki workstream: WS-SCAN
+Öncesinde WS-A (`1ddfd2a`, CI #57): `pnpm tenant:create` (T162), seed hedef
+koruması (T125), üretimde örnek `AUTH_SECRET` reddi (T133).
 
-Telefon kamerasıyla okutup dizüstündeki ekrana aktarma. Kapsamı henüz yazılı değil.
+## Sıradaki workstream: WS-B
+
+Birim hassasiyeti (T130) ve açılış stoğu / içe aktarma (T128). Ardından WS-C-lite:
+saha testinde görülebilecek export/Excel saat sorunu (tam saat dilimi işi T122,
+`DAT-16`, bulut öncesi).
 
 ## Production blocker düzeltmeleri
 

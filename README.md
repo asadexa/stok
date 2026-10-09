@@ -8,6 +8,8 @@ takip sistemi. Türkçe arayüz, çok kiracılı (multi-tenant), değiştirileme
 
 - **Giriş / çıkış**: barkod (USB okuyucu ya da elle) → ürün ve mevcut stok →
   miktar + sebep; koli barkodunda çarpan uygulanır
+- **Telefonla okutma (pilot, varsayılan kapalı)**: telefon kamerasıyla okunan barkod
+  laptopta aynı giriş/çıkış ekranında açılır; stok yalnız laptopta Kaydet'le değişir
 - **Kasa açığı kontrolü**: liste fiyatından sapan satışta sebep zorunlu; fark gün
   sonu raporunda kullanıcı bazında
 - **Stok tablosu**: Türkçe arama (`ısıtıcı` → `Isıtıcı Şerit`), kategori / kritik / arşiv filtreleri
@@ -88,6 +90,23 @@ veritabanına yazar.
 `--filter` ile çağırırken **`run` kelimesi zorunlu**: onsuz pnpm, Windows'ta
 `'migrate' is not recognized` hatası verir.
 
+**Telefonla barkod okutma (pilot):** telefon kamerası yalnız HTTPS'te açıldığı için
+laptoptaki sunucuya bir tünel gerekir (örnek: Cloudflare'in hesap gerektirmeyen geçici
+tüneli, Windows'ta `winget install --id Cloudflare.cloudflared -e`). Bayrak sunucuyu
+başlatan terminalde verilir (PowerShell: `$env:ENABLE_PHONE_SCANNER = 'true'`) ya da
+`.env`'e yazılır.
+
+```bash
+pnpm --filter @stok/web run build
+pnpm --filter @stok/web run start                 # bayrak açık terminalde
+cloudflared tunnel --url http://localhost:3000    # ikinci terminal; https adresini kopyala
+```
+
+Laptopta `http://localhost:3000/hareket` → "Telefon adresi (tünel)" alanına tünel
+adresi → **Telefonla Barkod Okut** → telefonun kamera uygulamasıyla QR'ı okut. Yalnız
+tek süreçli `next start` ile çalışır (oturumlar bellekte; `ARC-14`). Tünel açıkken
+uygulamanın tamamı internetten erişilebilir: yalnız kullanım süresince açık tutun (T167).
+
 **Gün sonu turunu elle tetiklemek** (`.env`'de `CRON_SECRET` tanımlı olmalı):
 
 ```bash
@@ -123,6 +142,7 @@ Tam liste ve açıklamalar `.env.example`'da.
 | `CRON_SECRET` | cron için | En az 32 karakter; tanımsızsa `/api/cron` kapalı |
 | `SMTP_URL`, `REPORT_FROM_EMAIL` | e-posta için | Rapor ve alarm e-postaları |
 | `DB_POOL_MAX`, `DB_IDLE_TIMEOUT` | serverless'ta | Havuz boyutu ve boşta kapanma süresi |
+| `ENABLE_PHONE_SCANNER` | pilot | `true` iken telefonla okutma açık (`/tara`, `/api/tara/*`, `/hareket` paneli); yalnız `true`/`false`. Varsayılan kapalı |
 
 `NODE_ENV` bilerek tanımlanmaz: Next kendisi ayarlar.
 

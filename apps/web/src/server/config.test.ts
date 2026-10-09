@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { assertServerConfig } from './config'
+import { assertServerConfig, phoneScannerEnabled } from './config'
 
 /**
  * ============================================================================
@@ -152,6 +152,41 @@ describe('assertServerConfig (T116)', () => {
       process.env.AUTH_SECRET = ornekSir
 
       expect(() => assertServerConfig()).not.toThrow()
+    })
+  })
+
+  /**
+   * WS-SCAN — `/tara` girişsiz açılıyor; bayrak yalnız açıkça `true` iken
+   * açmalı. Yanlış yazım kapalı sayılsaydı operatör 404'ün sebebini
+   * hiçbir yerde göremezdi.
+   */
+  describe('ENABLE_PHONE_SCANNER (WS-SCAN)', () => {
+    beforeEach(() => {
+      process.env.DATABASE_URL = 'postgresql://u:p@localhost:5433/stok'
+      process.env.AUTH_SECRET = 'a'.repeat(32)
+    })
+
+    afterEach(() => {
+      vi.unstubAllEnvs()
+    })
+
+    it.each([
+      ['tanımsız', undefined, false],
+      ['boş', '', false],
+      ['false', 'false', false],
+      ['true', 'true', true],
+    ])('%s iken açık mı: %s → %s', (_ad, deger, beklenen) => {
+      vi.stubEnv('ENABLE_PHONE_SCANNER', deger)
+
+      expect(phoneScannerEnabled()).toBe(beklenen)
+      expect(() => assertServerConfig()).not.toThrow()
+    })
+
+    it.each(['1', 'TRUE', 'evet'])('"%s" sayfayı açmıyor ve açılışı durduruyor', (deger) => {
+      vi.stubEnv('ENABLE_PHONE_SCANNER', deger)
+
+      expect(phoneScannerEnabled()).toBe(false)
+      expect(() => assertServerConfig()).toThrow(/ENABLE_PHONE_SCANNER yalnız true ya da false/)
     })
   })
 })

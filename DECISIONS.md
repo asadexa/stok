@@ -36,6 +36,7 @@ Kaynak `PLAN` = `docs/archive/PLAN-2026-09.md`.
 | PRD-03 | v1 web paneli; native mobil (Expo, offline) planlı ama kullanıcı kararıyla EN SONA bırakıldı | Active | PLAN §0 · D2 | Mobil görevleri TODOS "Product / Future" |
 | PRD-06 | Davet e-postası yok; çalışanın parolasını yönetici belirler (depo çalışanının iş e-postası çoğu zaman yok) | Active | PLAN T24 | Parola kurtarma tasarımı (T163) bunu hesaba katmalı |
 | PRD-11 | Ürünün asıl çözdüğü acı hangisi (sayım tutmuyor / sorumlu yok / sipariş kaçıyor) | Open | PLAN · U4 | İlk demoda hangi ekranın açılacağını belirler |
+| PRD-12 | Telefonla okutma stok hareketi DEĞİLDİR: telefon yalnız barkod metnini laptoptaki `/hareket?barkod=` akışına taşır; stok yalnız laptopta Kaydet'le (`createMovement`, laptop kullanıcısının yetkisi) değişir. Telefonda her gönderim bilinçli adım ("Sonraki Ürünü Tara"); laptopta değiştirilmiş form yeni okumayla değişmez | Active | WS-SCAN, 2026-10-09 (iPhone kabul testi) | `SECURITY_MODEL` S18. Telefona ürün/fiyat/stok gitmez |
 
 ## Mimari
 
@@ -45,6 +46,7 @@ Kaynak `PLAN` = `docs/archive/PLAN-2026-09.md`.
 | ARC-09 | API versiyonlama `/api/v1` + `X-Client-Version` + `426 CLIENT_TOO_OLD` | Active (uygulanmadı) | ADR-005 | |
 | ARC-10 | Mobil offline outbox; idempotency anahtarı OKUTMA anında üretilir; önbellek yalnız okutulan ürünler; çevrimdışı tanınmayan barkod reddedilmez, işaretlenir | Active (uygulanmadı) | ADR-003 · D-1.3, D9 | Sunucu tarafı hazır. Tam katalog: T159 |
 | ARC-13 | Mobil dağıtım EAS Build + EAS Update (JS değişikliği OTA ile geri alınabilir; native değişiklik mağaza turu ister) | Active (uygulanmadı) | PLAN §2 · D6 | ADR-005'in bağlamı "mobil geri alınamaz" diyor: çelişki, T143 |
+| ARC-14 | Telefon → laptop tarama köprüsü (pilot): QR eşleşmesi, oturum **süreç belleğinde**, laptop **salt okunur polling** (`?since=`), telefon `Bearer` token; WebSocket/SSE/DB tablosu yok. Yalnız tek süreçli `next start`'ta doğru; çok örnekli kurulumda (Vercel) `ENABLE_PHONE_SCANNER` kapalı kalmalı, orada paylaşılan bir depo gerekir | Active | WS-SCAN, 2026-10-09 | Sunucu yeniden başlarsa oturumlar düşer (telefon "bağlantı kapandı" görür). Kamera çözücüsü barcode-detector + zxing-wasm, WASM kendi origin'imizden. Tünel riski T167 |
 
 ## Veri ve stok defteri
 

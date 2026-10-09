@@ -83,6 +83,10 @@ export default defineConfig({
     // Yerelde `pnpm dev` açıksa ona bağlan; CI'da her zaman kendi sunucusunu
     // açsın, yoksa önceki adımdan sızmış bir süreç testi yalancı yeşil yapar.
     reuseExistingServer: !process.env.CI,
+    // WS-SCAN köprüsü varsayılan kapalı; telefon-tarama.spec.ts onu açık
+    // sunucuda sınıyor. Playwright bunu `process.env`'in ÜSTÜNE yazıyor,
+    // diğer değişkenler korunuyor (ölçüldü: playwright 1.62 runner).
+    env: { ENABLE_PHONE_SCANNER: 'true' },
     timeout: 120_000,
     // Sunucu günlüğü test çıktısına aksın. T61 tam olarak bunun yokluğuydu:
     // `SERVER_ERROR` görünüyordu, sunucu tarafında hiçbir iz yoktu.

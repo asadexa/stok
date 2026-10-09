@@ -54,7 +54,8 @@ ve sunucuda zorlanır; arayüzde düğmeyi gizlemek yetki kontrolü değildir.
 
 - **Var**: tek bir Next.js web uygulaması. Yönetici ve çalışan aynı panelden,
   role göre kısıtlanmış olarak çalışır. Web'in kendisi Server Action ile çalışır;
-  dışarıya açık REST yüzeyi bugün yalnız `/api/v1/health` ve `/api/cron`.
+  dışarıya açık REST yüzeyi bugün yalnız `/api/v1/health` ve `/api/cron`; pilot
+  bayrağı açıkken ayrıca telefon tarama köprüsü `/api/tara/*` (`ARC-14`, S18).
 - **Planlanmış, yazılmamış**: native mobil uygulama (`PRD-03`), mobilin ihtiyaç
   duyduğu `/api/v1` REST sözleşmesi (`ARC-07`, `ARC-09`), offline outbox (`ARC-10`).
 - **Bilinçli kapsam dışı**: §14.

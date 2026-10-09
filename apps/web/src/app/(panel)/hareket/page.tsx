@@ -15,6 +15,7 @@ import { redirect } from 'next/navigation'
 import { Alert, SubmitButton } from '@/components/field'
 import { formatMoney } from '@/lib/format'
 import { SaveFeedback } from '@/components/save-feedback'
+import { phoneScannerEnabled } from '@/server/config'
 import {
   type FormParams,
   errorQuery,
@@ -27,6 +28,7 @@ import {
 } from '@/server/form'
 import { currentActor } from '@/server/session'
 import { readSoundEnabled } from '@/server/theme'
+import { PhoneScanPanel } from './phone-scan-panel'
 
 /**
  * ============================================================================
@@ -256,6 +258,10 @@ export default async function MovementEntryPage({
           />
         </label>
       </form>
+
+      {/* WS-SCAN: telefonla okutulan barkod bu sayfayı yukarıdaki formun
+          gönderdiği adresle (`?barkod=`) açıyor; gerisi aynı akış. */}
+      {phoneScannerEnabled() ? <PhoneScanPanel /> : null}
 
       {/* 2. ADIM — ÜRÜN GÖRÜNÜR, MİKTAR VE YÖN SEÇİLİR. */}
       {barcode && !found ? (

@@ -7,7 +7,7 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
 **Kurallar**
 
 - ID `T<n>`. Arşivdeki görevler numaralarını korur. Yeni görev en büyük
-  numaradan devam eder — **sıradaki boş numara: T167**. Numara yeniden
+  numaradan devam eder — **sıradaki boş numara: T170**. Numara yeniden
   kullanılmaz.
 - Biçim: `- [ ] **T<n> (P0–P3)** - <alan> - **Başlık**`. Altında kısa
   **Neden / Kanıt / Bağlı / Doğrula / Kaynak** satırları.
@@ -116,6 +116,19 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
     yapılmadı (runbook §7).
   - Bağlı: T42.
 
+- [ ] **T167 (P1)** - güvenlik - **Telefon tarama pilotunun tüneli bütün uygulamayı internete açıyor**
+  - Neden: `cloudflared tunnel --url http://localhost:3000` yalnız `/tara`'yı değil giriş
+    sayfası dahil her yolu dışarı açıyor. Demo hesaplarının parolaları README'de herkese
+    açık; gerçek dükkân verisiyle tünel açık kalırsa adresi bulan biri giriş ekranına
+    ulaşır (kaba kuvvet kilidi S9 var, tek savunma o ve rastgele tünel adresi).
+  - Kanıt: WS-SCAN spike ve Phase 2 (2026-10-09); README "Telefonla barkod okutma" adımları.
+  - Yapılacak: tüneli yalnız `/tara`, `/api/tara/*`, `/_next/static/*` yollarına sınırlamak
+    (cloudflared ingress yol kuralları ya da Cloudflare Access) ya da sabit adlı, erişim
+    kontrollü tünel. O zamana kadar: tünel yalnız test/kullanım süresince açık.
+  - Bağlı: `SECURITY_MODEL` S18, `ARC-14`, T137.
+  - Doğrula: tünel adresinden `/giris` 403/404, `/tara` ve `/api/tara/*` çalışıyor.
+  - Kaynak: WS-SCAN kapanışı, 2026-10-09.
+
 - [ ] **T42 (P1)** - deploy - **Vercel + Supabase üretim kurulumu**
   - Kod tarafı T114–T119 ile hazır. Hesap kurulumu, plan kararı (`OPS-02`) ve ilk
     migration insana ait; adımlar `docs/uretim-runbook.md`'de.
@@ -167,6 +180,9 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
 
 - [ ] **T137 (P2)** - güvenlik - **Güvenlik başlıkları yok (CSP, frame-ancestors)**
   - Neden: panel başka bir sitenin iframe'ine konabilir (clickjacking); CSP yok.
+  - Not (WS-SCAN): CSP eklenirken `/tara` için `script-src 'wasm-unsafe-eval'` (ZXing WASM
+    derlemesi) ve `Permissions-Policy: camera=(self)` gerekiyor; yoksa iPhone'da okutma
+    sessizce başlamaz. WASM kendi origin'imizden (`/_next/static/media/`) geliyor, CDN yok.
 
 - [ ] **T138 (P2)** - export - **Büyük export bellekte üretilip cron içinde e-postayla gidiyor**
   - Neden: 20 bin satıra kadar bellekte xlsx. 200 bin satıra kadar iş, 60 sn'lik
@@ -242,6 +258,17 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
     yönleniyor. Muhtemel düzeltme yönlendirmeden önce `endSession()` (doğrulanmadı).
   - Kaynak: WS-A tarayıcı doğrulaması, 2026-10-09.
 
+- [ ] **T168 (P2)** - web - **Telefonla okutmada UPC-A 12 hane, kayıtlı barkod 13 hane olabilir**
+  - Neden: ZXing UPC-A'yı 12 hane döndürüyor; aynı ürünün sistemdeki barkodu (USB
+    okuyucunun yazdığı ya da Excel'den aktarılan) başında 0 olan 13 hane olabilir. O
+    durumda telefon okuması laptopta "barkod tanımlı değil" gösterir. Türkiye'deki
+    ürünlerin çoğu EAN-13 (869…) olduğu için sıklığı bilinmiyor; **doğrulanmadı**.
+  - Kanıt: `apps/web/src/app/tara/scan-logic.ts` (`SCAN_FORMATS` UPC-A ve EAN-13 ayrı
+    biçim); iPhone kabul testinde UPC'li ürün denenmedi.
+  - Doğrula: gerçek bir UPC-A ürünü telefonla ve USB okuyucuyla okut, iki değeri ve kayıtlı
+    barkodu karşılaştır. Normalizasyon gerekiyorsa sessiz değil, ölçülmüş bir kuralla.
+  - Kaynak: WS-SCAN spike bulgusu, 2026-10-09.
+
 ## P3
 
 - [ ] **T145 (P3)** - güvenlik - scrypt N=2¹⁴ → 2¹⁷ (girişte yeniden özetleme ile). `packages/db/src/password.ts:31`
@@ -256,6 +283,7 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
 - [ ] **T154 (P3)** - bakım - Satır içi action'lı çok büyük sayfa dosyaları (ör. `hareket/page.tsx` 549 satır). Yalnız ilgili işe dokunulurken ele alınır.
 - [ ] **T78 (P3)** - performans - Aylık stok değeri özet tablosu. BLOKE: `DAT-15`.
 - [ ] **T166 (P3)** - operasyon - Kalan `openssl` önerileri: `CRON_SECRET` uyarısı (`apps/web/src/server/config.ts:173`, `.env.example:72`) ve runbook'taki `stok_app` parolası (`docs/uretim-runbook.md:47`). openssl Windows'ta varsayılan olarak yok; `AUTH_SECRET` için node komutuna geçildi (T133), bunlar WS-A kapsamı dışında kaldı.
+- [ ] **T169 (P3)** - ci - Telefon kamerası ve çözücü yolu otomatik testte yok. `e2e/telefon-tarama.spec.ts` telefonu API istemcisiyle taklit ediyor; Playwright'ın headless shell'inde `getUserMedia` yok (`NotSupportedError`), geliştirme makinesinde Playwright'ın tam Chromium'u açılmıyor (`spawn UNKNOWN`). Yerelde kurulu Edge + sahte kamera aygıtı + sentetik EAN-13 Y4M ile uçtan uca geçti (2026-10-09, repoda değil). Seçenek: CI'da (Linux) tam Chromium + `--use-file-for-fake-video-capture` ile tek senaryo. Tetikleyici: çözücü ya da Next/Turbopack yükseltmesi.
 
 ## Product / Future
 

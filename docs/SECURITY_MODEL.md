@@ -7,7 +7,8 @@ Güvenlik, kiracı izolasyonu, auth, fiyat gizliliği ya da yönetim uçları ü
 
 Kod yorumlarındaki "tehdit S7" gibi ID'ler bu dosyaya işaret eder. S1–S12'nin
 ilk hali ve o günkü olasılık/etki puanları arşivde
-(`docs/archive/PLAN-2026-09.md` Bölüm 4). S13–S17 2026-10-08 denetiminde eklendi.
+(`docs/archive/PLAN-2026-09.md` Bölüm 4). S13–S17 2026-10-08 denetiminde, S18
+2026-10-09'da WS-SCAN ile eklendi.
 
 **Güncelleme kuralı:** yeni koruma eklenince ya da açık kapanınca ilgili satır
 güncellenir. Yeni tehdit yeni ID alır; ID yeniden kullanılmaz.
@@ -170,11 +171,48 @@ güncellenir. Yeni tehdit yeni ID alır; ID yeniden kullanılmaz.
 - **Açık:** tarayıcı görseli doğrudan üçüncü taraftan çekiyor; çalışanın IP'si,
   UA'sı ve origin referer'ı gidiyor; `referrerPolicy` yok; `http` kabul ediliyor (T136).
 
+### S18 — Telefon tarama köprüsü (girişsiz telefon → laptop ekranı)
+- **Tehdit:** girişsiz `/tara` ve `/api/tara/*` üzerinden başkasının laptop ekranına
+  barkod koymak, başka kullanıcının okumasını görmek, okutmayla stok değiştirmek,
+  tünelden ürün/fiyat verisi okumak.
+- **Koruma:**
+  - Varsayılan kapalı: `ENABLE_PHONE_SCANNER` açıkça `true` değilse sayfa ve dört uç
+    404; geçersiz değerle sunucu açılmaz.
+  - Telefonun yetkisi yalnız "bu laptop kullanıcısının ekranına barkod metni koy":
+    telefon kiracı, kullanıcı, ürün, miktar ya da fiyat göndermiyor; cevapta yalnız
+    sıra numarası var, ürün/fiyat/stok yok (INV-10).
+  - Okutma stok hareketi değil: uçlar veritabanına gitmiyor, `createMovement`
+    çağırmıyor. Stok yalnız laptopta Kaydet'le, laptop kullanıcısının yetkisiyle
+    değişiyor (`PRD-12`).
+  - Oturum sunucudaki aktörden kuruluyor (`movement:create`); laptop polling'i yalnız
+    aktörün kendi oturumunu görüyor, parametrede oturum kimliği yok. Kullanıcı başına
+    tek oturum.
+  - QR token'ı 256 bit, tek kullanımlık, 2 dk; adresin fragment'inde (loga ve
+    Referer'a düşmüyor). Telefon token'ı 256 bit, `Authorization` başlığıyla (çerez
+    yok, CORS yok → CSRF yok). İkisinin de yalnız SHA-256 özeti saklanıyor.
+  - QR tabanı yalnız `https:` origin. Barkod `barcodeSchema` + yazdırılabilir ASCII;
+    oturum başına saniyede 5 okuma; aynı okuma kimliği ikinci kez sayılmıyor. Telefon
+    10 dk sessiz kalırsa oturum kapanıyor, mutlak sınır 12 sa; Kes hemen iptal ediyor.
+- **Katman:** `apps/web/src/server/scan-sessions.ts`, `apps/web/src/app/api/tara/*`,
+  `apps/web/src/app/(panel)/hareket/phone-scan-*.ts(x)`, `apps/web/src/server/config.ts`.
+- **Test:** `scan-sessions.test.ts`, `api/tara/tara.test.ts` (IDOR, tek kullanım,
+  süre, geçersiz token, bayrak, "okumalar defteri ve stoğu değiştirmiyor" gerçek PG
+  ile), `e2e/telefon-tarama.spec.ts`; `dogrula` ile 8 koruma (2026-10-09).
+- **Açık:**
+  - Tünel açıkken uygulamanın tamamı (giriş sayfası dahil) internetten erişilebilir (T167).
+  - Eşleştirmede deneme sayacı yok; 256 bit entropiye güveniliyor.
+  - Laptop kullanıcısı çıkış yapsa ya da pasifleştirilse de telefon oturumu en geç
+    boşta kalma süresine kadar yaşıyor; etkisi yalnız o kullanıcının ekranına barkod
+    koymak.
+  - QR ekranda görünür: süresi içinde fotoğraflayan ilk cihaz eşleşir; laptop
+    "Telefon bağlı" gösterir, Kes iptal eder.
+  - Oturum süreç belleğinde: yalnız tek süreçli `next start` (`ARC-14`).
+
 ---
 
 ## Katmandan bağımsız açıklar
 
-- **Güvenlik başlıkları yok:** CSP yok, `frame-ancestors`/X-Frame-Options yok; panel iframe'e konabilir (T137).
+- **Güvenlik başlıkları yok:** CSP yok, `frame-ancestors`/X-Frame-Options yok; panel iframe'e konabilir (T137). CSP eklenirken telefon okutması için `'wasm-unsafe-eval'` ve kamera izni gerekecek (T137 notu).
 - **Yönetici eylemleri için denetim izi yok** (T141).
 - **Harici izleme ve alarm yok:** güvenlik olayları dahil (T129).
 - **Repo public ve korumasız:** güvenlik tasarımı ve demo kimlik bilgileri herkese açık (T120, T140).

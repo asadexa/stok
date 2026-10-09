@@ -124,6 +124,14 @@ export function assertServerConfig(): void {
     problems.push('AUTH_SECRET depoda açıkça yazan örnek bir değer; üretimde bununla açılmaz.')
   }
 
+  // Yanlış yazılmış bayrak sessizce "kapalı" sayılsaydı `=1` ya da `=açık`
+  // yazan operatör sayfayı 404 görür ve sebebi sunucu tarafında hiçbir yerde
+  // yazmazdı.
+  const scanner = process.env.ENABLE_PHONE_SCANNER
+  if (scanner !== undefined && scanner !== '' && scanner !== 'true' && scanner !== 'false') {
+    problems.push('ENABLE_PHONE_SCANNER yalnız true ya da false olabilir.')
+  }
+
   if (problems.length > 0) {
     throw new Error(
       [
@@ -142,6 +150,20 @@ export function assertServerConfig(): void {
       ].join('\n'),
     )
   }
+}
+
+/**
+ * ============================================================================
+ * WS-SCAN — TELEFON KAMERASIYLA OKUTMA PİLOTU, VARSAYILAN KAPALI
+ *
+ * `/tara` girişsiz açılıyor ve pilotta tünelle internete çıkıyor. Bayrak
+ * açıkça `true` yazılmadıkça sayfa yok (404): değişkeni unutan bir kurulumda
+ * sayfa kendiliğinden yayına girmesin. Geçersiz değer `assertServerConfig`'te
+ * açılışı durduruyor.
+ * ============================================================================
+ */
+export function phoneScannerEnabled(): boolean {
+  return process.env.ENABLE_PHONE_SCANNER === 'true'
 }
 
 /**
