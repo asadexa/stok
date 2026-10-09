@@ -13,7 +13,7 @@ kararlar → `DECISIONS.md`, model → `PROJECT_BRAIN.md`.
 ya da release kaydı yok. Kod tarafı hazırlığı (vercel.json, `/api/v1/health`,
 runbook) var; önkoşullar TODOS T42.
 
-## Doğrulanmış baseline — 2026-10-09, WS-SCAN (`1ddfd2a` üzerine, commit öncesi), Windows 11, Node 24.20
+## Doğrulanmış baseline — 2026-10-09, WS-SCAN (`2dd09cd`), Windows 11, Node 24.20
 
 | Kontrol | Sonuç |
 |---|---|
@@ -31,8 +31,8 @@ koruması çalışıyor, "Bağlantıyı kes" telefon oturumunu kapatıyor. Andro
 denenmedi. Yerelde ayrıca Edge + sahte kamera aygıtı + sentetik EAN-13 ile
 uçtan uca geçti (kamera yolu CI'da yok: T169).
 
-GitHub CI: `development` `1ddfd2a` (WS-A) koşu #57 yeşil; WS-SCAN henüz commit
-edilmedi, CI'da koşmadı. master'daki son koşu #44 (2026-09-14) yeşil.
+GitHub CI: `development` `2dd09cd` (WS-SCAN) koşu #58 yeşil.
+master'daki son koşu #44 (2026-09-14) yeşil.
 9 Dependabot PR açık, 3'ü kırmızı (T140).
 
 ## Çalışan ana kapsam (web)
@@ -82,7 +82,7 @@ işaretli (öne çıkanlar `DAT-15`, `DAT-16`, `SEC-14`, `OPS-01`, `OPS-02`, `UX
 
 ## Son tamamlanan workstream
 
-**WS-SCAN — Telefon kamerası → laptop** (commit bekliyor): `/hareket`te
+**WS-SCAN — Telefon kamerası → laptop** (`2dd09cd`, CI #58): `/hareket`te
 "Telefonla Barkod Okut" paneli (tünel adresi, QR, durum, Kes); telefonda `/tara`
 (QR ile eşleşme, okut, gönder, "Sonraki Ürünü Tara"); `/api/tara/*` dört uç.
 `lookupBarcode` ve `createMovement` değişmedi, migration yok. Güvenlik `SECURITY_MODEL`
