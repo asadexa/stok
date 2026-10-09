@@ -7,7 +7,7 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
 **Kurallar**
 
 - ID `T<n>`. Arşivdeki görevler numaralarını korur. Yeni görev en büyük
-  numaradan devam eder — **sıradaki boş numara: T165**. Numara yeniden
+  numaradan devam eder — **sıradaki boş numara: T167**. Numara yeniden
   kullanılmaz.
 - Biçim: `- [ ] **T<n> (P0–P3)** - <alan> - **Başlık**`. Altında kısa
   **Neden / Kanıt / Bağlı / Doğrula / Kaynak** satırları.
@@ -87,15 +87,6 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
     dahil taramalı.
   - Bağlı: T42, `OPS-01`.
 
-- [ ] **T125 (P1)** - veri - **Seed, ortam koruması olmadan defter dahil her şeyi TRUNCATE ediyor**
-  - Neden: `seed.ts` host/ortam kontrolü yapmadan `stock_movements` dahil bütün
-    tabloları TRUNCATE ediyor. Runbook operatörden üretim `MIGRATION_DATABASE_URL`'ini
-    kendi makinesinde kullanmasını istiyor; yanlış kabukta `pnpm seed` ya da
-    `pnpm demo --seed` üretimi siler. Append-only garantisi TRUNCATE'i kapsamıyor
-    (trigger yalnız UPDATE/DELETE).
-  - Kanıt: `packages/db/src/seed.ts:182`, migration 0002 (`BEFORE UPDATE OR DELETE`).
-  - Doğrula: yerel olmayan hedefte seed'in reddettiğini sınayan test; `dogrula`.
-
 - [ ] **T126 (P1)** - gözlem - **FAILED işler kalıcı; sağlık alarmı her saat tekrarlıyor**
   - Neden: `queueCheck` tüm zamanların FAILED işlerini sayıyor; onaylama ya da
     yeniden deneme yolu yok. HEALTH_ALARM `error` seviyesinde her saat e-posta
@@ -153,11 +144,6 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
     ihlal ancak sonradan invariant'la görülür. Seçenek: SECURITY DEFINER trigger +
     REVOKE.
   - Kanıt: `packages/db/migrations/0002_ledger_projection_rls.sql:64`.
-
-- [ ] **T133 (P2)** - güvenlik - **`.env.example`'daki `AUTH_SECRET` üretimde kabul ediliyor**
-  - Neden: kontrol yalnız uzunluğa bakıyor. Bilinen sır + kiracı UUID'si = sahte
-    admin token'ı.
-  - Kanıt: `apps/web/src/server/config.ts:95`, `.env.example:50`.
 
 - [ ] **T134 (P2)** - auth - **Çıkış refresh token'ı iptal etmiyor; rotasyon yok**
   - Neden: `endSession` yalnız çerezi siliyor; `tokenVersion` artmıyor. Refresh
@@ -240,6 +226,22 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
 
 - [ ] **T16 (P2)** - baskı - **Yazıcı zaman aşımı + PDF'e düşme** — T156 (E5) ile birlikte yapılır, önce değil.
 
+- [ ] **T165 (P2)** - auth - **Parolasını değiştiren kullanıcı panele geri düşüyor; o tarayıcının oturumu ≤15 dk açık kalıyor**
+  - Neden: `savePassword` refresh oturumlarını iptal edip `/giris?bilgi=parola`'ya
+    yönlendiriyor ama çerezleri silmiyor. Access token yalnız imzadan doğrulandığı
+    için `/giris` oturumu geçerli görüp `/panel`'e atıyor. "Parolanız değiştirildi"
+    bildirimi hiç görünmüyor; ekrandaki "tüm oturumlar kapanır ve yeniden giriş
+    yapmanız gerekir" vaadi, parolayı şüpheyle değiştiren kullanıcının kendi
+    tarayıcısında ≤15 dk gecikiyor.
+  - Kanıt: `apps/web/src/app/(panel)/ayarlar/page.tsx:85-109` (çerez silinmiyor),
+    `apps/web/src/app/giris/page.tsx:24`, vaat `ayarlar/page.tsx:255`. Tarayıcı
+    teşhisi 3/3 tur: gezinme `/giris?bilgi=parola` → `/panel`, ardından `/stok`
+    açılıyor; eski parola reddediliyor, yeni parola giriyor.
+  - Bağlı: S5, T134.
+  - Doğrula: e2e; parola değişince bildirim görünüyor ve korumalı sayfa `/giris`'e
+    yönleniyor. Muhtemel düzeltme yönlendirmeden önce `endSession()` (doğrulanmadı).
+  - Kaynak: WS-A tarayıcı doğrulaması, 2026-10-09.
+
 ## P3
 
 - [ ] **T145 (P3)** - güvenlik - scrypt N=2¹⁴ → 2¹⁷ (girişte yeniden özetleme ile). `packages/db/src/password.ts:31`
@@ -253,6 +255,7 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
 - [ ] **T153 (P3)** - db - FK'lar kiracı-bileşik değil (RI kontrolü RLS'i atlıyor); bugün uygulama kontrolleriyle kapalı, savunma derinliği yok.
 - [ ] **T154 (P3)** - bakım - Satır içi action'lı çok büyük sayfa dosyaları (ör. `hareket/page.tsx` 549 satır). Yalnız ilgili işe dokunulurken ele alınır.
 - [ ] **T78 (P3)** - performans - Aylık stok değeri özet tablosu. BLOKE: `DAT-15`.
+- [ ] **T166 (P3)** - operasyon - Kalan `openssl` önerileri: `CRON_SECRET` uyarısı (`apps/web/src/server/config.ts:173`, `.env.example:72`) ve runbook'taki `stok_app` parolası (`docs/uretim-runbook.md:47`). openssl Windows'ta varsayılan olarak yok; `AUTH_SECRET` için node komutuna geçildi (T133), bunlar WS-A kapsamı dışında kaldı.
 
 ## Product / Future
 
@@ -283,7 +286,6 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
 
 **Ürünleştirme**
 
-- [ ] **T162** - Kiracı açma / onboarding aracı. Bugün yalnız seed ya da elle SQL (`SEC-03`).
 - [ ] **T163** - Parola kurtarma. Son yönetici parolasını unutursa veritabanına elle müdahale gerekiyor.
 - [ ] **T164** - KVKK: aydınlatma metni, saklama süresi, kiracı verisini dışa aktarma ve silme (tehdit S10).
 
@@ -303,3 +305,38 @@ _(Bu dosyada açılıp kapanan görevler buraya iner. T1–T119'un kapanış kay
     closed). Kanıt: `dogrula`, çıktısız stub'da eski adım yeşil, yeni adım kırmızı;
     scratch depoda gerçek drift kırmızı. Yan not, doğrulanmadı: drizzle-kit
     Windows'ta mutlak `out` yolunu çalışma dizinine ekliyor.
+
+- [x] **T125 (P1)** - veri - **Seed, ortam koruması olmadan defter dahil her şeyi TRUNCATE ediyor**
+  - Sorun: hedef kontrolü yoktu; yanlış kabuktaki `pnpm seed` / `pnpm demo --seed`
+    üretimi silerdi. Yeniden üretildi: `127.0.0.2` hedefi ve yerel pilot kiracı
+    siliniyordu, `stok_app` ile TRUNCATE'e kadar gidiyordu.
+  - Kapanış (WS-A, 2026-10-09): üç kapı (`packages/db/src/seed.ts`, hedef çözümü
+    `target.ts`): uzak hedef bağlantıdan önce ve bayraksız reddediliyor; RLS'e tabi
+    rol reddediliyor; seed'e ait olmayan kiracı varsa yalnız yerelde ve hedefin
+    adıyla (`--wipe-non-demo-data=<ad>`) siliyor. Kanıt: `seed-guard.test.ts` 7/7,
+    `target.test.ts` 10/10; `dogrula` iki kapı için (uzak kapı kaldırılınca 5,
+    yerel kapı kaldırılınca 3 kırmızı); `pnpm demo --seed --no-server` ayrı test
+    veritabanında temizken geçiyor, pilot kiracı varken reddediyor. TRUNCATE'in
+    trigger dışında kalması DB gerçeği olarak sürüyor (S3).
+
+- [x] **T133 (P2)** - güvenlik - **`.env.example`'daki `AUTH_SECRET` üretimde kabul ediliyor**
+  - Sorun: kontrol yalnız uzunluğa bakıyordu; depoda açık yazan sır + kiracı
+    UUID'si = sahte yönetici token'ı.
+  - Kapanış (WS-A, 2026-10-09): `NODE_ENV=production`'da `.env.example` ve CI
+    değerleri reddediliyor, mesaj sırrı yazmıyor (`apps/web/src/server/config.ts`
+    `PUBLIC_EXAMPLE_SECRETS`); liste, değerleri o iki dosyadan okuyan testle senkron.
+    `pnpm demo` yeni `.env`'e Node ile rastgele anahtar yazıyor, var olana
+    dokunmuyor (örnekse uyarıyor). Kanıt: `config.test.ts` 12/12; `dogrula` (2
+    kırmızı); `next start` iki örnek sırla da çıkış 1, sır çıktıda yok; rastgele
+    sırla açılıyor. CI'ın `next build`'i kontrolü çalıştırmıyor, smoke işi demo'nun
+    ürettiği rastgele sırla açılıyor.
+
+- [x] **T162** - Kiracı açma / onboarding aracı. Bugün yalnız seed ya da elle SQL (`SEC-03`).
+  - Kapanış (WS-A, 2026-10-09): `pnpm tenant:create` (`packages/db/src/tenant-create.ts`,
+    `provision.ts`). Sahip rolüyle, tek transaction, `withTenant` ile; hedef ve kiracı
+    sayısı gösterilip "evet" isteniyor; parola üretiliyor ve bir kez gösteriliyor;
+    başka kiracıdaki e-posta (`auth_lookup_user`) advisory lock altında reddediliyor
+    (geçici kural, `SEC-14`). Kanıt: `provision.test.ts` 9/9,
+    `provisioned-login.test.ts` (gerçek giriş yolu, `stok_app`); `dogrula` üç koruma
+    (e-posta kontrolü, atomiklik, kilit). Tarayıcıda: CLI'la açılan iki sentetik
+    yönetici üretim derlemesinde giriyor, ürün izolasyonu korunuyor.

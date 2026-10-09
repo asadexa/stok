@@ -17,7 +17,8 @@
  */
 
 import { spawn, spawnSync } from 'node:child_process'
-import { copyFileSync, existsSync, readFileSync } from 'node:fs'
+import { randomBytes } from 'node:crypto'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
@@ -142,12 +143,27 @@ async function main() {
   // -------------------------------------------------------------------------
   step('Ayar dosyası')
   // -------------------------------------------------------------------------
+  if (!existsSync('.env.example')) die('.env.example bulunamadı. Depo eksik klonlanmış olabilir.')
+  const exampleSecret = readEnvFile('.env.example').AUTH_SECRET
+
   if (existsSync('.env')) {
     ok('.env zaten var, dokunulmadı')
+    // Kullanıcının dosyasına dokunulmuyor; ama örnek sır public repoda
+    // yazıyor ve üretim modu (`next start`) bununla açılmıyor (T133).
+    if (readEnvFile('.env').AUTH_SECRET === exampleSecret) {
+      warn('.env içindeki AUTH_SECRET depodaki örnek değer: `pnpm dev` çalışır, `next start` açılmaz.')
+      warn('Yenilemek için .env içindeki AUTH_SECRET değerini şunun çıktısıyla değiştirin:')
+      warn(`  node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"`)
+    }
   } else {
-    if (!existsSync('.env.example')) die('.env.example bulunamadı. Depo eksik klonlanmış olabilir.')
-    copyFileSync('.env.example', '.env')
-    ok('.env oluşturuldu (.env.example kopyalandı)')
+    // Örnek sır public repoda yazıyor; her kurulum kendi sırrıyla başlıyor
+    // (T133). CI duman testi de bu yoldan geçiyor ve `next start` ile koşuyor.
+    const example = readFileSync('.env.example', 'utf8')
+    const secretLine = /^AUTH_SECRET=[^\r\n]*/m
+    if (!secretLine.test(example)) die('.env.example içinde AUTH_SECRET satırı bulunamadı.')
+    const fresh = randomBytes(32).toString('base64url')
+    writeFileSync('.env', example.replace(secretLine, `AUTH_SECRET="${fresh}"`))
+    ok('.env oluşturuldu (.env.example kopyalandı, AUTH_SECRET rastgele üretildi)')
   }
 
   const env = readEnvFile('.env')

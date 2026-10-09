@@ -34,8 +34,9 @@ güncellenir. Yeni tehdit yeni ID alır; ID yeniden kullanılmaz.
   alınmış + her durumda istisna fırlatan trigger. Düzeltme ters hareketle.
 - **Katman:** DB (migration 0002).
 - **Test:** `rls.test.ts` (T5: uygulama rolü ve sahip rolü UPDATE/DELETE edemez).
-- **Açık:** TRUNCATE trigger kapsamında değil; sahip rolüyle koşan `seed` korumasız
-  TRUNCATE yapıyor (T125). Ters hareket akışı yok, düzeltmeler bağlantısız (T127).
+- **Açık:** TRUNCATE trigger kapsamında değil; sahip rolü defteri TRUNCATE
+  edebilir. Bunu yapan tek kod `seed` ve hedef korumasına bağlı (S12). Ters
+  hareket akışı yok, düzeltmeler bağlantısız (T127).
 
 ### S4 — Paylaşılan cihazda "kim yaptı" bilgisinin bozulması
 - **Koruma (web):** her kullanıcının kendi girişi; hareket `user_id`'yi token'dan
@@ -50,12 +51,16 @@ güncellenir. Yeni tehdit yeni ID alır; ID yeniden kullanılmaz.
   rol değişikliği ve parola değişimi oturumları iptal eder; HS256 sabit; refresh
   token access olarak kullanılamaz. Kendi parolasını değiştirmek mevcut parolayı
   ister: başında kimse olmayan açık bir oturum parolayı değiştirip sahibini
-  kilitleyemez. Yöneticinin başkası için yaptığı sıfırlama istemez.
-- **Katman:** `packages/core/src/auth.ts`, httpOnly çerezler.
-- **Test:** `packages/core/src/auth.test.ts`.
+  kilitleyemez. Yöneticinin başkası için yaptığı sıfırlama istemez. Üretimde
+  (`NODE_ENV=production`) depoda açık yazan örnek `AUTH_SECRET` değerleriyle
+  (`.env.example`, CI) sunucu açılmaz (T133).
+- **Katman:** `packages/core/src/auth.ts`, httpOnly çerezler, `apps/web/src/server/config.ts`.
+- **Test:** `packages/core/src/auth.test.ts`, `apps/web/src/server/config.test.ts`
+  (örnek değerleri o iki dosyadan okur).
 - **Açık:** pasifleştirmenin etkisi ≤15 dk gecikir (bilinçli takas). Çıkış refresh
-  token'ı iptal etmiyor, rotasyon yok (T134). `.env.example`'daki `AUTH_SECRET`
-  üretimde reddedilmiyor; bilinen sırla token sahtelenebilir (T133).
+  token'ı iptal etmiyor, rotasyon yok (T134). Kendi parolasını değiştirenin
+  çerezleri silinmiyor; o tarayıcı ≤15 dk açık kalıyor (T165). Örnek dışındaki
+  zayıf ama uzun anahtarlar ayırt edilmiyor.
 
 ### S6 — Çalışanın yetkisini aşması (ürün/kullanıcı yönetimi, negatif stok, başkasının geçmişi)
 - **Koruma:** rol matrisi tek kaynak (`packages/shared/src/roles.ts`), her yazma
@@ -111,10 +116,17 @@ güncellenir. Yeni tehdit yeni ID alır; ID yeniden kullanılmaz.
 - **Koruma:** `stok_app`'te BYPASSRLS yok, superuser değil, sahip değil; FORCE RLS
   sahibi de bağlar; Biome kuralı uygulama kodunda `adminDbUnsafe`'i yasaklar;
   `MIGRATION_DATABASE_URL` uygulamanın çalışma ortamına konmaz (runbook §3).
-- **Katman:** `db/init/01-roles.sql`, migration 0002, `biome.json`, runbook.
+  Sahip rolüyle koşan iki araç: `seed` uzak hedefte hiçbir bayrakla çalışmaz, RLS'e
+  tabi rolle çalışmaz, seed'e ait olmayan kiracı varken yalnız yerelde ve hedefin
+  adı yazılınca siler (T125). `pnpm tenant:create` yalnız ekler; yazmadan önce
+  hedefi (YEREL/UZAK) ve kiracı sayısını gösterip "evet" ister (T162).
+- **Katman:** `db/init/01-roles.sql`, migration 0002, `biome.json`, runbook,
+  `packages/db/src/seed.ts`, `target.ts`, `tenant-create.ts`.
 - **Test:** `rls.test.ts` (T46.4), `packages/db/src/smoke.test.ts` (uygulama ve
-  sahip bağlantısı gerçekten farklı), `pnpm lint`.
-- **Açık:** seed hedef veritabanını kontrol etmiyor (T125).
+  sahip bağlantısı gerçekten farklı), `pnpm lint`, `seed-guard.test.ts`, `target.test.ts`.
+- **Açık:** "yerel" adrese bakılarak belirleniyor: `localhost`'a tünellenmiş bir
+  üretim veritabanı YEREL görünür; orada seed'i yalnız 3. kapı (seed'e ait olmayan
+  kiracı) durdurur.
 
 ### S13 — Kasa açığının gizlenmesi (fiyat manipülasyonu)
 - **Koruma:** liste fiyatını sunucu üründen okur ve harekete dondurur; istemcinin
@@ -129,7 +141,9 @@ güncellenir. Yeni tehdit yeni ID alır; ID yeniden kullanılmaz.
   UTC sunucuda "bugün" 03:00'a kadar dün (T122).
 
 ### S14 — Kiracılar arası giriş engelleme ve e-posta sayımı
-- **Koruma:** yok. Bilinmeyen e-posta ile yanlış parola aynı hatayı verir.
+- **Koruma:** bilinmeyen e-posta ile yanlış parola aynı hatayı verir. Kiracı açma
+  aracı başka kiracıda kayıtlı e-postayla yönetici açmıyor (geçici kural, T162);
+  uygulama içinden kullanıcı eklemek bu kontrolü yapmıyor.
 - **Açık:** e-posta tekilliği yalnız kiracı içinde. B kiracısının yöneticisi aynı
   e-postayla kullanıcı açarak A'daki kişinin web girişini engelleyebilir (web
   `TENANT_AMBIGUOUS`'ı çözemiyor). Belirsizlik parola doğrulanmadan döndüğü için

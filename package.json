@@ -18,6 +18,7 @@
     "lint:fix": "biome lint . --write",
     "migrate": "pnpm --filter @stok/db run migrate",
     "seed": "pnpm --filter @stok/db run seed",
+    "tenant:create": "pnpm --filter @stok/db run tenant:create",
     "test": "pnpm -r --if-present test",
     "test:coverage": "pnpm -r --if-present test:coverage",
     "typecheck": "pnpm -r --if-present typecheck"

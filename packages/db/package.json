@@ -8,7 +8,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./schema": "./src/schema.ts",
-    "./testing": "./src/testing.ts"
+    "./testing": "./src/testing.ts",
+    "./provision": "./src/provision.ts"
   },
   "scripts": {
     "generate": "drizzle-kit generate",
@@ -17,6 +18,7 @@
     "product-count": "tsx src/product-count.ts",
     "seed": "tsx src/seed.ts",
     "studio": "drizzle-kit studio",
+    "tenant:create": "tsx src/tenant-create.ts",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit"

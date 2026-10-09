@@ -1,11 +1,12 @@
 import { createHash } from 'node:crypto'
 import { config } from 'dotenv'
-import { sql } from 'drizzle-orm'
+import { count, notInArray, sql } from 'drizzle-orm'
 import type { MovementReason, PriceOverrideReason } from '@stok/shared'
 import { reasonPriceBasis, toDelta } from '@stok/shared'
-import { adminDbUnsafe } from './client'
+import { type Db, adminDbUnsafe } from './client'
 import { hashSecret } from './password'
 import { locations, productBarcodes, products, stockMovements, tenants, users } from './schema'
+import { type DatabaseTarget, canBypassRls, describeTarget, formatTarget } from './target'
 
 config({ path: '../../.env' })
 
@@ -169,11 +170,85 @@ const TENANT_SPECS: TenantSpec[] = [
 
 const DAY = 24 * 60 * 60 * 1000
 
+/**
+ * ============================================================================
+ * T125 — SEED YALNIZ GÜVENLİ HEDEFTE SİLER
+ *
+ * Seed TRUNCATE ile defter dahil her şeyi siliyor ve append-only trigger
+ * TRUNCATE'i kapsamıyor (yalnız UPDATE/DELETE). Runbook operatörden üretim
+ * adresini kendi makinesinde kullanmasını istiyor; yanlış kabukta `pnpm
+ * seed` ya da `pnpm demo --seed` üretimi silerdi.
+ *
+ * ÜÇ KAPI, sırayla:
+ *   1. Hedef UZAKSA hiçbir koşulda ve bağlantı açılmadan. Uzak seed için
+ *      belgelenmiş bir yol yok; kaçış eklemek korumayı bir bayrağa indirirdi.
+ *   2. Bağlanan rol RLS'i atlamıyorsa: kiracıları göremez, 3. kapı
+ *      doğrulanamaz. Boş görüp "kiracı yok" sanmak korumayı açık bırakırdı.
+ *   3. Seed'in kendi demo kiracıları dışında kiracı varsa. Yalnız
+ *      "localhost" yetmiyor: dükkândaki pilot da yerel bir PostgreSQL'de
+ *      gerçek veri tutabilir. Yerelde bilerek silmek için hedef
+ *      veritabanının ADI yazılmalı; alışkanlıkla eklenen bir bayrak, yanlış
+ *      kabuktaki yanlış veritabanını silmesin diye.
+ * ============================================================================
+ */
+const WIPE_FLAG = '--wipe-non-demo-data='
+const DEMO_TENANT_IDS = TENANT_SPECS.map((spec) => detUuid(`tenant:${spec.key}`))
+
+class SeedRefused extends Error {}
+
+function assertLocalTarget(target: DatabaseTarget): void {
+  if (target.isLocal) return
+  throw new SeedRefused(
+    [
+      `Seed yalnız yerel veritabanında çalışır; hedef ${formatTarget(target)}.`,
+      'Seed defter dahil HER ŞEYİ siler ve uzak hedefte hiçbir bayrakla çalışmaz.',
+    ].join('\n  '),
+  )
+}
+
+async function assertSafeToWipe(db: Db, target: DatabaseTarget, args: string[]): Promise<void> {
+  if (!(await canBypassRls(db))) {
+    throw new SeedRefused(
+      'Bağlanan rol RLS\'i atlamıyor; kiracılar görülemediği için verinin demo olup olmadığı doğrulanamıyor. Seed çalıştırılmadı.',
+    )
+  }
+
+  const [row] = await db
+    .select({ n: count() })
+    .from(tenants)
+    .where(notInArray(tenants.id, DEMO_TENANT_IDS))
+  const foreign = row?.n ?? 0
+  if (foreign === 0) return
+
+  const confirmed = args.find((a) => a.startsWith(WIPE_FLAG))?.slice(WIPE_FLAG.length)
+  if (confirmed === target.database) {
+    console.warn(`UYARI: seed'e ait olmayan ${foreign} kiracı onayla siliniyor: ${formatTarget(target)}`)
+    return
+  }
+  throw new SeedRefused(
+    [
+      `Bu veritabanında seed'e ait olmayan ${foreign} kiracı var: ${formatTarget(target)}.`,
+      'Seed defter dahil HER ŞEYİ siler; bu veri gerçek ya da pilot olabilir. Seed çalıştırılmadı.',
+      // Komutun tamamı yazılıyor: `pnpm demo` bu bayrağı tanımıyor, yalnız
+      // adı veren bir mesaj geliştiriciyi tahmine bırakırdı. Ad ise yer
+      // tutucu kalıyor; doldurulmuş hali kopyala-yapıştır bir silme olurdu.
+      'Yalnız yerel bir geliştirme veritabanını bilerek silmek için hedefin adını yazın:',
+      `    pnpm --filter @stok/db run seed ${WIPE_FLAG}<veritabanı-adı>`,
+    ].join('\n  '),
+  )
+}
+
 async function main() {
+  const url = process.env.MIGRATION_DATABASE_URL
+  if (!url) throw new Error('MIGRATION_DATABASE_URL tanımlı değil')
+  const target = describeTarget(url)
+  assertLocalTarget(target)
+
   const { client, db } = adminDbUnsafe()
   const startedAt = Date.now()
 
   try {
+    await assertSafeToWipe(db, target, process.argv.slice(2))
     console.log('Seed baslıyor. Mevcut veri siliniyor...')
     // Sıra önemli: FK bağımlılıkları. TRUNCATE CASCADE trigger'ları atlamaz
     // ama DELETE trigger'ı stock_movements'ta exception fırlatır, bu yüzden
@@ -477,6 +552,12 @@ async function main() {
 }
 
 main().catch((err) => {
+  // Korumanın reddi bir arıza değil, bilinçli bir "hayır": yığın izi
+  // yerine yalnız sebep ve çıkış yolu yazılıyor.
+  if (err instanceof SeedRefused) {
+    console.error(`\n✗ ${err.message}\n`)
+    process.exit(1)
+  }
   console.error(err)
   process.exit(1)
 })

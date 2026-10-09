@@ -52,6 +52,31 @@ export const MAX_UPLOAD_BYTES = 4 * 1024 * 1024
 export const MAX_UPLOAD_LABEL = '4 MB'
 
 /**
+ * ============================================================================
+ * T133 — DEPODA AÇIKÇA YAZAN SIRLAR ÜRETİMDE REDDEDİLİR
+ *
+ * Uzunluk kontrolü bu değerleri geçiriyordu, oysa ikisi de public repoda
+ * yazıyor. Rol token'ın içinde imzalanıyor ve access token veritabanına
+ * gitmeden doğrulanıyor (packages/core/src/auth.ts): sırrı bilen bir
+ * çalışan kendi token'ını ADMIN rolüyle yeniden imzalayıp alış fiyatlarını
+ * görebilirdi (INV-10). Sezgisel bir kontrol ("değiştir" geçiyor mu) değil
+ * kesin liste: sezgi gerçek bir sırrı da reddedebilirdi.
+ *
+ * YALNIZ ÜRETİMDE. Geliştirmede örnek değer bilinçli bir kolaylık; orada
+ * reddetmek `pnpm dev`i ilk açılışta kırardı. `next start` ve Vercel
+ * NODE_ENV=production ile koşuyor.
+ *
+ * Liste dosyalardan kopmasın diye config.test.ts `.env.example`'ı ve CI iş
+ * akışını OKUYUP kontrol ediyor; biri değişip liste güncellenmezse test
+ * kırmızı yanar.
+ * ============================================================================
+ */
+export const PUBLIC_EXAMPLE_SECRETS: readonly string[] = [
+  'yerel-gelistirme-anahtari-degistir-32+', // .env.example
+  'ci-icin-sabit-anahtar-en-az-32-karakter', // .github/workflows/ci.yml
+]
+
+/**
  * Eksik olan HER ŞEYİ birden listeliyor. Tek tek söylemek, kullanıcıyı
  * birini düzeltip diğerini keşfetme turuna sokardı.
  */
@@ -94,6 +119,9 @@ export function assertServerConfig(): void {
   if (!secret) problems.push('AUTH_SECRET tanımlı değil.')
   else if (secret.length < 32) {
     problems.push(`AUTH_SECRET ${secret.length} karakter, en az 32 olmalı.`)
+  } else if (process.env.NODE_ENV === 'production' && PUBLIC_EXAMPLE_SECRETS.includes(secret)) {
+    // Değerin kendisi mesaja yazılmıyor: mesaj log akışına gidiyor.
+    problems.push('AUTH_SECRET depoda açıkça yazan örnek bir değer; üretimde bununla açılmaz.')
   }
 
   if (problems.length > 0) {
@@ -107,7 +135,9 @@ export function assertServerConfig(): void {
         '  Kök dizinde .env dosyası olmalı. Yoksa:',
         '      .env.example dosyasını .env adıyla kopyalayın',
         '  Örnek dosyadaki değerler yerel geliştirme için hazır gelir.',
-        '  Kendi anahtarınızı üretmek için: openssl rand -base64 32',
+        // openssl Windows'ta varsayılan olarak yok; Node her kurulumda var.
+        '  Kendi anahtarınızı üretmek için:',
+        `      node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"`,
         '',
       ].join('\n'),
     )

@@ -169,6 +169,15 @@ export const ERROR_CODES = {
     retryable: false,
     tr: (d) => `${d.email} adresi bu işletmede zaten kayıtlı`,
   },
+  // Yalnız kiracı açmada (T162). Aynı e-posta iki işletmede olursa web girişi
+  // TENANT_AMBIGUOUS çıkmazına düşüyor (T123); kalıcı karar SEC-14'e kadar
+  // yeni kiracı bu çıkmazı üretmesin diye reddediliyor.
+  EMAIL_IN_OTHER_TENANT: {
+    http: 409,
+    retryable: false,
+    tr: (d) =>
+      `${d.email} adresi başka bir işletmede kayıtlı; bu adresle yeni işletme yöneticisi açılamıyor. Başka bir e-posta kullanın.`,
+  },
   LAST_ADMIN: {
     http: 409,
     retryable: false,

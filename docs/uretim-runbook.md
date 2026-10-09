@@ -98,6 +98,23 @@ yani şema geri alınamıyor (Bölüm 6).
 > deploy'da zararsız — boş veritabanına hepsi birden koşuyor — ama kuralın
 > çiğnenebildiğini gösteriyor ve bunu yakalayan otomatik bir kontrol yok.
 
+### İlk işletme ve yöneticisi (T162)
+
+Migration'daki aynı `MIGRATION_DATABASE_URL` tanımlıyken, kendi makinenden:
+
+```bash
+pnpm tenant:create
+```
+
+Yazmadan önce hedefi (`host:port/veritabanı`, YEREL/UZAK) ve mevcut işletme
+sayısını gösterir; **hedefi kontrol et**, "evet" yazılmadan hiçbir şey yazılmaz.
+Parola üretilir ve yalnız bir kez gösterilir; yöneticiye güvenli bir yoldan ilet,
+ilk girişten sonra Ayarlar → Parola'dan değiştirsin. Başka işletmede kayıtlı bir
+e-posta reddedilir (geçici kural, `SEC-14`).
+
+`pnpm seed` / `pnpm demo --seed` uzak hedefte hiçbir bayrakla çalışmaz (T125);
+üretime örnek veri yüklemenin yolu yok, olmamalı.
+
 ---
 
 ## 3. Vercel ortam değişkenleri
@@ -105,7 +122,7 @@ yani şema geri alınamıyor (Bölüm 6).
 | Değişken | Zorunlu | Not |
 |---|---|---|
 | `DATABASE_URL` | evet | `stok_app` rolü, **port 6543** (transaction pooler) |
-| `AUTH_SECRET` | evet | en az 32 karakter, `openssl rand -base64 32` |
+| `AUTH_SECRET` | evet | en az 32 karakter; üretme komutu `.env.example`'da. `.env.example` ve CI'daki örnek değerlerle açılmaz (T133) |
 | `APP_URL` | evet | `https://` ile; çerez `Secure` bayrağı buradan türüyor |
 | `CRON_SECRET` | evet | en az 32 karakter; adı TAM böyle olmalı (Bölüm 5) |
 | `SMTP_URL` | rapor için | yoksa tur çalışır, e-posta gönderim anında hata verir |
@@ -117,7 +134,7 @@ yani şema geri alınamıyor (Bölüm 6).
 `DATABASE_URL` neden 6543: pgbouncer transaction modu. Sürücü zaten
 `prepare: false` ile açılıyor (PLAN D-1.4).
 
-Eksik `DATABASE_URL` ya da `AUTH_SECRET` ile deploy **açılışta** patlıyor
+Eksik `DATABASE_URL` ya da eksik / örnek `AUTH_SECRET` ile deploy **açılışta** patlıyor
 ve ne eksik olduğunu Vercel loglarına yazıyor (T116). Sessizce ilk giriş
 denemesine ertelenmiyor.
 

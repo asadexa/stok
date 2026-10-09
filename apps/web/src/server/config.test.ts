@@ -1,4 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { randomBytes } from 'node:crypto'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { assertServerConfig } from './config'
 
 /**
@@ -93,5 +96,62 @@ describe('assertServerConfig (T116)', () => {
     // bir karardı; koruyan tek şey bu satır.
     expect(mesaj).toMatch(/DATABASE_URL tanımlı değil/)
     expect(mesaj).toMatch(/AUTH_SECRET tanımlı değil/)
+  })
+
+  /**
+   * T133 — DEPODA YAZAN SIRLAR ÜRETİMDE.
+   *
+   * Değerler kod içinde tekrar yazılmıyor, DOSYALARDAN okunuyor: biri
+   * `.env.example`'daki ya da CI'daki örneği değiştirip config.ts'teki
+   * listeyi güncellemeyi unutursa ilk iki vaka kırmızı yanar. Liste ile
+   * dosyalar arasındaki senkronu tutan bu testin kendisi.
+   */
+  describe('üretimde depodaki örnek sırlar (T133)', () => {
+    const kok = new URL('../../../../', import.meta.url)
+    const oku = (yol: string) => readFileSync(fileURLToPath(new URL(yol, kok)), 'utf8')
+    const ornekSir = /^AUTH_SECRET="?([^"\r\n]+)"?/m.exec(oku('.env.example'))?.[1] ?? ''
+    const ciSir = /AUTH_SECRET:\s*([^\s#]+)/.exec(oku('.github/workflows/ci.yml'))?.[1] ?? ''
+
+    beforeEach(() => {
+      process.env.DATABASE_URL = 'postgresql://u:p@localhost:5433/stok'
+    })
+
+    afterEach(() => {
+      vi.unstubAllEnvs()
+    })
+
+    it.each([
+      ['.env.example', ornekSir],
+      ['CI iş akışı', ciSir],
+    ])('%s sırrıyla açılmıyor ve sırrı mesaja yazmıyor', (_kaynak, sir) => {
+      expect(sir.length, 'örnek sır dosyadan okunamadı').toBeGreaterThanOrEqual(32)
+      vi.stubEnv('NODE_ENV', 'production')
+      process.env.AUTH_SECRET = sir
+
+      let mesaj = ''
+      try {
+        assertServerConfig()
+      } catch (err) {
+        mesaj = err instanceof Error ? err.message : String(err)
+      }
+
+      expect(mesaj).toMatch(/AUTH_SECRET depoda açıkça yazan örnek/)
+      // Mesaj log akışına gidiyor (instrumentation.ts); sır oraya düşmemeli.
+      expect(mesaj).not.toContain(sir)
+    })
+
+    it('rastgele üretilmiş bir sırla açılıyor', () => {
+      vi.stubEnv('NODE_ENV', 'production')
+      process.env.AUTH_SECRET = randomBytes(32).toString('base64url')
+
+      expect(() => assertServerConfig()).not.toThrow()
+    })
+
+    it('geliştirmede örnek sır çalışmaya devam ediyor', () => {
+      vi.stubEnv('NODE_ENV', 'development')
+      process.env.AUTH_SECRET = ornekSir
+
+      expect(() => assertServerConfig()).not.toThrow()
+    })
   })
 })

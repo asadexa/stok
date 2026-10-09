@@ -4,7 +4,7 @@ Yalnız BUGÜNÜN gerçeği. Her merge'te ya da durum değiştiğinde güncellen
 satırlar silinir (tarihçe git'te). Ayrıntı yazılmaz: işler → `TODOS.md`,
 kararlar → `DECISIONS.md`, model → `PROJECT_BRAIN.md`.
 
-**Tarih:** 2026-10-08 · **Çalışma branch'i:** `development` · **Stabil referans:** `master`
+**Tarih:** 2026-10-09 · **Çalışma branch'i:** `development` · **Stabil referans:** `master`
 (`master` = `dac05ff`, devralma öncesi son kod; geliştirme `development`'ta yapılır)
 
 ## Deploy
@@ -13,23 +13,25 @@ kararlar → `DECISIONS.md`, model → `PROJECT_BRAIN.md`.
 ya da release kaydı yok. Kod tarafı hazırlığı (vercel.json, `/api/v1/health`,
 runbook) var; önkoşullar TODOS T42.
 
-## Doğrulanmış pre-migration baseline — 2026-10-08, `dac05ff`, Windows 11, Node 24.20
-
-Development System Migration'dan önce ölçüldü. Göç yalnız dokümanları değiştirdi;
-kod, test, config, migration ve CI bu baseline'la aynı.
+## Doğrulanmış baseline — 2026-10-09, WS-A (`a230c18` üzerine), Windows 11, Node 24.20
 
 | Kontrol | Sonuç |
 |---|---|
-| lint (Biome) | PASS — 167 dosya, 0 tanı |
+| lint (Biome) | PASS — 174 dosya, 0 tanı |
 | typecheck (4 paket) | PASS |
-| test | PASS — **688/688** (shared 56, db 59, core 492, web 81), atlanan yok |
-| migration drift | PASS — "No schema changes" (migration kopyasına karşı koşuldu) |
+| test | PASS — **719/719** (shared 56, db 85, core 493, web 85), atlanan yok |
+| migration drift | PASS — "No schema changes", dosya üretilmedi |
 | `next build` | PASS — 24 rota |
 | Playwright | PASS — **21/21** |
-| working tree | clean (baseline anında) |
 
-GitHub CI: master'daki son koşu #44 (2026-09-14) yeşil. 9 Dependabot PR açık,
-3'ü kırmızı (T140).
+Ek duman testi: `pnpm tenant:create` ile ayrı test veritabanında açılan iki
+sentetik işletmenin yöneticileri üretim derlemesinde (`next start`, rastgele
+`AUTH_SECRET`) giriyor, ürün izolasyonu korunuyor; örnek sırlarla `next start`
+açılmıyor; `pnpm demo --seed` ayrı veritabanında temizken geçiyor, pilot işletme
+varken duruyor.
+
+GitHub CI: `development` `a230c18` yeşil; master'daki son koşu #44 (2026-09-14)
+yeşil. 9 Dependabot PR açık, 3'ü kırmızı (T140).
 
 ## Çalışan ana kapsam (web)
 
@@ -63,7 +65,6 @@ defter, kaba kuvvet kilidi, elle tetiklenen `/api/cron`, `/api/v1/health`,
 | T122 | Saat dilimi politikası (`DAT-16` Open) |
 | T123 | `TENANT_AMBIGUOUS` çıkmazı + kiracılar arası kilitleme (`SEC-14` Open) |
 | T124 | Supabase SECURITY DEFINER yetkileri — deploy öncesi doğrulama |
-| T125 | Seed'in korumasız TRUNCATE'i |
 | T126 | Kalıcı FAILED işler / alarm tekrarı |
 | T127 | Düzeltme (ters hareket) akışı |
 | T128 | Açılış stoğu toplu girişi |
@@ -74,16 +75,19 @@ işaretli (öne çıkanlar `DAT-15`, `DAT-16`, `SEC-14`, `OPS-01`, `OPS-02`, `UX
 
 ## Son tamamlanan workstream
 
-**Development System Migration**: tamamlandı. Yalnız dokümanlar değişti:
-- PLAN arşivlendi; kökte yalnız yönlendirici kaldı.
-- PROJECT_BRAIN / CURRENT_STATE / DECISIONS / TODOS / `docs/SECURITY_MODEL.md` kuruldu.
-- Fiyat defteri tasarımı T90/T91 için aktif kaldı.
-- CLAUDE.md, README ve skill'ler güncellendi.
+**WS-A — Güvenli kurulum**: `pnpm tenant:create` ile işletme + ilk yönetici
+(T162), seed hedef koruması (T125), üretimde örnek `AUTH_SECRET` reddi ve
+`pnpm demo`'nun rastgele anahtar üretmesi (T133). Parola kurtarma kapsam dışı (T163).
+Öncesinde PRE (`a230c18`): CI `development`'ta da koşuyor, drift adımı fail closed (T131).
 
-## Sıradaki workstream: production blocker düzeltmeleri
+## Sıradaki workstream: WS-SCAN
+
+Telefon kamerasıyla okutup dizüstündeki ekrana aktarma. Kapsamı henüz yazılı değil.
+
+## Production blocker düzeltmeleri
 
 1. Önce kararlar: `DAT-16` (saat dilimi), `SEC-14` (e-posta tekilliği).
-2. Sonra T121 + T122 → T125 → T126 → T124 → T123. Her biri minimum değişiklik
+2. Sonra T121 + T122 → T126 → T124 → T123. Her biri minimum değişiklik
    + test + `dogrula`.
 
 Paralelde, insan işi ve kod dışı: T120 (sahiplik), T140 (Dependabot triyajı +

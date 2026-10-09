@@ -47,7 +47,9 @@ pnpm demo
 Veritabanını hazırlar (Docker varsa kaldırır; 5433'te kendi PostgreSQL'iniz
 varsa onu kullanır), şemayı uygular, örnek veriyi yükler ve sunucuyu
 `http://localhost:3000`'de açar. Windows (CMD/PowerShell), macOS ve Linux'ta
-aynı komut. Veriyi sıfırlayıp yeniden yüklemek için `pnpm demo --seed`.
+aynı komut. Veriyi sıfırlayıp yeniden yüklemek için `pnpm demo --seed`. Seed
+yalnız yerel veritabanında çalışır ve kendi demo verisi dışında bir işletme
+bulursa hiçbir şey silmeden durur.
 
 | Rol | E-posta | Parola |
 |---|---|---|
@@ -62,13 +64,26 @@ pnpm install
 docker compose up -d                # veya 5433 portunda kendi PostgreSQL'iniz
 pnpm --filter @stok/db run init     # pg_trgm eklentisi + stok_app rolü (idempotent)
 pnpm --filter @stok/db run migrate
-pnpm --filter @stok/db run seed     # DİKKAT: bütün veriyi siler, yalnız yerel geliştirme
+pnpm --filter @stok/db run seed     # DİKKAT: bütün veriyi siler; uzak hedefte ve başka işletme varken çalışmaz
 pnpm --filter @stok/web run dev
 ```
 
 `.env` yoksa `.env.example` dosyasını `.env` adıyla kopyalayın (`pnpm demo` bunu
-kendisi yapar). Sunucu, `DATABASE_URL` veya `AUTH_SECRET` eksik ya da geçersizse
-açılmaz ve neyin eksik olduğunu konsola yazar.
+kendisi yapar, `AUTH_SECRET`'e rastgele bir anahtar yazar ve var olan `.env`'e
+dokunmaz). Sunucu, `DATABASE_URL` veya `AUTH_SECRET` eksik ya da geçersizse
+açılmaz ve neyin eksik olduğunu konsola yazar. Örnek `AUTH_SECRET` yerel
+geliştirmede çalışır, üretim modunda (`next start`) reddedilir.
+
+**Yeni işletme ve ilk yöneticisi:**
+
+```bash
+pnpm tenant:create
+```
+
+İşletme adı, yönetici adı ve e-postası sorulur; parola üretilir ve yalnız bir kez
+gösterilir. Yazmadan önce hedef veritabanı (YEREL/UZAK) ve içindeki işletme sayısı
+gösterilir, "evet" yazılmadan hiçbir şey yazılmaz. `MIGRATION_DATABASE_URL`'deki
+veritabanına yazar.
 
 `--filter` ile çağırırken **`run` kelimesi zorunlu**: onsuz pnpm, Windows'ta
 `'migrate' is not recognized` hatası verir.
@@ -102,8 +117,8 @@ Tam liste ve açıklamalar `.env.example`'da.
 | Değişken | Zorunlu | Açıklama |
 |---|---|---|
 | `DATABASE_URL` | evet | Uygulama bağlantısı, `stok_app` rolü (RLS uygulanır) |
-| `MIGRATION_DATABASE_URL` | migration/seed için | Tablo sahibi (RLS'i atlar). **Uygulama çalışma ortamına konmaz** |
-| `AUTH_SECRET` | evet | JWT imza anahtarı, en az 32 karakter (`openssl rand -base64 32`). Üretimde örnek değer kullanılmaz |
+| `MIGRATION_DATABASE_URL` | migration, seed, `tenant:create` için | Tablo sahibi (RLS'i atlar). **Uygulama çalışma ortamına konmaz** |
+| `AUTH_SECRET` | evet | JWT imza anahtarı, en az 32 karakter; üretme komutu `.env.example`'da. Depodaki örnek değerlerle üretim modu açılmaz |
 | `APP_URL` | önerilir | Oturum çerezinin `Secure` bayrağı bu adresin şemasından türer; üretimde `https://` |
 | `CRON_SECRET` | cron için | En az 32 karakter; tanımsızsa `/api/cron` kapalı |
 | `SMTP_URL`, `REPORT_FROM_EMAIL` | e-posta için | Rapor ve alarm e-postaları |

@@ -78,8 +78,8 @@ Tehdit ve koruma ayrıntısı `docs/SECURITY_MODEL.md`'de.
 |---|---|---|---|---|
 | SEC-01 | Kiracı izolasyonu veritabanında: uygulama `stok_app` (sahip değil, BYPASSRLS yok); tüm tablolarda ENABLE + FORCE RLS; bağlam yalnız `withTenant()` (`SET LOCAL`) | Active | ADR-002 · D5 | |
 | SEC-02 | Kiracı bağlamı bilinmeden yapılması gerekenler yalnız dar SECURITY DEFINER fonksiyonlarıyla; `search_path` sabit; "tenant NULL iken her şeyi geçir" politikası YOK | Active | ADR-002 | Supabase yetkileri doğrulanmadı: T124 / S15 |
-| SEC-03 | `tenants` tablosuna uygulama yazamaz; kiracı açmak provisioning işidir | Active | migration 0002 | Araç yok: T162 |
-| SEC-14 | E-posta tekilliği global mi; kiracı içiyse girişte kiracı seçimi nasıl | Open | denetim 2026-10-08 | Bugünkü model: kullanıcı tek kiracıya ait, kiracı değiştirici yok (PLAN Faz 9b). T123 / S14 |
+| SEC-03 | `tenants` tablosuna uygulama yazamaz; kiracı açmak provisioning işidir | Active | migration 0002 | Araç: `pnpm tenant:create` (sahip rolüyle, operatör makinesinden; T162) |
+| SEC-14 | E-posta tekilliği global mi; kiracı içiyse girişte kiracı seçimi nasıl | Open | denetim 2026-10-08 | Bugünkü model: kullanıcı tek kiracıya ait, kiracı değiştirici yok (PLAN Faz 9b). T123 / S14. Karar verilene kadar kiracı açma aracı başka kiracıdaki e-postayı reddediyor (geçici, T162) |
 
 ## Operasyon
 
