@@ -4,7 +4,7 @@ Yalnız BUGÜNÜN gerçeği. Her merge'te ya da durum değiştiğinde güncellen
 satırlar silinir (tarihçe git'te). Ayrıntı yazılmaz: işler → `TODOS.md`,
 kararlar → `DECISIONS.md`, model → `PROJECT_BRAIN.md`.
 
-**Tarih:** 2026-10-10 · **Çalışma branch'i:** `development` · **Stabil referans:** `master`
+**Tarih:** 2026-10-12 · **Çalışma branch'i:** `development` · **Stabil referans:** `master`
 (`master` = `dac05ff`, devralma öncesi son kod; geliştirme `development`'ta yapılır)
 
 ## Deploy
@@ -13,7 +13,7 @@ kararlar → `DECISIONS.md`, model → `PROJECT_BRAIN.md`.
 ya da release kaydı yok. Kod tarafı hazırlığı (vercel.json, `/api/v1/health`,
 runbook) var; önkoşullar TODOS T42.
 
-## Doğrulanmış baseline — 2026-10-10, WS-C-lite (`f4006c8` üstünde, commit öncesi), Windows 11, Node 24.20
+## Doğrulanmış baseline — 2026-10-10, WS-C-lite (`dcf46d1`), Windows 11, Node 24.20
 
 | Kontrol | Sonuç |
 |---|---|
@@ -42,7 +42,7 @@ koruması çalışıyor, "Bağlantıyı kes" telefon oturumunu kapatıyor. Andro
 denenmedi. Yerelde ayrıca Edge + sahte kamera aygıtı + sentetik EAN-13 ile
 uçtan uca geçti (kamera yolu CI'da yok: T169).
 
-GitHub CI: `development` `f4006c8` (WS-B doküman senkronu) koşu #61 yeşil.
+GitHub CI: `development` `dcf46d1` (WS-C-lite) koşu #62 yeşil.
 master'daki son koşu #44 (2026-09-14) yeşil.
 9 Dependabot PR açık, 3'ü kırmızı (T140).
 
@@ -95,7 +95,7 @@ işaretli (öne çıkanlar `DAT-15`, `DAT-16`, `SEC-14`, `OPS-01`, `OPS-02`, `UX
 
 ## Son tamamlanan workstream
 
-**WS-C-lite — Excel/export saatleri Europe/Istanbul** (commit öncesi): bütün xlsx tarih
+**WS-C-lite — Excel/export saatleri Europe/Istanbul** (`dcf46d1`, CI #62): bütün xlsx tarih
 hücreleri ve dosya adı damgası `excel.ts`'te IANA `Europe/Istanbul` duvar saatine
 çevriliyor (T173); hareket raporunun tarih filtreli indirmesi 400 yerine dosya veriyor (T174).
 İç model, sorgular, cron ve ekran değişmedi. Migration ve dependency yok.
