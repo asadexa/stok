@@ -139,6 +139,31 @@ describe('yönetici izin verilen uçlara ulaşıyor', () => {
   }
 })
 
+/**
+ * WS-C-lite: hareketler ekranındaki tarih filtresi (`YYYY-MM-DD`) indirme
+ * adresine aynen geçiyor. Rota onu ISO'ya çevirmeden şemaya verdiğinde
+ * düğme "N satır" deyip 400 dönüyordu. Bozuk girdi ise 400 almaya devam
+ * etmeli: filtre sessizce düşerse kullanıcı bütün geçmişi indirir.
+ */
+describe('hareket raporu tarih filtresi', () => {
+  it('ekranın gönderdiği tarih-only filtreyle dosya iniyor', async () => {
+    await loginAs(tenant.adminEmail)
+    const res = await hareketGET(req('/api/rapor/hareket?baslangic=2026-10-10&bitis=2026-10-10'))
+
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toContain('spreadsheetml')
+  })
+
+  it('bozuk tarih yok sayılmıyor, VALIDATION_FAILED', async () => {
+    await loginAs(tenant.adminEmail)
+    const res = await hareketGET(req('/api/rapor/hareket?baslangic=xyz'))
+
+    expect(res.status).toBe(400)
+    const body = (await res.json()) as { code?: string }
+    expect(body.code).toBe('VALIDATION_FAILED')
+  })
+})
+
 describe('çalışan sınırı sunucuda duruyor (tehdit S6, S7)', () => {
   for (const rota of ROTALAR.filter((r) => r.calisan !== null)) {
     const beklenen = rota.calisan ? 'açık' : 'kapalı'

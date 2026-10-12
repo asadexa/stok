@@ -7,7 +7,7 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
 **Kurallar**
 
 - ID `T<n>`. Arşivdeki görevler numaralarını korur. Yeni görev en büyük
-  numaradan devam eder — **sıradaki boş numara: T173**. Numara yeniden
+  numaradan devam eder — **sıradaki boş numara: T175**. Numara yeniden
   kullanılmaz.
 - Biçim: `- [ ] **T<n> (P0–P3)** - <alan> - **Başlık**`. Altında kısa
   **Neden / Kanıt / Bağlı / Doğrula / Kaynak** satırları.
@@ -60,6 +60,10 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
   - Yeniden üretildi (2026-10-10 00:25 ve 01:36, yerel UTC+3, DB UTC): `cron.test.ts`'in
     üç testi (T88.1 kasa açığı ×2, T36 sağlık alarmı) yerel saatle kırmızı, `TZ=UTC` ile
     19/19 yeşil. Gece 00:00–03:00 arası yerel test koşusu bu yüzden kırılıyor.
+  - Kısmen ele alındı (WS-C-lite, T173): Excel hücreleri ve dosya adı sabit
+    Europe/Istanbul. Hâlâ sunucu saatine bağlı olanlar: ekran `formatDateTime`
+    (`apps/web/src/lib/format.ts`, bulutta UTC gösterir), tarih filtresinin gün sınırı
+    (`dayStartIso`/`dayEndIso`, ekran ve Excel indirmesi ortak), cron ve rapor günü.
 
 - [ ] **T123 (P1)** - auth - **Aynı e-posta birden fazla kiracıda: web'de çıkmaz + kiracılar arası kilitleme**
   - Neden: `login()` `TENANT_AMBIGUOUS` döndürüyor ve `tenantId` kabul ediyor, ama
@@ -326,6 +330,25 @@ FIFO maliyet.
 ## Kapananlar
 
 _(Bu dosyada açılıp kapanan görevler buraya iner. T1–T119'un kapanış kayıtları arşivde.)_
+
+- [x] **T173 (P1)** - export - **Excel'deki tarih-saatler UTC görünüyor**
+  - Sorun: exceljs seriyi anın UTC duvar saatinden üretiyor, Excel hücresinde saat dilimi
+    yok. 12:15'teki hareket 09:15, 00:30'daki ÖNCEKİ günde görünüyordu (sunucu TZ'sinden
+    bağımsız; pilot laptopta da). Dosya adı damgası sunucu yerel saatine bağlıydı.
+  - Kapanış (WS-C-lite, 2026-10-10): `excel.ts` `buildWorkbook` her `Date` hücresini,
+    `exportFileName` damgayı `Intl` + IANA `Europe/Istanbul` duvar saatine çeviriyor;
+    stok "Son Hareket", hareket "Tarih", gün sonu "Saat" kapsanıyor. Kanıt: `excel.test.ts`
+    (normal, gün farkı, yıl sınırı, 2015 kışı +02, süreç TZ'si UTC/New_York/Tokyo, girdi
+    değişmiyor), `exports.test.ts` gerçek PG (hücre = `created_at` + 3 sa, `listMovements`
+    UTC anı aynı); `dogrula` D1–D4 kırmızıya döndü; gerçek tarayıcıda 16/16 satır.
+
+- [x] **T174 (P1)** - export - **Hareketler ekranında tarih filtreli "Excel'e aktar" 400 dönüyor**
+  - Sorun: sayfa `YYYY-MM-DD`'yi `dayStartIso`/`dayEndIso` ile sayıp "N satır" gösteriyor,
+    indirme rotası aynı değeri ham şemaya veriyordu (`from: Invalid datetime`).
+  - Kapanış (WS-C-lite, 2026-10-10): `apps/web/src/app/api/rapor/shared.ts` geçerli tarih-only
+    değeri sayfayla aynı sınıra çeviriyor; çevrilemeyen değer ham gidip 400 almaya devam
+    ediyor (validation gevşemedi). Kanıt: `shared.test.ts`, `route-authz.test.ts` (200 ve
+    `xyz` → 400), E2E `faz10-fiyat.spec.ts`; `dogrula` D5 (birim, rota, E2E 400) ve D6.
 
 - [x] **T130 (P2)** - doğrulama - **Birim hassasiyeti zorlanmıyor; çok küçük miktar 500 veriyor**
   - Sorun: "0,5 adet" kabul ediliyordu; `decimalsOf` `toString()` ile `1e-7`'yi 0 basamak

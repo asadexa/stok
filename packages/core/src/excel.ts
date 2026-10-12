@@ -30,6 +30,18 @@ import ExcelJS from 'exceljs'
  *    (PLAN.md Bölüm 5). Türkiye'de `aa/gg` okuyan biri 03.08 tarihini
  *    3 Ağustos yerine 8 Mart sanar.
  *
+ *    SAAT DİLİMİ (WS-C-lite): Excel hücresinde saat dilimi yok; dosyayı açan
+ *    Excel seri sayıyı olduğu gibi gösterir. exceljs seriyi anın UTC duvar
+ *    saatinden üretiyor (`25569 + getTime()/86400000`), yani `Date`'i olduğu
+ *    gibi yazmak 12:15'te girilen hareketi 09:15, gece 00:30'dakini ÖNCEKİ
+ *    günde gösteriyordu, sunucunun saat diliminden bağımsız olarak. Bu yüzden
+ *    her `Date` hücreye yazılmadan hemen önce `Europe/Istanbul` duvar saatine
+ *    çevriliyor (`exportWallClock`). Dönüşüm YALNIZ burada: satır tipleri,
+ *    sorgular ve defter UTC anı taşımaya devam ediyor. Sütun bazında yapmak
+ *    üç ayrı listeye (stok, hareket, gün sonu) yazılması demekti ve bir
+ *    sonraki tarih sütunu unuturdu; `process.env.TZ` ise bütün iç saati
+ *    değiştirirdi. Kiracı bazlı saat dilimi kararı `DAT-16`'da açık.
+ *
  * 3. SAYI. Miktar ve para gerçek sayı olarak yazılıyor, metin olarak değil.
  *    Ondalık ayırıcı Excel'in kendi yerel ayarından gelir; biz sadece
  *    biçim maskesini `#,##0.000` veriyoruz. Metin yazsaydık kullanıcı
@@ -45,6 +57,47 @@ export const DATE_FORMAT = 'dd.mm.yyyy hh:mm'
 export const QTY_FORMAT = '#,##0.000'
 /** Para: iki basamak. */
 export const MONEY_FORMAT = '#,##0.00'
+
+/**
+ * IANA adı, sabit `+03:00` değil: Türkiye 2016 öncesi yaz saati uyguluyordu
+ * ve devir/geçmiş hareketler o yıllara düşebilir. `en-CA` + `h23`: parçalar
+ * sayısal geliyor ve gece yarısı bazı motorlarda olduğu gibi "24" dönmüyor.
+ * Saat dilimi verisi yoksa kurucu modül yüklenirken `RangeError` fırlatır;
+ * sessizce UTC'ye düşmek, kapattığımız hatanın kendisi olurdu.
+ */
+const EXPORT_TIME_ZONE = 'Europe/Istanbul'
+const exportClock = new Intl.DateTimeFormat('en-CA', {
+  timeZone: EXPORT_TIME_ZONE,
+  hourCycle: 'h23',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+})
+
+/**
+ * Anın İstanbul duvar saatini UTC bileşenlerinde taşıyan YENİ bir `Date`.
+ * Yalnız Excel sınırında anlamlı (exceljs seriyi UTC bileşenlerinden
+ * üretiyor); başka yerde kullanılırsa anı üç saat kaydırır. Girdi
+ * değiştirilmiyor: aynı nesne çağıranda UTC an olarak yaşamaya devam ediyor.
+ */
+function exportWallClock(at: Date): Date {
+  const part: Record<string, number> = {}
+  for (const p of exportClock.formatToParts(at)) part[p.type] = Number(p.value)
+  return new Date(
+    Date.UTC(
+      part.year!,
+      part.month! - 1,
+      part.day!,
+      part.hour!,
+      part.minute!,
+      part.second!,
+      at.getUTCMilliseconds(),
+    ),
+  )
+}
 
 export interface SheetColumn<T> {
   header: string
@@ -201,7 +254,12 @@ export async function buildWorkbook<T>(spec: SheetSpec<T>): Promise<Buffer> {
   header.alignment = { vertical: 'middle' }
 
   for (const row of spec.rows) {
-    sheet.addRow(spec.columns.map((c) => c.value(row)))
+    sheet.addRow(
+      spec.columns.map((c) => {
+        const value = c.value(row)
+        return value instanceof Date ? exportWallClock(value) : value
+      }),
+    )
   }
 
   // Biçim maskeleri sütun bazında: satır satır uygulamak 50 bin satırda
@@ -224,15 +282,20 @@ export async function buildWorkbook<T>(spec: SheetSpec<T>): Promise<Buffer> {
  * Dosya adı. Türkçe karakter ve boşluk YOK: bazı SMTP sunucuları ve
  * eski tarayıcılar `Content-Disposition` içindeki UTF-8 dosya adını
  * bozuyor ve kullanıcı "rapor_A_ustos.xlsx" indiriyor.
+ *
+ * Damga hücrelerle aynı İstanbul saatinde. Yerel getter'lar sunucunun saat
+ * dilimini okuyordu: laptopta doğru, UTC bir sunucuda üç saat geri ve gece
+ * yarısından sonra bir önceki günün tarihiyle.
  */
 export function exportFileName(prefix: string, at: Date): string {
   const pad = (n: number) => String(n).padStart(2, '0')
+  const local = exportWallClock(at)
   const stamp = [
-    at.getFullYear(),
-    pad(at.getMonth() + 1),
-    pad(at.getDate()),
-    pad(at.getHours()),
-    pad(at.getMinutes()),
+    local.getUTCFullYear(),
+    pad(local.getUTCMonth() + 1),
+    pad(local.getUTCDate()),
+    pad(local.getUTCHours()),
+    pad(local.getUTCMinutes()),
   ]
   return `${prefix}-${stamp.slice(0, 3).join('')}-${stamp.slice(3).join('')}.xlsx`
 }

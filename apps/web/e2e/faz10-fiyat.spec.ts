@@ -385,5 +385,14 @@ test.describe('Faz 10 — kasa açığı ve açılış değerlemesi', () => {
     expect(cevap.status()).toBe(200)
     expect(cevap.headers()['content-type']).toContain('spreadsheetml')
     expect(cevap.headers()['content-disposition']).toMatch(/\.xlsx/)
+
+    // WS-C-lite: hareketler ekranının tarih filtresi indirme adresine
+    // `YYYY-MM-DD` olarak geçiyor; eskiden bu istek 400 dönüyordu.
+    const bugun = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Istanbul' })
+    const filtreli = await page.request.get(
+      `/api/rapor/hareket?baslangic=${bugun}&bitis=${bugun}`,
+    )
+    expect(filtreli.status()).toBe(200)
+    expect(filtreli.headers()['content-type']).toContain('spreadsheetml')
   })
 })

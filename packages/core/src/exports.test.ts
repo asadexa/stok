@@ -16,7 +16,7 @@ import {
 } from './exports'
 import { RETRY_DELAY_SECONDS, getJob, listFailedJobs, listJobs, runQueuedJobs } from './jobs'
 import { createInMemoryTransport } from './mail'
-import { createMovement } from './movements'
+import { createMovement, listMovements } from './movements'
 import { TEST_DB_NAME } from './test/db-name'
 
 /**
@@ -279,6 +279,74 @@ describe('senkron indirme (eşik altı)', () => {
   it('bozuk filtre VALIDATION_FAILED', async () => {
     await expectAppError(exportStock(boss, { category: 123 }, opts), 'VALIDATION_FAILED')
     await expectAppError(exportMovements(boss, { from: 'dün' }, opts), 'VALIDATION_FAILED')
+  })
+})
+
+/**
+ * WS-C-lite: gerçek defter satırları Excel'e İstanbul duvar saatiyle iniyor,
+ * defterin kendisi ve iç okuma yolu UTC an olarak kalıyor.
+ *
+ * Kâhin bilerek BAĞIMSIZ: beklenen değer `created_at + 3 saat` aritmetiği
+ * (Türkiye 2016'dan beri sabit UTC+3), uygulama ise `Intl` + IANA kullanıyor.
+ * Aynı yoldan hesaplasaydık ikisi aynı hatayı paylaşıp yeşil kalabilirdi.
+ */
+describe('WS-C-lite - Excel saati gerçek defterde', () => {
+  const TR_OFFSET_MS = 3 * 3_600_000
+
+  /** DB'nin kendi UTC metni: oturum saat diliminden bağımsız. */
+  function utcText(column: string) {
+    return sql.raw(`to_char(${column} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`)
+  }
+
+  it('hareket "Tarih" hücresi = created_at + 3 sa; listMovements UTC anı değişmiyor', async () => {
+    const dbRows = [
+      ...(await admin.db.execute<{ sku: string; at: string }>(sql`
+        SELECT p.sku, ${utcText('m.created_at')} AS at
+          FROM stock_movements m JOIN products p ON p.id = m.product_id
+         WHERE m.tenant_id = ${tenant.tenantId}
+         ORDER BY m.created_at, m.id
+      `)),
+    ]
+    expect(dbRows.length).toBeGreaterThan(0)
+
+    const sheet = await sheetOf((await asInline(exportMovements(boss, {}, opts))).buffer)
+    const cells = dbRows.map((_, i) => ({
+      sku: sheet.getRow(i + 2).getCell(2).value,
+      at: sheet.getRow(i + 2).getCell(1).value as Date,
+    }))
+
+    for (const [i, db] of dbRows.entries()) {
+      expect(cells[i]!.sku).toBe(db.sku)
+      expect(cells[i]!.at).toBeInstanceOf(Date)
+      // exceljs seriyi UTC bileşenli Date'e çeviriyor: UTC bileşenleri =
+      // Excel'in gösterdiği saat. 1 ms tolerans seri sayının kayan noktası için.
+      expect(Math.abs(cells[i]!.at.getTime() - (Date.parse(db.at) + TR_OFFSET_MS))).toBeLessThanOrEqual(1)
+    }
+
+    // İç okuma yolu (ekran, rapor) hâlâ defterdeki UTC anı veriyor.
+    const internal = await listMovements(boss, {}, opts)
+    expect(internal.map((m) => m.createdAt.toISOString()).sort()).toEqual(
+      dbRows.map((r) => r.at).sort(),
+    )
+  })
+
+  it('stok "Son Hareket" hücresi = current_stock.last_movement_at + 3 sa', async () => {
+    const [ex1] = [
+      ...(await admin.db.execute<{ at: string }>(sql`
+        SELECT ${utcText('cs.last_movement_at')} AS at
+          FROM current_stock cs JOIN products p ON p.id = cs.product_id
+         WHERE cs.tenant_id = ${tenant.tenantId} AND p.sku = 'EX-1'
+      `)),
+    ]
+    expect(ex1?.at).toBeTruthy()
+
+    const sheet = await sheetOf((await asInline(exportStock(boss, { search: 'EX-1' }, opts))).buffer)
+    // Yönetici sürümü: 7 temel + 2 fiyat sütunu, ardından "Son Hareket".
+    expect(sheet.getRow(1).getCell(10).value).toBe('Son Hareket')
+    const cell = sheet.getRow(2).getCell(10).value as Date
+
+    expect(cell).toBeInstanceOf(Date)
+    expect(Math.abs(cell.getTime() - (Date.parse(ex1!.at) + TR_OFFSET_MS))).toBeLessThanOrEqual(1)
   })
 })
 

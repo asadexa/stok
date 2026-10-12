@@ -316,3 +316,151 @@ describe('dosya adı', () => {
     expect(name).toContain('20260803')
   })
 })
+
+/**
+ * ============================================================================
+ * WS-C-lite — EXCEL SAATİ Europe/Istanbul
+ *
+ * Kapatılan hata: 12:15'te girilen hareket Excel'de 09:15, gece 00:30'daki
+ * bir önceki günde görünüyordu. exceljs seri sayıyı anın UTC duvar
+ * saatinden üretiyor ve Excel hücresinde saat dilimi yok.
+ *
+ * NASIL OKUNUYOR: exceljs geri okurken seriyi UTC bileşenli bir `Date`'e
+ * çeviriyor; yani okunan `Date`'in UTC bileşenleri tam olarak Excel'in
+ * ekranda gösterdiği gün ve saat. `excelShows` onu Excel biçiminde yazıyor,
+ * `serialOf` hücredeki ham sayıyı geri hesaplıyor.
+ * ============================================================================
+ */
+function excelShows(value: unknown): string {
+  expect(value).toBeInstanceOf(Date)
+  const d = value as Date
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${p(d.getUTCDate())}.${p(d.getUTCMonth() + 1)}.${d.getUTCFullYear()} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`
+}
+
+function serialOf(value: unknown): number {
+  return (value as Date).getTime() / 86_400_000 + 25_569
+}
+
+async function movementCellAt(at: Date): Promise<unknown> {
+  const buffer = await buildWorkbook({
+    name: 'Hareketler',
+    columns: movementColumns(false),
+    rows: [movementRow({ createdAt: at })],
+  })
+  const { sheet } = await readBack(buffer)
+  return sheet.getRow(2).getCell(1).value
+}
+
+/** Süreç saat dilimini geçici olarak değiştirir; Node `process.env.TZ`
+ *  atamasını anında uyguluyor. Vitest tek fork'ta sıralı koşuyor. */
+async function withProcessTz<T>(tz: string, fn: () => Promise<T>): Promise<T> {
+  const before = process.env.TZ
+  process.env.TZ = tz
+  try {
+    return await fn()
+  } finally {
+    // `= undefined` "undefined" METNİNİ yazar ve UTC'ye düşer; silmek gerekiyor.
+    if (before === undefined) delete process.env.TZ
+    else process.env.TZ = before
+  }
+}
+
+describe('WS-C-lite — Excel saati Europe/Istanbul', () => {
+  it('normal saat: 09:15 UTC hareketi 12:15 görünüyor', async () => {
+    const cell = await movementCellAt(new Date('2026-10-10T09:15:00Z'))
+
+    expect(excelShows(cell)).toBe('10.10.2026 12:15')
+    expect(serialOf(cell)).toBeCloseTo(46305.510416666664, 9)
+  })
+
+  it('UTC günü ile Türkiye günü farklı: 21:30 UTC hareketi ERTESİ gün 00:30', async () => {
+    // UTC'de hâlâ 9 Ekim, Türkiye'de 10 Ekim. Eski davranışta satır
+    // "09.10.2026 21:30" görünüyor ve gün bazlı süzmede yanlış güne düşüyordu.
+    const cell = await movementCellAt(new Date('2026-10-09T21:30:00Z'))
+
+    expect(excelShows(cell)).toBe('10.10.2026 00:30')
+    expect(serialOf(cell)).toBeCloseTo(46305.020833333336, 9)
+  })
+
+  it('gece yarısı ve yıl sınırı: saat "24" olmuyor', async () => {
+    const cell = await movementCellAt(new Date('2026-12-31T21:00:00Z'))
+
+    expect(excelShows(cell)).toBe('01.01.2027 00:00')
+  })
+
+  it('sabit +3 değil, IANA: 2015 kışı +2, yazı +3', async () => {
+    // Türkiye 2016'ya kadar yaz saati uyguluyordu; devir ve eski hareketler
+    // o yıllara düşebilir. Sabit ofset kışın bir saat ileri gösterirdi.
+    expect(excelShows(await movementCellAt(new Date('2015-01-15T10:00:00Z')))).toBe(
+      '15.01.2015 12:00',
+    )
+    expect(excelShows(await movementCellAt(new Date('2015-07-01T10:00:00Z')))).toBe(
+      '01.07.2015 13:00',
+    )
+  })
+
+  it('stok "Son Hareket" ve gün sonu tarzı "Saat" sütunu da aynı kurala uyuyor', async () => {
+    // Dönüşüm sütun tanımında değil `buildWorkbook`'ta: cron'un `hh:mm`
+    // biçimli sütunu da, ileride eklenecek bir tarih sütunu da kapsanıyor.
+    const at = new Date('2026-10-09T21:30:00Z')
+    const stock = await readBack(
+      await buildWorkbook({
+        name: 'Stok',
+        columns: stockColumns(false),
+        rows: [stockRow({ lastMovementAt: at })],
+      }),
+    )
+    const daily = await readBack(
+      await buildWorkbook({
+        name: 'Gün sonu',
+        columns: [{ header: 'Saat', width: 10, value: (r: { at: Date }) => r.at, format: 'hh:mm' }],
+        rows: [{ at }],
+      }),
+    )
+
+    expect(excelShows(stock.sheet.getRow(2).getCell(8).value)).toBe('10.10.2026 00:30')
+    expect(excelShows(daily.sheet.getRow(2).getCell(1).value)).toBe('10.10.2026 00:30')
+    expect(daily.sheet.getColumn(1).numFmt).toBe('hh:mm')
+  })
+
+  it('sonuç sunucunun saat diliminden bağımsız (hücre ve dosya adı)', async () => {
+    // Vercel/Supabase UTC, pilot laptop İstanbul, bir geliştirici başka bir
+    // yerde: üçünde de aynı dosya çıkmalı.
+    const at = new Date('2026-10-09T21:30:00Z')
+    const seen: string[] = []
+    for (const tz of ['UTC', 'America/New_York', 'Asia/Tokyo', 'Europe/Istanbul']) {
+      seen.push(
+        await withProcessTz(tz, async () => {
+          const cell = excelShows(await movementCellAt(at))
+          return `${cell} | ${exportFileName('hareket', at)}`
+        }),
+      )
+    }
+
+    expect(new Set(seen)).toEqual(new Set(['10.10.2026 00:30 | hareket-20261010-0030.xlsx']))
+  })
+
+  it('dosya adı damgası İstanbul saatinde', () => {
+    expect(exportFileName('hareket', new Date('2026-10-09T21:30:00Z'))).toBe(
+      'hareket-20261010-0030.xlsx',
+    )
+  })
+
+  it('iç değer değişmiyor: girdi Date UTC an olarak kalıyor, takvim günü ve sayı kaymıyor', async () => {
+    const at = new Date('2026-10-09T21:30:00Z')
+    const buffer = await buildWorkbook({
+      name: 'Hareketler',
+      columns: movementColumns(true),
+      rows: [movementRow({ createdAt: at, priceDate: '2021-06-12', delta: 12.5 })],
+    })
+    const { sheet } = await readBack(buffer)
+
+    // Dönüşüm yeni bir nesne üretmeli. Girdiyi yerinde değiştirseydi aynı
+    // satır nesnesini kullanan her şey (e-posta, sayım) üç saat kaymış anı görürdü.
+    expect(at.toISOString()).toBe('2026-10-09T21:30:00.000Z')
+    // "Fiyat Tarihi" takvim günü, metin olarak yazılıyor ve saat dilimine girmiyor.
+    expect(sheet.getRow(2).getCell(13).value).toBe('12.06.2021')
+    expect(sheet.getRow(2).getCell(7).value).toBe(12.5)
+  })
+})

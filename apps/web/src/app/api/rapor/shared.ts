@@ -1,6 +1,7 @@
 import 'server-only'
 import { XLSX_CONTENT_TYPE, type ExportResult } from '@stok/core'
 import { NextResponse } from 'next/server'
+import { dayEndIso, dayStartIso } from '@/lib/format'
 
 /**
  * ============================================================================
@@ -37,13 +38,32 @@ export function stockQuery(params: URLSearchParams): Record<string, unknown> {
   }
 }
 
+/**
+ * Ekrandaki tarih filtresi (`YYYY-MM-DD`), sayfanın sayımda kullandığı
+ * `dayStartIso`/`dayEndIso` ile aynı gün sınırına çevriliyor. Çevrilmeden
+ * gittiğinde şema (ISO datetime) onu reddediyordu: düğme "N satır" diyor,
+ * tıklayınca 400 dönüyordu.
+ *
+ * Çevrilemeyen değer HAM gidiyor, yok sayılmıyor: `?baslangic=xyz` şemada
+ * 400 almaya devam etmeli, yoksa bozuk bir filtre sessizce "bütün geçmiş"
+ * raporuna dönerdi. Doğrudan ISO datetime da ham geçip eskisi gibi kabul ediliyor.
+ */
+function dayParam(
+  params: URLSearchParams,
+  key: string,
+  toIso: (value: string) => string | undefined,
+): string | undefined {
+  const value = trimmed(params, key)
+  return value === undefined ? undefined : (toIso(value) ?? value)
+}
+
 export function movementQuery(params: URLSearchParams): Record<string, unknown> {
   return {
     productId: trimmed(params, 'urun'),
     userId: trimmed(params, 'kullanici'),
     reason: trimmed(params, 'sebep'),
-    from: trimmed(params, 'baslangic'),
-    to: trimmed(params, 'bitis'),
+    from: dayParam(params, 'baslangic', dayStartIso),
+    to: dayParam(params, 'bitis', dayEndIso),
   }
 }
 

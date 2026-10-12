@@ -13,19 +13,24 @@ kararlar → `DECISIONS.md`, model → `PROJECT_BRAIN.md`.
 ya da release kaydı yok. Kod tarafı hazırlığı (vercel.json, `/api/v1/health`,
 runbook) var; önkoşullar TODOS T42.
 
-## Doğrulanmış baseline — 2026-10-10, WS-B (`e1dc9a1`), Windows 11, Node 24.20
+## Doğrulanmış baseline — 2026-10-10, WS-C-lite (`f4006c8` üstünde, commit öncesi), Windows 11, Node 24.20
 
 | Kontrol | Sonuç |
 |---|---|
-| lint (Biome) | PASS — 195 dosya, 0 tanı |
+| lint (Biome) | PASS — 196 dosya, 0 tanı |
 | typecheck (4 paket) | PASS |
-| test | PASS — **856/856** (shared 69, db 85, core 540, web 162), `TZ=UTC` ile |
+| test | PASS — **872/872** (shared 69, db 85, core 550, web 168), yerel saat 14:3x, `TZ` zorlanmadan |
 | migration drift | PASS — "No schema changes", dosya üretilmedi |
 | `next build` | PASS — 29 rota |
 | Playwright | PASS — **24/24** |
 
 Yerel saatle 00:00–03:00 arasında `cron.test.ts`'in üç testi kırmızı: T122'nin
-yeniden üretimi (yerel UTC+3, DB UTC), WS-B'den bağımsız; `TZ=UTC` ile yeşil.
+yeniden üretimi (yerel UTC+3, DB UTC); `TZ=UTC` ile yeşil.
+
+Excel saatleri (WS-C-lite, gerçek tarayıcı, `next dev`): `/hareketler` bugünün
+filtresiyle "Excel'e aktar 16 satır" → 16 satırlık dosya; her "Tarih" hücresi DB
+`created_at`'in Europe/Istanbul duvar saati (UTC'de 9 Ekim 22:33 olan satır
+`10.10.2026 01:33`), dosya adı `hareket-20261010-1439.xlsx`.
 
 İçe aktarma, 2.000 satır (ayrı test veritabanı): devirli ilk koşu 47,1 sn, tekrar
 32,5 sn (ikinci devir yazılmadı), önizleme 125–305 ms; devirsiz taban 23,5 sn (T171).
@@ -37,7 +42,7 @@ koruması çalışıyor, "Bağlantıyı kes" telefon oturumunu kapatıyor. Andro
 denenmedi. Yerelde ayrıca Edge + sahte kamera aygıtı + sentetik EAN-13 ile
 uçtan uca geçti (kamera yolu CI'da yok: T169).
 
-GitHub CI: `development` `e1dc9a1` (WS-B) koşu #60 yeşil.
+GitHub CI: `development` `f4006c8` (WS-B doküman senkronu) koşu #61 yeşil.
 master'daki son koşu #44 (2026-09-14) yeşil.
 9 Dependabot PR açık, 3'ü kırmızı (T140).
 
@@ -55,7 +60,9 @@ okutup `/hareket`te açma (`ENABLE_PHONE_SCANNER`, `PRD-12`, `ARC-14`).
 ## Kısmi / bozuk
 
 - **Gün sonu raporu**: saatlik zamanlamada günün ilk turunda boş günü raporluyor (T121).
-- **Saat dilimi**: tanımsız; UTC'de gün sınırları kayar (T122).
+- **Saat dilimi**: tanımsız; UTC'de gün sınırları kayar (T122). Excel hücreleri ve
+  dosya adı WS-C-lite'tan beri sabit Europe/Istanbul; ekran saati, tarih filtresinin
+  gün sınırı ve cron hâlâ sunucu saatine bağlı.
 - **Çok kiracıda aynı e-posta**: web'de giriş çıkmazı (T123).
 - **Sağlık alarmı**: bir kez FAILED olan iş kalıcı, alarm her saat tekrar eder (T126).
 - **Düzeltme / ters hareket**: akış yok (T127).
@@ -88,18 +95,17 @@ işaretli (öne çıkanlar `DAT-15`, `DAT-16`, `SEC-14`, `OPS-01`, `OPS-02`, `UX
 
 ## Son tamamlanan workstream
 
-**WS-B — Birim hassasiyeti + içe aktarmada açılış stoğu** (`e1dc9a1`, CI #60):
-adet tam sayı, efektif miktarda ve `createMovement`'ta (T130, `DAT-17`); `1e-7` artık
-500 değil anlaşılır hata. İçe aktarmada "Açılış Stoğu" sütunu, devir `createMovement`
-ile OPENING, yalnız ilk hareket olarak ve ürün başına tek (T128, `DAT-18`). Migration yok.
+**WS-C-lite — Excel/export saatleri Europe/Istanbul** (commit öncesi): bütün xlsx tarih
+hücreleri ve dosya adı damgası `excel.ts`'te IANA `Europe/Istanbul` duvar saatine
+çevriliyor (T173); hareket raporunun tarih filtreli indirmesi 400 yerine dosya veriyor (T174).
+İç model, sorgular, cron ve ekran değişmedi. Migration ve dependency yok.
 
-Öncesinde WS-SCAN (`2dd09cd`, CI #58): telefon kamerası → laptop `/hareket`
-(`PRD-12`, `ARC-14`, S18); gerçek iPhone kabul testi geçti (baseline'a bak).
+Öncesinde WS-B (`e1dc9a1`, CI #60): birim hassasiyeti (T130, `DAT-17`) ve içe
+aktarmada açılış stoğu (T128, `DAT-18`).
 
-## Sıradaki workstream: WS-C-lite
+## Sıradaki workstream
 
-Saha testinde görülebilecek export/Excel saat sorunu. Tam saat dilimi işi (T122,
-`DAT-16`) bulut öncesi ayrıca.
+Belirlenmedi (kullanıcı kararı). Tam saat dilimi işi (T122, `DAT-16`) bulut öncesi ayrıca.
 
 ## Production blocker düzeltmeleri
 
