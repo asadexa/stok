@@ -23,6 +23,10 @@ Hazır sistemler (ERPNext, InvenTree) yerine sıfırdan yazılmasının iki gere
 var: beş dakikada öğrenilen Türkçe arayüz ve telefonun el terminaline dönüşmesi
 (mobil, henüz yazılmadı). Geri kalan her şey hazır sistemlerde de var.
 
+Hedef uzun ömürlü, ticari olarak kullanılabilir bir ürün (`PRD-13`): pilot ilk
+gerçek kullanımdır, kapsamın sınırı değildir. Bir tercihte önce stok doğruluğu,
+sonra operasyonel kolaylık kazanır.
+
 ## 2. Kullanıcılar ve roller
 
 | Kişi | Rol | Ne ister |

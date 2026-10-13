@@ -37,6 +37,7 @@ Kaynak `PLAN` = `docs/archive/PLAN-2026-09.md`.
 | PRD-06 | Davet e-postası yok; çalışanın parolasını yönetici belirler (depo çalışanının iş e-postası çoğu zaman yok) | Active | PLAN T24 | Parola kurtarma tasarımı (T163) bunu hesaba katmalı |
 | PRD-11 | Ürünün asıl çözdüğü acı hangisi (sayım tutmuyor / sorumlu yok / sipariş kaçıyor) | Open | PLAN · U4 | İlk demoda hangi ekranın açılacağını belirler |
 | PRD-12 | Telefonla okutma stok hareketi DEĞİLDİR: telefon yalnız barkod metnini laptoptaki `/hareket?barkod=` akışına taşır; stok yalnız laptopta Kaydet'le (`createMovement`, laptop kullanıcısının yetkisi) değişir. Telefonda her gönderim bilinçli adım ("Sonraki Ürünü Tara"); laptopta değiştirilmiş form yeni okumayla değişmez | Active | WS-SCAN, 2026-10-09 (iPhone kabul testi) | `SECURITY_MODEL` S18. Telefona ürün/fiyat/stok gitmez |
+| PRD-13 | Hedef uzun ömürlü, ticari olarak kullanılabilir bir ürün; önceki hızlı teslim (48 saat) hedefi geçersiz. Pilot ilk gerçek kullanımdır, kapsamın sınırı değildir. Öncelik: stok doğruluğu, sonra operasyonel kolaylık. Özellik gerçek kullanıcı değeriyle seçilir; iş küçük, test edilebilir workstream'lerle ilerler; erken optimizasyon ve "ileride lazım olur" yapısı eklenmez | Active | Kullanıcı kararı, 2026-10-13 | Mimari ilkeler `PROJECT_BRAIN` §12 |
 
 ## Mimari
 
