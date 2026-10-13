@@ -7,7 +7,7 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
 **Kurallar**
 
 - ID `T<n>`. Arşivdeki görevler numaralarını korur. Yeni görev en büyük
-  numaradan devam eder — **sıradaki boş numara: T175**. Numara yeniden
+  numaradan devam eder — **sıradaki boş numara: T183**. Numara yeniden
   kullanılmaz.
 - Biçim: `- [ ] **T<n> (P0–P3)** - <alan> - **Başlık**`. Altında kısa
   **Neden / Kanıt / Bağlı / Doğrula / Kaynak** satırları.
@@ -310,8 +310,85 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
 
 **Ürün**
 
-- [ ] **T155** - Sayım (stocktake) akışı (eski E2, P1). Sayım tabloları o gün eklenir (`PROJECT_BRAIN` §12.10).
-- [ ] **T156** - Barkod üretme + etiket basma (eski E5, P2); T16 bununla birlikte.
+Öncelik sırası kullanıcı kararıyla belirlendi (2026-10-13; ürün araştırması
+`~/.claude/plans/urun-yol-haritasi-2026-10-13.md`). Temel kararlar: stok doğruluğu ve
+operasyonel kullanım kolaylığı birinci öncelik; ürün barkodu isteğe bağlı; sistem çok
+kullanıcılı ama ortak laptop kullanımına özel hedef yok; önce kritik stok uyarıları,
+tükenme tahmini sonra; öncelik günlük stok takibi, 2026 yıl sonu envanteri zorunlu hedef
+değil. Kayıtlarda "Ürün kararı" onaylı kapsamdır; "Teknik not" henüz onaylanmamış tasarım girdisidir.
+
+- Öncelikli: T155 (sayım), T175 (telefondan ürün yönetimi), T176 (uygulama içi gün sonu
+  raporu), T177 (barkodsuz ürün).
+- Kritik stok takibi mevcut, yeniden geliştirilmeyecek (doğrulandı 2026-10-13): ürün bazlı
+  eşik `products.min_stock` (`packages/db/src/schema.ts:157-158`, ürün formunda "Kritik eşik"),
+  kritik liste `/stok?kritik=1`, panel uyarısı ve "Kritik stok" listesi
+  (`apps/web/src/app/(panel)/panel/page.tsx:65-80,286-297`), bildirim zili (`alert-bell.tsx`),
+  kritik stok e-postası (`packages/core/src/cron.ts:283`). Açık kalan: T170.
+- Değerlendirilecek: T178 (seri barkod okutma). Mevcut hâli yeterli, iş açılmadı: barkoddan
+  hızlı ürün tanımlama.
+- Ertelendi: T179 (tükenme tahmini), T180 (geçmiş tarihli stok), T181 (web'de PIN geçişi), T156
+  (etiket). Koşullu: T182 (satış aktarımı).
+
+- [ ] **T155** - Sayım (stocktake) akışı (eski E2, P1; ürün önceliği 2026-10-13). Sayım tabloları o gün eklenir (`PROJECT_BRAIN` §12.10).
+  - Ürün kararı: barkodlu ve barkodsuz ürün sayımı; ürün ya da kategori bazlı kısmi sayım;
+    sayıma ara verip devam etme; sistem ve fiziksel miktar karşılaştırması; yetkili onayıyla
+    fark düzeltmesi; append-only defter korunur; sayım sırasındaki hareketler doğru hesaba
+    katılır; telefondan sayım seçeneği değerlendirilir.
+  - Teknik not (onaylanmadı): `COUNT_ADJUST_*` bugün tek yazma kapısından geçemiyor
+    (`packages/shared/src/schemas.ts:128`, `userSelectable` refine); aday desen
+    `requireFirstMovement` gibi sunucu tarafı çağıran seçeneği (`movements.ts:86-92`). Fark,
+    satırın sayıldığı andaki sistem miktarına göre delta olarak yazılmalı ("sayılanı yaz"
+    aradaki satışı siler); farkı 0 satır hareket üretmez (`schema.ts:343`). STAFF `stock:read`
+    ile sistem miktarını görüyor, kör sayım ürün kararı ister (`roles.ts:78`). Büyük onay
+    T171 süresine yakın (2.000 satır ~47 sn).
+  - Bağlı: T177 (barkodsuz), T175 / `PRD-12` (telefondan sayım), T127, T171.
+  - Doğrula: sayım sırasında satış ve çift onay yarışı testleri, `dogrula`; elle
+    `COUNT_ADJUST` reddi testleri (`movements.test.ts:244`, `dusman-qa.test.ts:209`,
+    `reasons.test.ts:46`) yeşil kalır.
+- [ ] **T175** - ürün - **Telefondan ürün yönetimi** (ürün önceliği 2026-10-13)
+  - Ürün kararı: telefonla barkod okutma korunur; telefondan ürün arama ve ürün bilgisi
+    güncelleme; yetkili kullanıcı telefondan stok giriş/çıkışı yapar; barkodsuz ürün
+    desteklenir; güvenli kimlik doğrulama ve yetkilendirme; mevcut telefon köprüsünün güvenlik
+    modeli izinsiz genişletilmez.
+  - Çakışma: `PRD-12` (Active) "telefonla okutma stok hareketi değildir; telefona
+    ürün/fiyat/stok gitmez" diyor. Bu iş yeni bir karar ister: köprüyü genişletmek değil,
+    telefonda kimliği doğrulanmış ayrı bir istemci. Karar verilene kadar köprü (`ARC-14`,
+    `SECURITY_MODEL` S18) olduğu gibi kalır.
+  - Teknik not (onaylanmadı): kamera güvenli bağlam (HTTPS) istiyor; T167'nin tünel kısıtı
+    telefonda tam uygulamayı kapatacağı için yol ya erişim kontrollü kalıcı HTTPS ya da mobil
+    istemci (`PRD-03`, T53, T26–T49). T167'nin çözümü bu yolu kapatmamalı.
+  - Bağlı: `PRD-12`, `ARC-14`, T167, T177, T53.
+- [ ] **T176** - rapor - **Uygulama içi gün sonu raporu** (ürün önceliği 2026-10-13)
+  - Ürün kararı: günlük stok özeti; günlük giriş/çıkış hareketleri; en çok hareket gören
+    ürünler; kullanıcı bazlı işlem özeti; kritik seviyeye düşen ürünler; Europe/Istanbul gün
+    sınırı; eksik satış verisi kasa açığı ya da ciroda yanıltıcı sonuç üretmez. Excel/PDF
+    indirme ileride değerlendirilir.
+  - Teknik not (onaylanmadı): bugünkü özet yalnız e-postada (`cron.ts:102-176`), gün filtresi
+    DB oturum saatinde (`cron.ts:133`, UTC), kasa açığı toplamı TypeScript `Number` ile
+    (`cron.ts:157,177`, INV-8 sapması). Fiyatı girilmemiş satış "0 açık" gösterilmemeli; alış
+    fiyatı yalnız yetkiliye (INV-10).
+  - Bağlı: T122 / `DAT-16` (gün sınırı), T121 (e-posta raporu ayrı iş).
+- [ ] **T177** - ürün - **Barkodsuz ürün desteği** (ürün kararı 2026-10-13: barkod isteğe bağlı)
+  - Neden: yeni ürün için barkod bugün zorunlu (`schemas.ts:280` "En az bir barkod gerekli",
+    `import.ts:609-611`) ve hareket girişi barkodla (`schemas.ts:126`).
+  - Teknik not (onaylanmadı): seçenekler iç kod üretimi (T156 ile) ya da ürün kimliğiyle
+    hareket yolu; `DAT-18` devri, `PRD-12` köprüsü ve içe aktarma etkilenir.
+  - Bağlı: T155, T175, T156.
+- [ ] **T178** - hareket - **Seri barkod okutma** (değerlendirilecek, 2026-10-13). Kayıttan sonra
+  sebep sıfırlanıyor (`hareket/page.tsx:145-148`), mal kabulünde her kalemde yeniden seçiliyor.
+  Yanlış sebebin sessizce tekrarlanma riski tasarımda ele alınmalı.
+- [ ] **T156** - Barkod üretme + etiket basma (eski E5, P2); T16 bununla birlikte. Ertelendi (2026-10-13); barkodsuz ürün kararı (T177) bu işe dayanabilir.
+- [ ] **T179** - ürün - **Stok tükenme tahmini ve satın alma önerisi** (ertelendi, 2026-10-13: önce
+  kritik stok uyarıları). Tetikleyici: birkaç haftalık hareket verisi ve satışların eksiksiz
+  girildiğinin bilinmesi.
+- [ ] **T180** - rapor - **Geçmiş tarihli stok raporu** (ertelendi, 2026-10-13: 2026 yıl sonu
+  envanteri zorunlu hedef değil). Değerleme kısmı T78 / `DAT-15` ile çakışır.
+- [ ] **T181** - auth - **Web'de PIN ile hızlı kullanıcı geçişi** (ertelendi, 2026-10-13: ortak laptop
+  kullanımına özel hedef yok). Teknik not: `PIN` sayaç kapsamı var ama PIN kilit politikası yok
+  (`packages/core/src/rate-limit.ts:52,68` yalnız `LOGIN_EMAIL`/`LOGIN_IP`); şema 4 haneli PIN
+  kabul ediyor (`schemas.ts:383`). Mobil karşılığı T32.
+- [ ] **T182** - entegrasyon - **POS / satış programından satış aktarımı** (koşullu, 2026-10-13).
+  Pilot işletmenin satışı nerede kaydettiği öğrenilene kadar açılmaz. Önkoşul: T127.
 - [ ] **T157** - Maliyet takibi + kâr raporu (eski E8, P2). BLOKE: `DAT-15`. Geçmiş hareketlerde fiyat verisi yok.
 - [ ] **T158** - Raf/konum yönetimi arayüzü (eski E9, P3). Şema hazır.
 - [ ] **T159** - Mobilde tam katalog senkronu (P2). Tetikleyici: sahada "ürün adını göremiyorum" şikâyeti.
