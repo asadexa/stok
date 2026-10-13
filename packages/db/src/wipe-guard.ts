@@ -25,9 +25,16 @@ import { createHash } from 'node:crypto'
  *   2. Hedefin veritabanı ADI YOKSA hiçbir koşulda. Adsız adreste
  *      PostgreSQL kullanıcı adıyla aynı adlı veritabanına bağlanıyor: silinen
  *      şey adreste yazmıyor, onay da boş adla "eşleşiyordu".
- *   3. Bağlanan rol RLS'i atlamıyorsa: kiracıları göremez, 4. kapı
+ *   3. BAĞLANILAN veritabanı adı yazılan hedef değilse (T187). Adresin
+ *      ayrıştırılması sürücünün okumasından ayrışabiliyor; ayrıştırma
+ *      `target.ts`'te daraltıldı ama silmeden hemen önceki gerçek ölçü bu.
+ *   4. Silinecek tablolar o oturumda başka bir şemaya çözülüyorsa (T187).
+ *      `search_path` veritabanı/rol ayarıyla ya da rolün adını taşıyan bir
+ *      şemayla (`"$user"`) değişebiliyor; o zaman kapının saydığı `tenants`
+ *      ile CASCADE'in sildiği defter farklı şemalarda olur.
+ *   5. Bağlanan rol RLS'i atlamıyorsa: kiracıları göremez, 6. kapı
  *      doğrulanamaz. Boş görüp "kiracı yok" sanmak korumayı açık bırakırdı.
- *   4. Demo kiracıları dışında kiracı varsa. Yalnız "yerel" yetmiyor:
+ *   6. Demo kiracıları dışında kiracı varsa. Yalnız "yerel" yetmiyor:
  *      dükkândaki pilot da yerel bir PostgreSQL'de gerçek veri tutabilir.
  *      Bilerek silmek için hedef veritabanının ADI yazılmalı; alışkanlıkla
  *      eklenen bir bayrak, yanlış kabuktaki yanlış veritabanını silmesin diye.
@@ -68,7 +75,13 @@ export interface WipeTarget {
   database: string
 }
 
-export type WipeRefusal = 'remote' | 'unnamed' | 'rls-hidden' | 'foreign-unconfirmed'
+export type WipeRefusal =
+  | 'remote'
+  | 'unnamed'
+  | 'target-mismatch'
+  | 'schema-shadowed'
+  | 'rls-hidden'
+  | 'foreign-unconfirmed'
 
 export type WipeDecision =
   // `foreignTenants > 0` ise onayla siliniyor: çağıran bunu uyarı olarak yazar.
@@ -89,14 +102,24 @@ export function refuseTarget(target: WipeTarget): WipeRefusal | null {
  * Bütün kapıları sırayla uygular. 1–2 burada YİNE sınanıyor: kural tek
  * başına eksiksiz kalsın, bir çağıran ön kontrolü unutursa da silme olmasın.
  *
- * `foreignTenants`, RLS'e tabi rolde anlamsızdır (hep 0 görünür); 3. kapı
- * onu okumadan reddeder.
+ * `connectedDatabase` ve `schemaShadowed`, silecek bağlantı havuzunda (aynı
+ * adres, aynı oturum ayarları) ölçülmeli; başka bir bağlantının ya da
+ * adresin değeri 3–4. kapıyı boşa çıkarır. `foreignTenants`, RLS'e tabi
+ * rolde anlamsızdır (hep 0 görünür); 5. kapı onu okumadan reddeder.
  */
 export function decideWipe(
-  input: WipeTarget & { bypassRls: boolean; foreignTenants: number; args: readonly string[] },
+  input: WipeTarget & {
+    connectedDatabase: string
+    schemaShadowed: boolean
+    bypassRls: boolean
+    foreignTenants: number
+    args: readonly string[]
+  },
 ): WipeDecision {
   const early = refuseTarget(input)
   if (early) return { allowed: false, reason: early }
+  if (input.connectedDatabase !== input.database) return { allowed: false, reason: 'target-mismatch' }
+  if (input.schemaShadowed) return { allowed: false, reason: 'schema-shadowed' }
   if (!input.bypassRls) return { allowed: false, reason: 'rls-hidden' }
   if (input.foreignTenants === 0) return { allowed: true, foreignTenants: 0 }
 

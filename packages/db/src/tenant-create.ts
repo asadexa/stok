@@ -6,7 +6,7 @@ import { count } from 'drizzle-orm'
 import { adminDbUnsafe } from './client'
 import { provisionTenant } from './provision'
 import { tenants } from './schema'
-import { canBypassRls, describeTarget, formatTarget } from './target'
+import { canBypassRls, connectedDatabase, describeTarget, formatTarget } from './target'
 
 /**
  * Yeni işletme ve ilk yönetici (T162). Kullanım: `pnpm tenant:create`.
@@ -31,6 +31,17 @@ async function main(): Promise<number> {
   const rl = createInterface({ input: process.stdin, output: process.stdout })
 
   try {
+    // Gösterilen hedef ile yazılacak veritabanı ayrışabiliyor (T187:
+    // `?database=` gibi parametreler). Kullanıcının "evet"i gördüğü adrese
+    // ait olmalı; ayrışmada hiçbir şey sorulmadan duruluyor.
+    const connected = await connectedDatabase(db)
+    if (connected !== target.database) {
+      console.error(
+        `✗ Adres ${formatTarget(target)} gösteriyor ama bağlanılan veritabanı "${connected}".\n  Hiçbir şey yazılmadı.`,
+      )
+      return 1
+    }
+
     // RLS'e tabi bir rol kiracıları göremez; "0" yazmak yanıltırdı.
     const tenantCount = (await canBypassRls(db))
       ? String((await db.select({ n: count() }).from(tenants))[0]?.n ?? 0)

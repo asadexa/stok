@@ -7,7 +7,7 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
 **Kurallar**
 
 - ID `T<n>`. Arşivdeki görevler numaralarını korur. Yeni görev en büyük
-  numaradan devam eder — **sıradaki boş numara: T187**. Numara yeniden
+  numaradan devam eder — **sıradaki boş numara: T189**. Numara yeniden
   kullanılmaz.
 - Biçim: `- [ ] **T<n> (P0–P3)** - <alan> - **Başlık**`. Altında kısa
   **Neden / Kanıt / Bağlı / Doğrula / Kaynak** satırları.
@@ -143,6 +143,20 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
     T90'dan önce yapılmalı.
 
 ## P2
+
+- [ ] **T188 (P2)** - db - **`tenant:create`, tablolar başka şemaya çözülürse oraya yazabilir**
+  - Neden: T187'de seed'e eklenen şema kontrolü (`search_path` veritabanı/rol ayarı ya da rolle
+    aynı adlı şema) `tenant:create`'te yok; `provisionTenant` tablo adlarını şemasız yazıyor.
+    Yalnız ekleme yapıyor (veri kaybı yok) ve şema gölgesi veritabanı sahibinin işlemiyle
+    oluşuyor; gösterilen veritabanı ise artık doğrulanıyor.
+  - Kanıt: **doğrulanmadı (çıkarım)**. Mekanizma seed için ölçüldü: `seed-guard.test.ts`
+    "gölge veritabanında tablolar public dışına çözülüyor (kontrol)".
+  - Bağlı: T187, S12. **Gerçek pilotta yeni kiracı oluşturulmadan önce düzeltilmeli**
+    (kullanıcı kararı, 2026-10-13).
+  - Doğrula: gölge şemalı izole bir `stok_test_*` veritabanında `tenant:create` çalıştırılıp
+    kaydın nereye yazıldığı ölçülür; risk doğrulanırsa seed'deki çözümleme kontrolü
+    (`seed.ts` `schemaShadowed`) burada da uygulanır.
+  - Kaynak: T187 uygulaması, 2026-10-13.
 
 - [ ] **T171 (P2)** - import - **Büyük içe aktarma tek istekte uzun sürüyor (2.000 satır devirli 47 sn)**
   - Neden: satırlar tek tek, her devir kendi `createMovement` transaction'ında yazılıyor
@@ -302,12 +316,6 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
 - [ ] **T169 (P3)** - ci - Telefon kamerası ve çözücü yolu otomatik testte yok. `e2e/telefon-tarama.spec.ts` telefonu API istemcisiyle taklit ediyor; Playwright'ın headless shell'inde `getUserMedia` yok (`NotSupportedError`), geliştirme makinesinde Playwright'ın tam Chromium'u açılmıyor (`spawn UNKNOWN`). Yerelde kurulu Edge + sahte kamera aygıtı + sentetik EAN-13 Y4M ile uçtan uca geçti (2026-10-09, repoda değil). Seçenek: CI'da (Linux) tam Chromium + `--use-file-for-fake-video-capture` ile tek senaryo. Tetikleyici: çözücü ya da Next/Turbopack yükseltmesi.
 - [ ] **T170 (P3)** - ürün - Ürünün birimi sonradan değiştirilince (KG → ADET) eski koli çarpanları ve kesirli hareketler denetlenmiyor; birim kuralı (T130, `DAT-17`) yalnız yeni yazımlarda. Kritik seviye (`minStock`) da birim hassasiyetine bağlı değil (adetli üründe 0,5 kabul). Kaynak: WS-B, 2026-10-10.
 - [ ] **T172 (P3)** - import - İçe aktarma devrinde fiyatın ekonomik tarihi ("Açılış Fiyat Tarihi", `PRC-05`) ve "Tahmini" sütunu yok; devir bugünün alış fiyatıyla yazılıyor. Satır notları (devir atlandı / yazılamadı) ekranda ilk 50 satır, indirilebilir raporda yok. Plan polish'i; tetikleyici: eski stoğu geçmiş fiyatla değerlemek isteyen müşteri. Kaynak: WS-B, 2026-10-10.
-- [ ] **T186 (P3)** - test - **`seed-guard.test.ts`'in uzak hedef testleri yerelde artık gerçek bir veritabanına ulaşmıyor**
-  - Neden: dosya yorumu (`seed-guard.test.ts:18-20`) `127.0.0.2`'nin "gerçekten erişilebilir" olduğunu, yani koruma çalışmasaydı seed'in veriyi gerçekten sileceğini söylüyor. WS-1.1'den beri port yalnız `127.0.0.1`'e bağlı; yerelde `127.0.0.2:5433` `ECONNREFUSED` veriyor. Testler yine kırmızı yanabiliyor ama sebep sürücü hatası (mesaj eşleşmiyor), "silmeye ulaştı" değil.
-  - Kanıt: `net.connect` 2026-10-13: `127.0.0.1` açık, `127.0.0.2` `ECONNREFUSED`. WS-1.2a `dogrula` M6 (bağlantı öncesi çağrı kaldırıldı): iki uzak test `DrizzleQueryError` ile kırmızı. CI'da servis portu `5433:5432` (`ci.yml:64-67`) bütün arayüzlerde, orada `127.0.0.2` erişilebilir ve testler asıl iddiasını koruyor.
-  - Bağlı: **WS-1.2b'den önce** uzak hedef korumasının testte gerçekten sınandığı doğrulanmalı (kullanıcı kararı, 2026-10-13). Mutasyon yalnız izole, silinmesi güvenli bir `stok_test_*` hedefinde; `postgres` ya da gerçek/pilot veritabanında değil.
-  - Doğrula: yorumu ortama göre düzelt ya da yerelde de erişilebilir bir "uzak" adres kullan; koruma kaldırılınca hem yerelde hem CI'da kırmızı.
-  - Kaynak: WS-1.2a `dogrula`, 2026-10-13.
 
 ## Product / Future
 
@@ -425,6 +433,46 @@ FIFO maliyet.
 ## Kapananlar
 
 _(Bu dosyada açılıp kapanan görevler buraya iner. T1–T119'un kapanış kayıtları arşivde.)_
+
+- [x] **T187 (P1)** - güvenlik - **Silme kapısının gösterdiği hedef ile seed'in bağlandığı hedef ayrışabiliyordu**
+  - Sorun: `describeTarget` hedefi adresin ana makine, port ve yolundan okuyordu; postgres.js
+    tanımadığı sorgu parametrelerini başlangıç mesajına koyuyor (`?database=` başka veritabanı,
+    `?search_path=`/`?options=` başka şema), yolu çözmeden kullanıyor (`%`), port yoksa `PGPORT`'u
+    alıyor. Ayrıca `search_path` veritabanı/rol ayarıyla ya da rolle aynı adlı şemayla (`"$user"`)
+    değişince seed'in saydığı `tenants` ile CASCADE'in sildiği defter ayrı şemalarda olabiliyordu.
+    `PGOPTIONS` postgres.js'i etkilemiyor (ölçüldü).
+  - Kapanış (2026-10-13): (A) `target.ts` sorgu parametresi, `%` kodlu yol ya da
+    eksik port varsa hedefi yerel saymıyor; (B) `wipe-guard.ts` bağlanılan veritabanı
+    (`current_database()`) yazılan hedef değilse silmeyi reddediyor; seed'in tabloları `public`'e
+    çözülmüyorsa da reddediyor (`schemaShadowed`, silinen tablo listesiyle tek kaynak); `tenant:create`
+    gösterilen ile bağlanılan veritabanı ayrışınca soru sormadan duruyor.
+    Test: `target.test.ts` +6, `wipe-guard.test.ts` +5, `seed-guard.test.ts` `?database=` ve
+    gölge şema alt süreç testleri (her biri kontrol testiyle), yeni `tenant-create.test.ts` 3.
+    `dogrula` (yalnız `stok_test_*`): A kaldırılınca B reddetti (bağlanılan ≠ gösterilen); A+B
+    kaldırılınca seed gösterilen adla verilen onayla `stok_test_seeddivert`'i sildi; şema kuralı
+    ya da seed'in şema ölçümü kaldırılınca pilotun `public.locations` kaydı silindi, kiracısı
+    kaldı (ayrışma ölçüldü); A kapalıyken seed B'ye adresin adını verince silme oldu (B'nin
+    bağlantısı gerçek); `tenant:create` kontrolü kaldırılınca araç izole veritabanına yazdı.
+    Kapı: lint 199 dosya, typecheck, test 911/911, drift "No schema changes", build PASS; e2e
+    koşulmadı (UI değişmedi, T150).
+  - Kalan: veritabanı sahibinin `pg_catalog`'u yolda sona koyup katalog fonksiyonlarını
+    gölgelemesi kapsam dışı (öyle bir aktör veriyi doğrudan silebilir); `tenant:create` şema
+    gölgesi T188; rol düzeyinde `ALTER ROLE … SET search_path` (veritabanı belirtmeden) paylaşılan
+    kümeyi değiştireceği için ayrıca denenmedi, aynı mekanizma `ALTER DATABASE` ve
+    `ALTER ROLE … IN DATABASE` ile ölçüldü ve kontrol çözümlemeye baktığı için kaynaktan bağımsız.
+
+- [x] **T186 (P3)** - test - **`seed-guard.test.ts`'in uzak hedef testleri yerelde gerçek bir veritabanına ulaşmıyordu**
+  - Sorun: WS-1.1'den beri `127.0.0.2:5433` yerelde reddediliyor; testler korumadan değil bağlantı
+    hatasından kırmızı/yeşil olabiliyordu. 1.2a'nın adsız hedef testleri de koruma bozulunca
+    `postgres` veritabanına gidiyordu.
+  - Kapanış (2026-10-13): test `127.0.0.2`'de bağlantı sayan bir TCP yönlendirici
+    açıp test kümesine iletiyor; kontrol testi adresin `stok_test_seedguard`'a gerçekten ulaştığını
+    ölçüyor; "bağlantı açmadan" sayaçla kanıtlanıyor. Seed asenkron koşuyor (`spawnSync` olay
+    döngüsünü kilitleyip yönlendiriciyi durdururdu). Adsız hedef testleri `PGDATABASE` ile izole
+    `stok_test_seeddivert`'e yönleniyor. Mevcut 7 testin amacı ve kontrolleri aynı; 1–2. testlere
+    adres ve sayaç, hepsine `await` eklendi. `dogrula`: uzak hedef kuralı kaldırılınca seed
+    `127.0.0.2` üzerinden `stok_test_seedguard`'ı GERÇEKTEN sildi (çıkış 0); bağlantı öncesi
+    çağrı kaldırılınca ret mesajı aynı kaldı ama sayaç kırmızı yaktı.
 
 - [x] **T185 (P1)** - veri - **Seed, adreste veritabanı adı yokken boş onayla demo dışı veriyi silebiliyordu**
   - Sorun: `postgresql://…:5433` gibi adsız bir adreste hedefin adı `""` oluyor ve

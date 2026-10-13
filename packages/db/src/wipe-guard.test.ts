@@ -10,13 +10,27 @@ import { DEMO_TENANT_IDS, type WipeDecision, decideWipe, refuseTarget } from './
  * görünse bile izin almamalı.
  */
 const named = { isLocal: true, database: 'stok_dev' }
-const probe = { bypassRls: true, foreignTenants: 0, args: [] as string[] }
+// Varsayılan ölçüm: bağlanılan veritabanı `named` ile aynı, tablolar public'te.
+const probe = {
+  connectedDatabase: 'stok_dev',
+  schemaShadowed: false,
+  bypassRls: true,
+  foreignTenants: 0,
+  args: [] as string[],
+}
 
 describe('decideWipe', () => {
   it.each<[string, Parameters<typeof decideWipe>[0], WipeDecision]>([
     [
       'uzak hedef, hedefin adıyla onay verilse bile',
-      { isLocal: false, database: 'stok', bypassRls: true, foreignTenants: 1, args: ['--wipe-non-demo-data=stok'] },
+      {
+        ...probe,
+        isLocal: false,
+        database: 'stok',
+        connectedDatabase: 'stok',
+        foreignTenants: 1,
+        args: ['--wipe-non-demo-data=stok'],
+      },
       { allowed: false, reason: 'remote' },
     ],
     [
@@ -33,13 +47,56 @@ describe('decideWipe', () => {
     ],
     [
       'adsız hedef, boş onayla (eski açık: "" === "")',
-      { isLocal: true, database: '', bypassRls: true, foreignTenants: 1, args: ['--wipe-non-demo-data='] },
+      // Adsız adreste sürücü kullanıcı adıyla aynı veritabanına bağlanıyor.
+      {
+        ...probe,
+        isLocal: true,
+        database: '',
+        connectedDatabase: 'postgres',
+        foreignTenants: 1,
+        args: ['--wipe-non-demo-data='],
+      },
       { allowed: false, reason: 'unnamed' },
     ],
     [
       'yalnız boşluktan oluşan ad, aynı boşlukla onay',
-      { isLocal: true, database: ' ', bypassRls: true, foreignTenants: 1, args: ['--wipe-non-demo-data= '] },
+      {
+        ...probe,
+        isLocal: true,
+        database: ' ',
+        connectedDatabase: ' ',
+        foreignTenants: 1,
+        args: ['--wipe-non-demo-data= '],
+      },
       { allowed: false, reason: 'unnamed' },
+    ],
+    // T187: kapının gösterdiği ile bağlanılan ayrışırsa onay hiçbir şeyi
+    // onaylamaz; adres ayrıştırması ne kadar dar olursa olsun son ölçü bu.
+    [
+      'bağlanılan veritabanı yazılan hedef değil, hedefin adıyla onay verilse bile',
+      { ...named, ...probe, connectedDatabase: 'stok', foreignTenants: 1, args: ['--wipe-non-demo-data=stok_dev'] },
+      { allowed: false, reason: 'target-mismatch' },
+    ],
+    [
+      'bağlanılan veritabanı farklı, yalnız demo kiracı görünse bile',
+      { ...named, ...probe, connectedDatabase: 'stok' },
+      { allowed: false, reason: 'target-mismatch' },
+    ],
+    [
+      'bağlanılan veritabanı okunamadı (boş)',
+      { ...named, ...probe, connectedDatabase: '' },
+      { allowed: false, reason: 'target-mismatch' },
+    ],
+    // T187: tablolar başka şemaya çözülürse kapının saydığı ile silinen ayrışır.
+    [
+      'tablolar başka şemaya çözülüyor, yalnız demo kiracı görünse bile',
+      { ...named, ...probe, schemaShadowed: true },
+      { allowed: false, reason: 'schema-shadowed' },
+    ],
+    [
+      'tablolar başka şemaya çözülüyor, hedefin adıyla onay verilse bile',
+      { ...named, ...probe, schemaShadowed: true, foreignTenants: 1, args: ['--wipe-non-demo-data=stok_dev'] },
+      { allowed: false, reason: 'schema-shadowed' },
     ],
     [
       'RLS atlanmıyor ve sayım 0 görünüyor',

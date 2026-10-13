@@ -5,7 +5,13 @@ import { reasonPriceBasis, toDelta } from '@stok/shared'
 import { type Db, adminDbUnsafe } from './client'
 import { hashSecret } from './password'
 import { locations, productBarcodes, products, stockMovements, tenants, users } from './schema'
-import { type DatabaseTarget, canBypassRls, describeTarget, formatTarget } from './target'
+import {
+  type DatabaseTarget,
+  canBypassRls,
+  connectedDatabase,
+  describeTarget,
+  formatTarget,
+} from './target'
 import {
   DEMO_TENANT_IDS,
   type DemoTenantKey,
@@ -175,17 +181,50 @@ const DAY = 24 * 60 * 60 * 1000
  *
  * Kural ve gerekçesi `wipe-guard.ts`'te (db:reset de kullanıyor). Seed'in
  * payı: uzak ya da adsız hedefi bağlanmadan reddetmek, kuralın istediği
- * iki sorguyu sahip rolüyle yapmak ve reddi seed'in diliyle yazmak.
+ * sorguları silecek bağlantı havuzunda sahip rolüyle yapmak ve reddi
+ * seed'in diliyle yazmak.
  * ============================================================================
  */
 class SeedRefused extends Error {}
 
-function refusalMessage(reason: WipeRefusal, target: DatabaseTarget, foreign: number): string {
+/**
+ * Seed'in TRUNCATE ettiği tablolar. Şema kontrolü (T187) aynı listeye
+ * bakıyor: iki ayrı liste olsaydı yeni bir tablo silinip kontrol edilmeden
+ * kalabilirdi.
+ */
+const WIPED_TABLES = [
+  'current_stock',
+  'stock_movements',
+  'product_barcodes',
+  'products',
+  'locations',
+  'users',
+  'tenants',
+] as const
+
+interface Probe {
+  foreign: number
+  connected: string
+}
+
+function refusalMessage(reason: WipeRefusal, target: DatabaseTarget, probe: Probe): string {
   switch (reason) {
     case 'remote':
       return [
         `Seed yalnız yerel veritabanında çalışır; hedef ${formatTarget(target)}.`,
         'Seed defter dahil HER ŞEYİ siler ve uzak hedefte hiçbir bayrakla çalışmaz.',
+        'Adreste sorgu parametresi (?…), `%` kodlu ad ya da eksik port varsa hedef kesin okunamadığı için UZAK sayılır.',
+      ].join('\n  ')
+    case 'target-mismatch':
+      return [
+        `Adres ${formatTarget(target)} gösteriyor ama bağlanılan veritabanı "${probe.connected}".`,
+        'Silinecek veritabanı yazılan hedefle aynı değil; seed çalıştırılmadı.',
+      ].join('\n  ')
+    case 'schema-shadowed':
+      return [
+        `Seed'in tabloları bu oturumda public şemasına çözülmüyor: ${formatTarget(target)}.`,
+        'search_path (veritabanı/rol ayarı) ya da rolle aynı adlı bir şema, kapının saydığı tablolarla silinecek tabloları ayırabilir. Seed çalıştırılmadı.',
+        'Kontrol: SHOW search_path; ALTER DATABASE/ROLE … RESET search_path.',
       ].join('\n  ')
     case 'unnamed':
       return [
@@ -197,7 +236,7 @@ function refusalMessage(reason: WipeRefusal, target: DatabaseTarget, foreign: nu
       return 'Bağlanan rol RLS\'i atlamıyor; kiracılar görülemediği için verinin demo olup olmadığı doğrulanamıyor. Seed çalıştırılmadı.'
     case 'foreign-unconfirmed':
       return [
-        `Bu veritabanında seed'e ait olmayan ${foreign} kiracı var: ${formatTarget(target)}.`,
+        `Bu veritabanında seed'e ait olmayan ${probe.foreign} kiracı var: ${formatTarget(target)}.`,
         'Seed defter dahil HER ŞEYİ siler; bu veri gerçek ya da pilot olabilir. Seed çalıştırılmadı.',
         // Komutun tamamı yazılıyor: `pnpm demo` bu bayrağı tanımıyor, yalnız
         // adı veren bir mesaj geliştiriciyi tahmine bırakırdı. Ad ise yer
@@ -210,10 +249,26 @@ function refusalMessage(reason: WipeRefusal, target: DatabaseTarget, foreign: nu
 
 function assertTargetBeforeConnect(target: DatabaseTarget): void {
   const reason = refuseTarget(target)
-  if (reason) throw new SeedRefused(refusalMessage(reason, target, 0))
+  if (reason) throw new SeedRefused(refusalMessage(reason, target, { foreign: 0, connected: '' }))
+}
+
+/**
+ * Silinecek tablolardan biri `public`'teki tabloya çözülmüyorsa true. Metin
+ * karşılaştırması yetmezdi: görünür tablo şemasız yazılıyor, `golge.tenants`
+ * de `tenants` diye görünür. Eksik tablo (null) da gölge sayılıyor (fail closed).
+ */
+async function schemaShadowed(db: Db): Promise<boolean> {
+  const names = sql.raw(WIPED_TABLES.map((t) => `'${t}'`).join(', '))
+  const result = await db.execute<{ ok: boolean | null }>(sql`
+    SELECT bool_and(to_regclass(t) = to_regclass('public.' || t)) AS ok
+    FROM unnest(ARRAY[${names}]::text[]) AS t
+  `)
+  return [...result][0]?.ok !== true
 }
 
 async function assertSafeToWipe(db: Db, target: DatabaseTarget, args: string[]): Promise<void> {
+  const connected = await connectedDatabase(db)
+  const shadowed = await schemaShadowed(db)
   const bypassRls = await canBypassRls(db)
   // RLS'e tabi rolün sayımı anlamsız (hep 0 görünür) ve kural o rolü sayıya
   // bakmadan reddediyor; sorgu bu yüzden hiç gönderilmiyor.
@@ -226,8 +281,17 @@ async function assertSafeToWipe(db: Db, target: DatabaseTarget, args: string[]):
     foreign = row?.n ?? 0
   }
 
-  const decision = decideWipe({ ...target, bypassRls, foreignTenants: foreign, args })
-  if (!decision.allowed) throw new SeedRefused(refusalMessage(decision.reason, target, foreign))
+  const decision = decideWipe({
+    ...target,
+    connectedDatabase: connected,
+    schemaShadowed: shadowed,
+    bypassRls,
+    foreignTenants: foreign,
+    args,
+  })
+  if (!decision.allowed) {
+    throw new SeedRefused(refusalMessage(decision.reason, target, { foreign, connected }))
+  }
   if (decision.foreignTenants > 0) {
     console.warn(`UYARI: seed'e ait olmayan ${foreign} kiracı onayla siliniyor: ${formatTarget(target)}`)
   }
@@ -248,12 +312,7 @@ async function main() {
     // Sıra önemli: FK bağımlılıkları. TRUNCATE CASCADE trigger'ları atlamaz
     // ama DELETE trigger'ı stock_movements'ta exception fırlatır, bu yüzden
     // TRUNCATE kullanıyoruz (trigger DELETE için, TRUNCATE için değil).
-    await db.execute(sql`
-      TRUNCATE TABLE
-        current_stock, stock_movements, product_barcodes,
-        products, locations, users, tenants
-      RESTART IDENTITY CASCADE
-    `)
+    await db.execute(sql.raw(`TRUNCATE TABLE ${WIPED_TABLES.join(', ')} RESTART IDENTITY CASCADE`))
 
     const adminPin = await hashSecret('1234')
     const staffPin = await hashSecret('1111')

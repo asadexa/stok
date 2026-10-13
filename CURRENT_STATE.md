@@ -42,12 +42,13 @@ koruması çalışıyor, "Bağlantıyı kes" telefon oturumunu kapatıyor. Andro
 denenmedi. Yerelde ayrıca Edge + sahte kamera aygıtı + sentetik EAN-13 ile
 uçtan uca geçti (kamera yolu CI'da yok: T169).
 
-WS-1.2a (2026-10-13, yerel): lint 198 dosya 0 tanı, typecheck, test **891/891** (shared 69,
-db 104, core 550, web 168), drift "No schema changes", `next build` PASS. Playwright WS-1.1'de
-de WS-1.2a'da da koşulmadı (arayüz değişmedi; e2e demo veritabanına yazıyor, T150); son e2e
-sonucu yukarıdaki 24/24. GitHub CI sonucu commit'ten sonra yazılır.
+T187/T186 (2026-10-13, yerel): lint 199 dosya 0 tanı, typecheck, test
+**911/911** (shared 69, db 124, core 550, web 168), drift "No schema changes", `next build` PASS.
+Playwright WS-1.1, 1.2a ve T187/T186'da koşulmadı (arayüz değişmedi; e2e demo veritabanına
+yazıyor, T150); son e2e sonucu yukarıdaki 24/24. GitHub CI sonucu commit'ten sonra yazılır.
 
-GitHub CI: `development` `42486cc` (WS-1.1) koşu #66 yeşil.
+GitHub CI: `development` `59e4d9f` (WS-1.2a) koşu #67 yeşil; üç iş de geçti (typecheck + test,
+Windows lint + typecheck + derleme, demo yolu). Doğrulama: GitHub API, 2026-10-13.
 master'daki son koşu #44 (2026-09-14) yeşil.
 9 Dependabot PR açık, 3'ü kırmızı (T140).
 
@@ -104,22 +105,26 @@ işaretli (öne çıkanlar `DAT-15`, `DAT-16`, `SEC-14`, `OPS-01`, `OPS-02`, `UX
 
 ## Son tamamlanan workstream
 
-**WS-1.2a — Ortak silme kuralı** (2026-10-13): seed'in silme kapısı yan etkisiz
+**T187 + T186 — Silme hedefinin doğrulanması** (2026-10-13): hedef adresten
+kesin okunamıyorsa (sorgu parametresi, `%` kodlu ad, eksik port) yerel sayılmıyor; seed silmeden
+önce bağlanılan veritabanını yazılan adla ve tablolarının `public`'e çözüldüğünü karşılaştırıyor;
+`tenant:create` gösterilen ile bağlanılan veritabanı ayrışınca duruyor. Uzak hedef testi artık
+gerçekten erişilebilir bir adresle ve bağlantı sayacıyla sınıyor. Ayrıntı: TODOS T187, T186,
+`SECURITY_MODEL` S12. Açık kalan: T188 (P2, gerçek pilotta yeni kiracıdan önce).
+
+Öncesinde **WS-1.2a — Ortak silme kuralı** (`59e4d9f`, CI #67): seed'in silme kapısı yan etkisiz
 `packages/db/src/wipe-guard.ts`'e taşındı (demo kiracı kimlikleri ve saf karar); seed sorguyu
 kendisi yapıyor ve mesajları birebir aynı. Bilinçli tek sıkılaştırma: adreste veritabanı adı
 yoksa ve onay boşsa silme reddediliyor (T185). `db:reset` henüz bu kuralı kullanmıyor (WS-1.2b).
-Ayrıntı: TODOS T185, `SECURITY_MODEL` S12.
-
-Öncesinde **WS-1.1 — PostgreSQL yalnız localhost** (`42486cc`, CI #66): port yalnız
-`127.0.0.1:5433`; volume ve veri değişmedi (T184, S19). Açık doğrulama: başka bir cihazdan
-5433 denemesi ve Playwright yapılmadı.
+Ayrıntı: TODOS T185, `SECURITY_MODEL` S12. WS-1.1'den (`42486cc`) açık doğrulama: başka bir
+cihazdan 5433 denemesi yapılmadı (T184).
 
 ## Sıradaki workstream
 
 **WS-1 — Güvenlik ve Veri Koruma** (kullanıcı onaylı R-1 planı, 2026-10-13): sıra
 1.1 ✓ → 1.2a ✓ (ortak silme kuralı) → 1.2b (güvenli `db:reset`) → 1.3a (yedek) → 1.4 (tatbikat) →
 1.3b (zamanlama); ayrı şerit 1.5a/1.5b (tünel kapısı, T167). Her dilim ayrı onayla başlar.
-1.2b'den önce T186 (uzak hedef testinin gerçekten sınadığı) doğrulanır.
+1.2b'nin ön koşulu olan T187 ve T186 kapandı (yerel kapı yeşil).
 **Pilot ortamı:** WS-1.3a yedeği ve WS-1.4 tatbikatı geliştirilip o makinede yeşil geçmeden
 gerçek pilot laptopuna hiçbir WS-1 değişikliği uygulanmaz (ikisi de henüz yok). Tam saat dilimi
 işi (T122, `DAT-16`) bulut öncesi ayrıca.
