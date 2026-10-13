@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto'
 import { config } from 'dotenv'
 import { count, notInArray, sql } from 'drizzle-orm'
 import type { MovementReason, PriceOverrideReason } from '@stok/shared'
@@ -7,6 +6,15 @@ import { type Db, adminDbUnsafe } from './client'
 import { hashSecret } from './password'
 import { locations, productBarcodes, products, stockMovements, tenants, users } from './schema'
 import { type DatabaseTarget, canBypassRls, describeTarget, formatTarget } from './target'
+import {
+  DEMO_TENANT_IDS,
+  type DemoTenantKey,
+  WIPE_FLAG,
+  type WipeRefusal,
+  decideWipe,
+  detUuid,
+  refuseTarget,
+} from './wipe-guard'
 
 config({ path: '../../.env' })
 
@@ -38,15 +46,6 @@ function makeRng(seed: number) {
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296
   }
-}
-
-/** Tohumdan türetilmiş, kararlı UUID. Aynı girdi hep aynı kimliği verir. */
-function detUuid(seed: string): string {
-  const h = createHash('sha256').update(seed).digest('hex')
-  const v4 = `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-${
-    ((parseInt(h[16] ?? '0', 16) & 0x3) | 0x8).toString(16) + h.slice(17, 20)
-  }-${h.slice(20, 32)}`
-  return v4
 }
 
 const rng = makeRng(20260822)
@@ -138,7 +137,7 @@ const SEED_OVERRIDE_REASONS: PriceOverrideReason[] = [
 ]
 
 interface TenantSpec {
-  key: string
+  key: DemoTenantKey
   name: string
   vocab: typeof KIRTASIYE
   productCount: number
@@ -174,75 +173,71 @@ const DAY = 24 * 60 * 60 * 1000
  * ============================================================================
  * T125 — SEED YALNIZ GÜVENLİ HEDEFTE SİLER
  *
- * Seed TRUNCATE ile defter dahil her şeyi siliyor ve append-only trigger
- * TRUNCATE'i kapsamıyor (yalnız UPDATE/DELETE). Runbook operatörden üretim
- * adresini kendi makinesinde kullanmasını istiyor; yanlış kabukta `pnpm
- * seed` ya da `pnpm demo --seed` üretimi silerdi.
- *
- * ÜÇ KAPI, sırayla:
- *   1. Hedef UZAKSA hiçbir koşulda ve bağlantı açılmadan. Uzak seed için
- *      belgelenmiş bir yol yok; kaçış eklemek korumayı bir bayrağa indirirdi.
- *   2. Bağlanan rol RLS'i atlamıyorsa: kiracıları göremez, 3. kapı
- *      doğrulanamaz. Boş görüp "kiracı yok" sanmak korumayı açık bırakırdı.
- *   3. Seed'in kendi demo kiracıları dışında kiracı varsa. Yalnız
- *      "localhost" yetmiyor: dükkândaki pilot da yerel bir PostgreSQL'de
- *      gerçek veri tutabilir. Yerelde bilerek silmek için hedef
- *      veritabanının ADI yazılmalı; alışkanlıkla eklenen bir bayrak, yanlış
- *      kabuktaki yanlış veritabanını silmesin diye.
+ * Kural ve gerekçesi `wipe-guard.ts`'te (db:reset de kullanıyor). Seed'in
+ * payı: uzak ya da adsız hedefi bağlanmadan reddetmek, kuralın istediği
+ * iki sorguyu sahip rolüyle yapmak ve reddi seed'in diliyle yazmak.
  * ============================================================================
  */
-const WIPE_FLAG = '--wipe-non-demo-data='
-const DEMO_TENANT_IDS = TENANT_SPECS.map((spec) => detUuid(`tenant:${spec.key}`))
-
 class SeedRefused extends Error {}
 
-function assertLocalTarget(target: DatabaseTarget): void {
-  if (target.isLocal) return
-  throw new SeedRefused(
-    [
-      `Seed yalnız yerel veritabanında çalışır; hedef ${formatTarget(target)}.`,
-      'Seed defter dahil HER ŞEYİ siler ve uzak hedefte hiçbir bayrakla çalışmaz.',
-    ].join('\n  '),
-  )
+function refusalMessage(reason: WipeRefusal, target: DatabaseTarget, foreign: number): string {
+  switch (reason) {
+    case 'remote':
+      return [
+        `Seed yalnız yerel veritabanında çalışır; hedef ${formatTarget(target)}.`,
+        'Seed defter dahil HER ŞEYİ siler ve uzak hedefte hiçbir bayrakla çalışmaz.',
+      ].join('\n  ')
+    case 'unnamed':
+      return [
+        `Hedef veritabanının adı adreste yok: ${formatTarget(target)}.`,
+        'Adsız adreste PostgreSQL kullanıcı adıyla aynı adlı veritabanına bağlanır; seed neyi sileceği yazılmadan çalışmaz.',
+        'MIGRATION_DATABASE_URL adresinin sonuna veritabanı adını yazın: …:<port>/<veritabanı-adı>',
+      ].join('\n  ')
+    case 'rls-hidden':
+      return 'Bağlanan rol RLS\'i atlamıyor; kiracılar görülemediği için verinin demo olup olmadığı doğrulanamıyor. Seed çalıştırılmadı.'
+    case 'foreign-unconfirmed':
+      return [
+        `Bu veritabanında seed'e ait olmayan ${foreign} kiracı var: ${formatTarget(target)}.`,
+        'Seed defter dahil HER ŞEYİ siler; bu veri gerçek ya da pilot olabilir. Seed çalıştırılmadı.',
+        // Komutun tamamı yazılıyor: `pnpm demo` bu bayrağı tanımıyor, yalnız
+        // adı veren bir mesaj geliştiriciyi tahmine bırakırdı. Ad ise yer
+        // tutucu kalıyor; doldurulmuş hali kopyala-yapıştır bir silme olurdu.
+        'Yalnız yerel bir geliştirme veritabanını bilerek silmek için hedefin adını yazın:',
+        `    pnpm --filter @stok/db run seed ${WIPE_FLAG}<veritabanı-adı>`,
+      ].join('\n  ')
+  }
+}
+
+function assertTargetBeforeConnect(target: DatabaseTarget): void {
+  const reason = refuseTarget(target)
+  if (reason) throw new SeedRefused(refusalMessage(reason, target, 0))
 }
 
 async function assertSafeToWipe(db: Db, target: DatabaseTarget, args: string[]): Promise<void> {
-  if (!(await canBypassRls(db))) {
-    throw new SeedRefused(
-      'Bağlanan rol RLS\'i atlamıyor; kiracılar görülemediği için verinin demo olup olmadığı doğrulanamıyor. Seed çalıştırılmadı.',
-    )
+  const bypassRls = await canBypassRls(db)
+  // RLS'e tabi rolün sayımı anlamsız (hep 0 görünür) ve kural o rolü sayıya
+  // bakmadan reddediyor; sorgu bu yüzden hiç gönderilmiyor.
+  let foreign = 0
+  if (bypassRls) {
+    const [row] = await db
+      .select({ n: count() })
+      .from(tenants)
+      .where(notInArray(tenants.id, [...DEMO_TENANT_IDS]))
+    foreign = row?.n ?? 0
   }
 
-  const [row] = await db
-    .select({ n: count() })
-    .from(tenants)
-    .where(notInArray(tenants.id, DEMO_TENANT_IDS))
-  const foreign = row?.n ?? 0
-  if (foreign === 0) return
-
-  const confirmed = args.find((a) => a.startsWith(WIPE_FLAG))?.slice(WIPE_FLAG.length)
-  if (confirmed === target.database) {
+  const decision = decideWipe({ ...target, bypassRls, foreignTenants: foreign, args })
+  if (!decision.allowed) throw new SeedRefused(refusalMessage(decision.reason, target, foreign))
+  if (decision.foreignTenants > 0) {
     console.warn(`UYARI: seed'e ait olmayan ${foreign} kiracı onayla siliniyor: ${formatTarget(target)}`)
-    return
   }
-  throw new SeedRefused(
-    [
-      `Bu veritabanında seed'e ait olmayan ${foreign} kiracı var: ${formatTarget(target)}.`,
-      'Seed defter dahil HER ŞEYİ siler; bu veri gerçek ya da pilot olabilir. Seed çalıştırılmadı.',
-      // Komutun tamamı yazılıyor: `pnpm demo` bu bayrağı tanımıyor, yalnız
-      // adı veren bir mesaj geliştiriciyi tahmine bırakırdı. Ad ise yer
-      // tutucu kalıyor; doldurulmuş hali kopyala-yapıştır bir silme olurdu.
-      'Yalnız yerel bir geliştirme veritabanını bilerek silmek için hedefin adını yazın:',
-      `    pnpm --filter @stok/db run seed ${WIPE_FLAG}<veritabanı-adı>`,
-    ].join('\n  '),
-  )
 }
 
 async function main() {
   const url = process.env.MIGRATION_DATABASE_URL
   if (!url) throw new Error('MIGRATION_DATABASE_URL tanımlı değil')
   const target = describeTarget(url)
-  assertLocalTarget(target)
+  assertTargetBeforeConnect(target)
 
   const { client, db } = adminDbUnsafe()
   const startedAt = Date.now()

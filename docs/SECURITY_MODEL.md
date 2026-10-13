@@ -117,14 +117,17 @@ güncellenir. Yeni tehdit yeni ID alır; ID yeniden kullanılmaz.
 - **Koruma:** `stok_app`'te BYPASSRLS yok, superuser değil, sahip değil; FORCE RLS
   sahibi de bağlar; Biome kuralı uygulama kodunda `adminDbUnsafe`'i yasaklar;
   `MIGRATION_DATABASE_URL` uygulamanın çalışma ortamına konmaz (runbook §3).
-  Sahip rolüyle koşan iki araç: `seed` uzak hedefte hiçbir bayrakla çalışmaz, RLS'e
-  tabi rolle çalışmaz, seed'e ait olmayan kiracı varken yalnız yerelde ve hedefin
-  adı yazılınca siler (T125). `pnpm tenant:create` yalnız ekler; yazmadan önce
+  Sahip rolüyle koşan iki araç: `seed` uzak hedefte ve adreste veritabanı adı
+  yokken hiçbir bayrakla çalışmaz, RLS'e tabi rolle çalışmaz, seed'e ait olmayan
+  kiracı varken yalnız yerelde ve hedefin adı yazılınca siler; boş onay hiçbir
+  adı onaylamaz (T125, T185). Silme kuralı tek kaynakta, `db:reset` (WS-1.2b) de
+  onu kullanacak. `pnpm tenant:create` yalnız ekler; yazmadan önce
   hedefi (YEREL/UZAK) ve kiracı sayısını gösterip "evet" ister (T162).
 - **Katman:** `db/init/01-roles.sql`, migration 0002, `biome.json`, runbook,
-  `packages/db/src/seed.ts`, `target.ts`, `tenant-create.ts`.
+  `packages/db/src/wipe-guard.ts`, `seed.ts`, `target.ts`, `tenant-create.ts`.
 - **Test:** `rls.test.ts` (T46.4), `packages/db/src/smoke.test.ts` (uygulama ve
-  sahip bağlantısı gerçekten farklı), `pnpm lint`, `seed-guard.test.ts`, `target.test.ts`.
+  sahip bağlantısı gerçekten farklı), `pnpm lint`, `wipe-guard.test.ts`,
+  `seed-guard.test.ts`, `target.test.ts`.
 - **Açık:** "yerel" adrese bakılarak belirleniyor: `localhost`'a tünellenmiş bir
   üretim veritabanı YEREL görünür; orada seed'i yalnız 3. kapı (seed'e ait olmayan
   kiracı) durdurur.

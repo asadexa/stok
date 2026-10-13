@@ -146,3 +146,34 @@ describe('seed koruması (T125)', () => {
     expect(demoTenants.map((t) => t.id).sort()).toEqual([...DEMO_TENANT_IDS].sort())
   }, 180_000)
 })
+
+/**
+ * WS-1.2a — ADSIZ HEDEF. Adreste veritabanı adı yoksa PostgreSQL kullanıcı
+ * adıyla aynı adlı veritabanına bağlanıyor (burada `postgres`) ve eski
+ * kapıda boş onay boş adla eşleşiyordu. Seed bu hedefi BAĞLANMADAN
+ * reddetmeli: kapı çağrılmasaydı seed `postgres`'e bağlanıp kiracı sorgusunda
+ * düşer, ret mesajı hiç basılmazdı; testin kırmızı yanacağı yer orası.
+ */
+describe('seed adsız hedefte (WS-1.2a)', () => {
+  const unnamedUrl = () => {
+    const u = new URL(testDatabaseUrls(GUARD_DB).migrationUrl)
+    u.pathname = ''
+    return u.toString()
+  }
+
+  it('veritabanı adı yazılmamışsa bağlanmadan reddediyor', () => {
+    const { status, output } = runSeed(unnamedUrl())
+
+    expect(status).not.toBe(0)
+    expect(output).toMatch(/veritabanının adı adreste yok/)
+    expect(output).not.toMatch(/Seed baslıyor/)
+  })
+
+  it('adsız hedefte boş onay da işe yaramıyor', () => {
+    const { status, output } = runSeed(unnamedUrl(), ['--wipe-non-demo-data='])
+
+    expect(status).not.toBe(0)
+    expect(output).toMatch(/veritabanının adı adreste yok/)
+    expect(output).not.toMatch(/Seed baslıyor/)
+  })
+})

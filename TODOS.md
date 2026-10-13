@@ -7,7 +7,7 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
 **Kurallar**
 
 - ID `T<n>`. Arşivdeki görevler numaralarını korur. Yeni görev en büyük
-  numaradan devam eder — **sıradaki boş numara: T185**. Numara yeniden
+  numaradan devam eder — **sıradaki boş numara: T187**. Numara yeniden
   kullanılmaz.
 - Biçim: `- [ ] **T<n> (P0–P3)** - <alan> - **Başlık**`. Altında kısa
   **Neden / Kanıt / Bağlı / Doğrula / Kaynak** satırları.
@@ -302,6 +302,12 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
 - [ ] **T169 (P3)** - ci - Telefon kamerası ve çözücü yolu otomatik testte yok. `e2e/telefon-tarama.spec.ts` telefonu API istemcisiyle taklit ediyor; Playwright'ın headless shell'inde `getUserMedia` yok (`NotSupportedError`), geliştirme makinesinde Playwright'ın tam Chromium'u açılmıyor (`spawn UNKNOWN`). Yerelde kurulu Edge + sahte kamera aygıtı + sentetik EAN-13 Y4M ile uçtan uca geçti (2026-10-09, repoda değil). Seçenek: CI'da (Linux) tam Chromium + `--use-file-for-fake-video-capture` ile tek senaryo. Tetikleyici: çözücü ya da Next/Turbopack yükseltmesi.
 - [ ] **T170 (P3)** - ürün - Ürünün birimi sonradan değiştirilince (KG → ADET) eski koli çarpanları ve kesirli hareketler denetlenmiyor; birim kuralı (T130, `DAT-17`) yalnız yeni yazımlarda. Kritik seviye (`minStock`) da birim hassasiyetine bağlı değil (adetli üründe 0,5 kabul). Kaynak: WS-B, 2026-10-10.
 - [ ] **T172 (P3)** - import - İçe aktarma devrinde fiyatın ekonomik tarihi ("Açılış Fiyat Tarihi", `PRC-05`) ve "Tahmini" sütunu yok; devir bugünün alış fiyatıyla yazılıyor. Satır notları (devir atlandı / yazılamadı) ekranda ilk 50 satır, indirilebilir raporda yok. Plan polish'i; tetikleyici: eski stoğu geçmiş fiyatla değerlemek isteyen müşteri. Kaynak: WS-B, 2026-10-10.
+- [ ] **T186 (P3)** - test - **`seed-guard.test.ts`'in uzak hedef testleri yerelde artık gerçek bir veritabanına ulaşmıyor**
+  - Neden: dosya yorumu (`seed-guard.test.ts:18-20`) `127.0.0.2`'nin "gerçekten erişilebilir" olduğunu, yani koruma çalışmasaydı seed'in veriyi gerçekten sileceğini söylüyor. WS-1.1'den beri port yalnız `127.0.0.1`'e bağlı; yerelde `127.0.0.2:5433` `ECONNREFUSED` veriyor. Testler yine kırmızı yanabiliyor ama sebep sürücü hatası (mesaj eşleşmiyor), "silmeye ulaştı" değil.
+  - Kanıt: `net.connect` 2026-10-13: `127.0.0.1` açık, `127.0.0.2` `ECONNREFUSED`. WS-1.2a `dogrula` M6 (bağlantı öncesi çağrı kaldırıldı): iki uzak test `DrizzleQueryError` ile kırmızı. CI'da servis portu `5433:5432` (`ci.yml:64-67`) bütün arayüzlerde, orada `127.0.0.2` erişilebilir ve testler asıl iddiasını koruyor.
+  - Bağlı: **WS-1.2b'den önce** uzak hedef korumasının testte gerçekten sınandığı doğrulanmalı (kullanıcı kararı, 2026-10-13). Mutasyon yalnız izole, silinmesi güvenli bir `stok_test_*` hedefinde; `postgres` ya da gerçek/pilot veritabanında değil.
+  - Doğrula: yorumu ortama göre düzelt ya da yerelde de erişilebilir bir "uzak" adres kullan; koruma kaldırılınca hem yerelde hem CI'da kırmızı.
+  - Kaynak: WS-1.2a `dogrula`, 2026-10-13.
 
 ## Product / Future
 
@@ -419,6 +425,19 @@ FIFO maliyet.
 ## Kapananlar
 
 _(Bu dosyada açılıp kapanan görevler buraya iner. T1–T119'un kapanış kayıtları arşivde.)_
+
+- [x] **T185 (P1)** - veri - **Seed, adreste veritabanı adı yokken boş onayla demo dışı veriyi silebiliyordu**
+  - Sorun: `postgresql://…:5433` gibi adsız bir adreste hedefin adı `""` oluyor ve
+    `--wipe-non-demo-data=` (boş onay) bu adla eşleşiyordu. PostgreSQL adsız adreste
+    kullanıcı adıyla aynı adlı veritabanına bağlandığı için silinen veritabanı adreste yazmıyordu.
+  - Kapanış (WS-1.2a, 2026-10-13): kural `packages/db/src/wipe-guard.ts`'e taşındı.
+    Adsız hedef bağlantı açılmadan reddediliyor; boş onay hiçbir adı onaylamıyor.
+    Seed'in diğer davranışı ve mesajları aynı. Test: `wipe-guard.test.ts` 17,
+    `seed-guard.test.ts` mevcut 7 değişmeden ve 2 yeni (adsız hedef). `dogrula`: adsız kapı
+    kaldırılınca 7 kırmızı; boş onay kapısı da birlikte kaldırılınca eski açık `{ allowed: true }`
+    olarak yeniden üretildi. RLS kapısı, ad eşleşmesi ve seed'in bağlantı öncesi çağrısı da
+    ayrı ayrı kaldırılınca kırmızı yandı. Kapı: lint, typecheck, test 891/891, drift
+    "No schema changes", build PASS. e2e koşulmadı (UI değişmedi, T150).
 
 - [x] **T184 (P1)** - güvenlik - **Veritabanı portu yerel ağa ve IPv6'ya açıktı**
   - Sorun: `docker-compose.yml` `'5433:5432'` portu bütün arayüzlerde yayınlıyordu; repodaki
