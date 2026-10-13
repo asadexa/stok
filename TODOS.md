@@ -7,7 +7,7 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
 **Kurallar**
 
 - ID `T<n>`. Arşivdeki görevler numaralarını korur. Yeni görev en büyük
-  numaradan devam eder — **sıradaki boş numara: T183**. Numara yeniden
+  numaradan devam eder — **sıradaki boş numara: T185**. Numara yeniden
   kullanılmaz.
 - Biçim: `- [ ] **T<n> (P0–P3)** - <alan> - **Başlık**`. Altında kısa
   **Neden / Kanıt / Bağlı / Doğrula / Kaynak** satırları.
@@ -273,6 +273,18 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
     barkodu karşılaştır. Normalizasyon gerekiyorsa sessiz değil, ölçülmüş bir kuralla.
   - Kaynak: WS-SCAN spike bulgusu, 2026-10-09.
 
+- [ ] **T183 (P2)** - güvenlik - **Uygulama sunucusu yerel ağda HTTP ile bütün arayüzlerde açık**
+  - Neden: `next start` varsayılan olarak bütün arayüzlerde dinliyor; yerel ağdaki herkes
+    giriş ekranına şifresiz HTTP ile ulaşıyor (parola ağda açık metin; `APP_URL` yoksa çerez
+    `Secure`, varsa şemaya bağlı). Veritabanı portu WS-1.1'de kapatıldı, uygulama portu açık
+    kaldı. WS-1 kapsamı dışında bırakılan açık risk (K9).
+  - Kanıt: `apps/web/package.json:9` (`"start": "next start"`, `-H` yok); ölçülmedi.
+  - Bağlı: S19 (Açık), T167 (tünel kapısı yalnız `127.0.0.1`'e bağlanacak), T175 (telefondan
+    ürün yönetimi yerel ağ erişimine dayanmamalı).
+  - Doğrula: ölçüm (`netstat`, başka cihazdan `:3000`), sonra karar (`-H 127.0.0.1` ya da
+    bilinçli yerel ağ erişimi + HTTPS).
+  - Kaynak: WS-1 Engineering Review A-3, 2026-10-13.
+
 ## P3
 
 - [ ] **T145 (P3)** - güvenlik - scrypt N=2¹⁴ → 2¹⁷ (girişte yeniden özetleme ile). `packages/db/src/password.ts:31`
@@ -407,6 +419,19 @@ FIFO maliyet.
 ## Kapananlar
 
 _(Bu dosyada açılıp kapanan görevler buraya iner. T1–T119'un kapanış kayıtları arşivde.)_
+
+- [x] **T184 (P1)** - güvenlik - **Veritabanı portu yerel ağa ve IPv6'ya açıktı**
+  - Sorun: `docker-compose.yml` `'5433:5432'` portu bütün arayüzlerde yayınlıyordu; repodaki
+    varsayılan parolalarla aynı ağdaki herkes süper kullanıcı olarak bağlanabiliyordu (S19).
+  - Kapanış (WS-1.1, 2026-10-13): port `'127.0.0.1:5433:5432'`,
+    `.env.example` adresleri `127.0.0.1`, `wait-for-db.mjs` Docker'da host portunu da sınıyor.
+    Ölçüm: önce yerel ağ IPv4'ü, iki küresel IPv6 adresi, WSL arayüzü ve `::1` açıktı; sonra
+    yalnız `127.0.0.1:5433`, `::1` reddediyor, diğerleri ulaşılamıyor. Volume (oluşturma
+    2026-10-08T12:40:28Z), küme kimliği ve 8 tablonun satır sayıları değişmedi; eski
+    `localhost` `.env`'i ve `127.0.0.1` ile uygulama rolü bağlanıyor. `dogrula`: host kontrolü
+    kaldırılınca erişilemeyen portta (5499) "hazır" dedi, geri konunca çıkış 1. Kapı: lint,
+    typecheck, test 872/872, drift "No schema changes", build PASS; e2e koşulmadı (UI değişmedi, T150).
+  - Kalan: varsayılan parolalar (WS-1 dışı), gerçek ikinci cihazdan deneme yapılmadı, T183.
 
 - [x] **T173 (P1)** - export - **Excel'deki tarih-saatler UTC görünüyor**
   - Sorun: exceljs seriyi anın UTC duvar saatinden üretiyor, Excel hücresinde saat dilimi

@@ -208,6 +208,29 @@ güncellenir. Yeni tehdit yeni ID alır; ID yeniden kullanılmaz.
     "Telefon bağlı" gösterir, Kes iptal eder.
   - Oturum süreç belleğinde: yalnız tek süreçli `next start` (`ARC-14`).
 
+### S19 — Veritabanı portunun ağa açık olması
+- **Tehdit:** yerel ağdaki (küresel IPv6 adresi varsa ve modem izin veriyorsa
+  internetteki) biri 5433'e repodaki varsayılan parolalarla süper kullanıcı olarak
+  bağlanır: bütün kiracıların verisi, RLS'in atlanması, `COPY … TO PROGRAM` ile
+  konteynerde komut çalıştırma.
+- **Koruma:** compose portu yalnız `127.0.0.1` (`'127.0.0.1:5433:5432'`, WS-1.1);
+  `.env.example` bağlantı adresleri `127.0.0.1`. `wait-for-db.mjs` Docker'da içeriden
+  `pg_isready`'e ek olarak host portunu da sınıyor; yayın bozulursa "hazır" demiyor.
+- **Ölçüm (2026-10-13, geliştirme laptopu):** önce `0.0.0.0`, `[::]` (Docker Desktop) ve
+  `[::1]` (`wslrelay.exe`) dinliyordu; yerel ağ IPv4'ü, iki küresel IPv6 adresi ve WSL
+  arayüzünden TCP bağlantısı açıktı. Sonra tek dinleyici `127.0.0.1:5433`; `::1` reddediyor,
+  diğer adresler ulaşılamıyor. Volume, küme kimliği ve satır sayıları değişmedi.
+- **Katman:** `docker-compose.yml`, `.env.example`, `scripts/wait-for-db.mjs`.
+- **Test:** elle ölçüm (netstat + adres başına TCP denemesi); `wait-for-db` host kontrolü
+  `dogrula` ile (kaldırılınca erişilemeyen portta "hazır" diyor); CI demo işi kurulumu
+  `.env.example`'daki `127.0.0.1` ile yapıyor.
+- **Açık:**
+  - Parolalar repodaki varsayılanlar (`postgres/postgres`, `stok_app/stok_app_dev`): bu
+    makinedeki her süreç, başka yerel kullanıcı ve aynı Docker ağındaki konteynerler
+    bağlanabilir. Parola rotasyonu WS-1 dışında.
+  - Gerçek ikinci bir cihazdan deneme yapılmadı; ret aynı makineden ağ adresleriyle ölçüldü.
+  - Uygulama sunucusu (`next start`) yerel ağda HTTP ile bütün arayüzlerde açık (T183).
+
 ---
 
 ## Katmandan bağımsız açıklar

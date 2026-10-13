@@ -13,7 +13,14 @@ services:
     ports:
       # 5433: yerel bir Postgres kurulumuyla çakışmamak için.
       # Bağlantı dizesi .env.example içinde.
-      - '5433:5432'
+      #
+      # 127.0.0.1: veritabanına YALNIZ BU MAKİNE bağlanır (WS-1.1, S19).
+      # Önek olmadan Docker portu bütün arayüzlerde yayınlıyordu: yerel ağ
+      # IPv4'ü, küresel IPv6 adresleri ve WSL arayüzü dahil (2026-10-13'te
+      # ölçüldü). Parolalar repodaki varsayılanlar olduğu için bu, aynı ağdaki
+      # herkese süper kullanıcı demekti. Telefon okutması etkilenmez: telefon
+      # veritabanına değil, tünel üzerinden uygulamaya gidiyor.
+      - '127.0.0.1:5433:5432'
     volumes:
       - stok_pgdata:/var/lib/postgresql/data
       - ./db/init:/docker-entrypoint-initdb.d:ro

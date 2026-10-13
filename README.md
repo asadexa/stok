@@ -76,6 +76,11 @@ dokunmaz). Sunucu, `DATABASE_URL` veya `AUTH_SECRET` eksik ya da geçersizse
 açılmaz ve neyin eksik olduğunu konsola yazar. Örnek `AUTH_SECRET` yerel
 geliştirmede çalışır, üretim modunda (`next start`) reddedilir.
 
+Docker veritabanı yalnız bu makineden erişilebilir (`127.0.0.1:5433`); yerel ağdaki
+başka bir cihaz bağlanamaz. `.env.example` bu yüzden `127.0.0.1` kullanır. Eski bir
+`.env`'de `localhost:5433` yazıyorsa uygulama yine bağlanır (Node `::1` reddedilince
+IPv4'e geçer), ama başka veritabanı araçları için adresi `127.0.0.1` yapın.
+
 **Yeni işletme ve ilk yöneticisi:**
 
 ```bash

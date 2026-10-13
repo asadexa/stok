@@ -18,8 +18,14 @@
  *
  * Bu yüzden iki ayrı yoklama var:
  *
- *   Docker      konteynerin İÇİNDEN `pg_isready` — tek güvenilir cevap
+ *   Docker      konteynerin İÇİNDEN `pg_isready` VE host'tan 127.0.0.1 portu
  *   Yerel kurulum   TCP yeter: yerel Postgres portu ancak hazır olunca açar
+ *
+ * DOCKER'DA İÇERİSİ TEK BAŞINA YETMİYOR (WS-1.1). `pg_isready` konteynerin
+ * içinden soruyor, yani port yayınını hiç görmüyor. Yayın yalnız 127.0.0.1'e
+ * bağlandıktan sonra (docker-compose.yml) yayın bozulursa ya da yanlış porta
+ * bakılırsa içeriden "hazır" gelir, uygulama ise host'tan bağlanamaz. Bu
+ * betik "hazır" dediği an uygulamanın da bağlanabildiğini söylemeli.
  */
 
 import { spawnSync } from 'node:child_process'
@@ -67,7 +73,8 @@ export async function waitForDatabase(port, { timeoutMs = 60_000, onTick } = {})
 
   while (Date.now() < deadline) {
     const ready = inDocker
-      ? quiet('docker', ['compose', 'exec', '-T', 'db', 'pg_isready', '-U', 'postgres', '-d', 'stok'])
+      ? quiet('docker', ['compose', 'exec', '-T', 'db', 'pg_isready', '-U', 'postgres', '-d', 'stok']) &&
+        (await portOpen(port))
       : await portOpen(port)
     if (ready) return true
     onTick?.()

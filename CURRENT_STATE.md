@@ -4,7 +4,7 @@ Yalnız BUGÜNÜN gerçeği. Her merge'te ya da durum değiştiğinde güncellen
 satırlar silinir (tarihçe git'te). Ayrıntı yazılmaz: işler → `TODOS.md`,
 kararlar → `DECISIONS.md`, model → `PROJECT_BRAIN.md`.
 
-**Tarih:** 2026-10-12 · **Çalışma branch'i:** `development` · **Stabil referans:** `master`
+**Tarih:** 2026-10-13 · **Çalışma branch'i:** `development` · **Stabil referans:** `master`
 (`master` = `dac05ff`, devralma öncesi son kod; geliştirme `development`'ta yapılır)
 
 ## Deploy
@@ -42,6 +42,10 @@ koruması çalışıyor, "Bağlantıyı kes" telefon oturumunu kapatıyor. Andro
 denenmedi. Yerelde ayrıca Edge + sahte kamera aygıtı + sentetik EAN-13 ile
 uçtan uca geçti (kamera yolu CI'da yok: T169).
 
+WS-1.1 (2026-10-13, yerel): lint 196 dosya 0 tanı, typecheck, test **872/872**,
+drift "No schema changes", `next build` PASS. Playwright koşulmadı (arayüz değişmedi; e2e demo
+veritabanına yazıyor, T150). GitHub CI sonucu ayrı doküman senkronunda yazılır.
+
 GitHub CI: `development` `dcf46d1` (WS-C-lite) koşu #62 yeşil.
 master'daki son koşu #44 (2026-09-14) yeşil.
 9 Dependabot PR açık, 3'ü kırmızı (T140).
@@ -75,6 +79,10 @@ okutup `/hareket`te açma (`ENABLE_PHONE_SCANNER`, `PRD-12`, `ARC-14`).
 - **Telefonla okutma pilotu**: oturum süreç belleğinde (yeniden başlatmada düşer,
   yalnız tek süreçli `next start`, `ARC-14`); tünel açıkken bütün uygulama dışarıda
   (T167); UPC-A 12/13 hane ölçülmedi (T168).
+- **Ağ açıklığı**: veritabanı portu yalnız `127.0.0.1` (WS-1.1, S19), ama parolalar repodaki
+  varsayılanlar; uygulama sunucusu (`next start`) yerel ağda HTTP ile açık (T183).
+- **Yedek / geri yükleme**: yerel yedek aracı ve tatbikat yok (WS-1.3a, WS-1.4); `pnpm db:reset`
+  hâlâ korumasız (WS-1.2b).
 
 ## P0 / P1 blocker'lar
 
@@ -95,17 +103,25 @@ işaretli (öne çıkanlar `DAT-15`, `DAT-16`, `SEC-14`, `OPS-01`, `OPS-02`, `UX
 
 ## Son tamamlanan workstream
 
-**WS-C-lite — Excel/export saatleri Europe/Istanbul** (`dcf46d1`, CI #62): bütün xlsx tarih
+**WS-1.1 — PostgreSQL yalnız localhost** (2026-10-13): compose
+portu `'127.0.0.1:5433:5432'`, `.env.example` adresleri `127.0.0.1`, `wait-for-db.mjs` Docker'da
+host portunu da sınıyor. Ölçüm (geliştirme laptopu): önce yerel ağ IPv4'ü, iki küresel IPv6, WSL
+arayüzü ve `::1` açıktı; sonra yalnız `127.0.0.1:5433`. Volume, küme kimliği ve satır sayıları
+aynı; eski `localhost` `.env`'i çalışıyor. Ayrıntı: TODOS T184, `SECURITY_MODEL` S19.
+
+Öncesinde **WS-C-lite — Excel/export saatleri Europe/Istanbul** (`dcf46d1`, CI #62): bütün xlsx tarih
 hücreleri ve dosya adı damgası `excel.ts`'te IANA `Europe/Istanbul` duvar saatine
 çevriliyor (T173); hareket raporunun tarih filtreli indirmesi 400 yerine dosya veriyor (T174).
 İç model, sorgular, cron ve ekran değişmedi. Migration ve dependency yok.
 
-Öncesinde WS-B (`e1dc9a1`, CI #60): birim hassasiyeti (T130, `DAT-17`) ve içe
-aktarmada açılış stoğu (T128, `DAT-18`).
-
 ## Sıradaki workstream
 
-Belirlenmedi (kullanıcı kararı). Tam saat dilimi işi (T122, `DAT-16`) bulut öncesi ayrıca.
+**WS-1 — Güvenlik ve Veri Koruma** (kullanıcı onaylı R-1 planı, 2026-10-13): sıra
+1.1 ✓ → 1.2a (ortak silme kuralı) → 1.2b (güvenli `db:reset`) → 1.3a (yedek) → 1.4 (tatbikat) →
+1.3b (zamanlama); ayrı şerit 1.5a/1.5b (tünel kapısı, T167). Her dilim ayrı onayla başlar.
+**Pilot ortamı:** WS-1.3a yedeği ve WS-1.4 tatbikatı geliştirilip o makinede yeşil geçmeden
+gerçek pilot laptopuna hiçbir WS-1 değişikliği uygulanmaz (ikisi de henüz yok). Tam saat dilimi
+işi (T122, `DAT-16`) bulut öncesi ayrıca.
 
 ## Production blocker düzeltmeleri
 
