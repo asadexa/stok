@@ -127,6 +127,16 @@ Aynı bilgiyi iki yaşayan dosyaya kopyalama; ID ile referans ver.
 - Ortamı hazırlamak **scriptin değil uygulamanın işi**; `apps/web` kök `.env`'i
   kendisi yüklüyor (`next.config.ts`).
 
+## Kabuk güvenliği (near-miss, 2026-10-14)
+
+- Markdown/doküman ya da kod metnini **`node -e`, `bash -c` veya başka bir kabuk
+  dizgesine gömerek düzenleme**; dosyaları Edit/Write araçlarıyla değiştir.
+- Sebep: çift tırnaklı kabuk dizgesinde ters tırnaklı metin komut olarak çalışır.
+  CURRENT_STATE böyle düzenlenirken `docker compose down -v` çalıştırılmaya
+  teşebbüs edildi; geliştirme volume'ü yalnız bir sözdizimi hatası sayesinde silinmedi.
+- Yıkıcı komut adı (`down -v`, `volume rm`, `DROP`, `TRUNCATE`) içeren metin hiçbir
+  koşulda kabuk yorumlayıcısına verilmez.
+
 ## gstack
 
 Kuruluysa: web'de gezinme için `/browse` kullan, `mcp__claude-in-chrome__*`
