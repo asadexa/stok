@@ -16,6 +16,7 @@
     "init": "tsx src/init-db.ts",
     "migrate": "drizzle-kit migrate",
     "product-count": "tsx src/product-count.ts",
+    "reset": "tsx src/db-reset.ts",
     "seed": "tsx src/seed.ts",
     "studio": "drizzle-kit studio",
     "tenant:create": "tsx src/tenant-create.ts",

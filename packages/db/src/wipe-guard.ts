@@ -133,3 +133,204 @@ export function decideWipe(
   if (confirmed !== input.database) return { allowed: false, reason: 'foreign-unconfirmed' }
   return { allowed: true, foreignTenants: input.foreignTenants }
 }
+
+/**
+ * ============================================================================
+ * VOLUME SIFIRLAMA (WS-1.2b) — `pnpm db:reset`
+ *
+ * Seed tabloları boşaltıyor; reset ise Docker volume'ünü, yani BÜTÜN
+ * PostgreSQL kümesini siliyor: içindeki her veritabanı, rol ve şablon. Bu
+ * yüzden `stok`'a bakmak yetmiyor; küme bir bütün olarak sınıflandırılıyor ve
+ * tanınmayan her şey reddediliyor (fail closed). Bir veritabanının adı
+ * (`stok_test_*` dahil) silinebilir olduğunun kanıtı sayılmıyor.
+ *
+ * Listeler bilerek dar ve açık: bu kurulumun bugün ürettiği küme. Yeni bir
+ * tablo, rol ya da eklenti eklendiğinde reset, liste bilinçli güncellenene
+ * kadar reddeder; yanlış yöndeki hata veri kaybı değil gereksiz bir ret olur.
+ * ============================================================================
+ */
+
+export const CONFIRM_VOLUME_FLAG = '--confirm-volume='
+
+/**
+ * Uygulamanın `public` tabloları: `schema.ts`'tekiler ve migration 0005'in
+ * SQL ile açtığı `auth_attempts` (Drizzle şemasında yok, T51). Senkronu
+ * `schema-sync.test.ts` taze migrate edilmiş veritabanıyla sınıyor.
+ *
+ * RLS tek başına kimlik sayılmıyor: FORCE RLS ve politika yabancı bir tabloda
+ * da olabilir. Ama listedeki tablonun RLS'siz bulunması da ret (INV-4).
+ */
+export const APP_TABLES: readonly string[] = [
+  'auth_attempts',
+  'background_jobs',
+  'current_stock',
+  'locations',
+  'product_barcodes',
+  'products',
+  'stock_movements',
+  'tenants',
+  'users',
+]
+
+/** Kümedeki veritabanları. `template0` bağlantı kabul etmiyor, incelenmiyor. */
+const KNOWN_DATABASES = ['postgres', 'stok', 'template0', 'template1']
+/** `docker-compose.yml`'nin süper kullanıcısı ve `db/init/01-roles.sql`'in rolü. */
+const KNOWN_ROLES = ['postgres', 'stok_app']
+const KNOWN_TABLESPACES = ['pg_default', 'pg_global']
+/** İncelenen her veritabanı için izinli şemalar ve eklentiler. */
+const ALLOWED_OBJECTS: Record<string, { schemas: string[]; extensions: string[] }> = {
+  postgres: { schemas: ['public'], extensions: ['plpgsql'] },
+  template1: { schemas: ['public'], extensions: ['plpgsql'] },
+  // pg_trgm: db/init/00-extensions.sql; drizzle: migration günlüğü.
+  stok: { schemas: ['drizzle', 'public'], extensions: ['pg_trgm', 'plpgsql'] },
+}
+
+/** Bir veritabanının içinden okunan katalog (salt okunur sorgu). */
+export interface DatabaseProbe {
+  database: string
+  superuser: boolean
+  schemas: string[]
+  /** Veri taşıyan ilişkiler: tablo, bölümlü tablo, materialized view, foreign table. */
+  relations: { schema: string; name: string; kind: string; forceRls: boolean; policies: number }[]
+  largeObjects: number
+  extensions: string[]
+  /** Yalnız `stok`: `public.tenants`'ta demo dışı kiracı; tablo yoksa null. */
+  foreignTenants: number | null
+}
+
+export interface VolumeProbe {
+  databases: string[]
+  roles: string[]
+  tablespaces: string[]
+  /** `postgres`, `template1` ve varsa `stok`. */
+  inspected: Record<string, DatabaseProbe>
+}
+
+export type VolumeRefusal =
+  | 'unknown-database'
+  | 'unknown-role'
+  | 'unknown-tablespace'
+  | 'uninspected-database'
+  | 'unknown-object'
+  | 'unverifiable'
+  | WipeRefusal
+
+export type VolumeDecision =
+  | { allowed: true; foreignTenants: number }
+  | { allowed: false; reason: VolumeRefusal; details: string[] }
+
+const outside = (values: readonly string[], allowed: readonly string[]) =>
+  values.filter((v) => !allowed.includes(v))
+
+function unknownObjects(name: string, probe: DatabaseProbe): string[] {
+  const allowed = ALLOWED_OBJECTS[name]!
+  const found = [
+    ...outside(probe.schemas, allowed.schemas).map((s) => `${name}: şema ${s}`),
+    ...outside(probe.extensions, allowed.extensions).map((e) => `${name}: eklenti ${e}`),
+  ]
+  if (probe.largeObjects > 0) found.push(`${name}: ${probe.largeObjects} large object`)
+  for (const r of probe.relations) {
+    const label = `${name}: ${r.schema}.${r.name} (${r.kind})`
+    const isJournal = name === 'stok' && r.schema === 'drizzle' && r.name === '__drizzle_migrations'
+    const isAppTable = name === 'stok' && r.schema === 'public' && APP_TABLES.includes(r.name)
+    if (r.kind !== 'r' || !(isJournal || isAppTable)) found.push(label)
+    else if (isAppTable && (!r.forceRls || r.policies === 0)) found.push(`${label}: RLS yok (INV-4)`)
+  }
+  return found
+}
+
+/**
+ * Volume silinebilir mi. Sıra: kümede tanınmayan bir şey varsa hiçbir onay
+ * aşamaz; ancak küme tanınırsa `stok` mevcut `decideWipe` ile, aynı onay
+ * anlamıyla (`--wipe-non-demo-data=stok`) değerlendiriliyor. Volume adının
+ * onayı ayrı (`volumeConfirmed`): bu karar yalnız içeriğe bakıyor.
+ */
+export function decideVolumeWipe(probe: VolumeProbe, args: readonly string[]): VolumeDecision {
+  const refuse = (reason: VolumeRefusal, details: string[] = []): VolumeDecision => ({
+    allowed: false,
+    reason,
+    details,
+  })
+  const dbs = outside(probe.databases, KNOWN_DATABASES)
+  if (dbs.length) return refuse('unknown-database', dbs)
+  const roles = outside(probe.roles, KNOWN_ROLES)
+  if (roles.length) return refuse('unknown-role', roles)
+  const spaces = outside(probe.tablespaces, KNOWN_TABLESPACES)
+  if (spaces.length) return refuse('unknown-tablespace', spaces)
+
+  const toInspect = probe.databases.filter((d) => d !== 'template0')
+  const missing = toInspect.filter((d) => !probe.inspected[d])
+  if (missing.length) return refuse('uninspected-database', missing)
+  const objects = toInspect.flatMap((d) => unknownObjects(d, probe.inspected[d]!))
+  if (objects.length) return refuse('unknown-object', objects)
+
+  const stok = probe.inspected.stok
+  if (!stok) return { allowed: true, foreignTenants: 0 }
+  if (stok.foreignTenants === null) {
+    // `tenants` yoksa kiracılar sayılamaz; ancak hiç tablo yoksa (migration
+    // öncesi taze volume) korunacak veri de yok.
+    const tables = stok.relations.filter((r) => r.schema === 'public')
+    return tables.length
+      ? refuse('unverifiable', tables.map((r) => r.name))
+      : { allowed: true, foreignTenants: 0 }
+  }
+  // Şema gölgesi burada anlamsız: sayım `public.tenants` diye açık yazılıyor
+  // ve bilinmeyen her şema yukarıda zaten reddedildi.
+  const decision = decideWipe({
+    isLocal: true,
+    database: 'stok',
+    connectedDatabase: stok.database,
+    schemaShadowed: false,
+    bypassRls: stok.superuser,
+    foreignTenants: stok.foreignTenants,
+    args,
+  })
+  return decision.allowed ? decision : refuse(decision.reason)
+}
+
+/** Silme yalnız hedef volume'ün TAM adıyla onaylanınca; boş onay hiçbir adı onaylamaz. */
+export function volumeConfirmed(args: readonly string[], volumeName: string): boolean {
+  const value = args
+    .find((a) => a.startsWith(CONFIRM_VOLUME_FLAG))
+    ?.slice(CONFIRM_VOLUME_FLAG.length)
+  return value !== undefined && value.trim() !== '' && value === volumeName
+}
+
+/**
+ * Docker yerel mi. `DOCKER_HOST` ya da bağlam `tcp://`/`ssh://` gösterirse
+ * `docker volume rm` başka bir makinenin volume'ünü siler.
+ */
+export function isLocalDockerEndpoint(host: string): boolean {
+  return /^(unix|npipe):\/\//.test(host)
+}
+
+/** Silmeden hemen önceki karşılaştırma için volume ve kapsayıcı durumu. */
+export interface TargetState {
+  volumeCreatedAt: string
+  /** Volume'ü kullanan kapsayıcılar (çalışan ya da duran). */
+  volumeUsers: string[]
+  containerRunning: boolean
+  containerFinishedAt: string
+}
+
+/**
+ * İnceleme bittikten sonra hedef değişmedi mi. Volume yeniden yaratılmışsa
+ * `CreatedAt`, biri kapsayıcıyı çalıştırıp durdurduysa `FinishedAt`, başka
+ * bir kapsayıcı bağlandıysa kullanıcı listesi değişir; üçünde de incelenen
+ * veri artık silinecek veri olmayabilir.
+ *
+ * Okunamayan alan eşit sayılmıyor: Docker çıktısında alan yoksa iki tarafta
+ * da boş/tanımsız olur ve "değişmedi" sonucu sahte olurdu.
+ */
+export function sameTarget(containerId: string, inspected: TargetState, now: TargetState): boolean {
+  const readable = (s: TargetState) => Boolean(s.volumeCreatedAt) && Boolean(s.containerFinishedAt)
+  return (
+    readable(inspected) &&
+    readable(now) &&
+    now.volumeCreatedAt === inspected.volumeCreatedAt &&
+    now.containerFinishedAt === inspected.containerFinishedAt &&
+    !now.containerRunning &&
+    now.volumeUsers.length === 1 &&
+    now.volumeUsers[0] === containerId
+  )
+}

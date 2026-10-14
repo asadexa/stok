@@ -7,7 +7,7 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
 **Kurallar**
 
 - ID `T<n>`. Arşivdeki görevler numaralarını korur. Yeni görev en büyük
-  numaradan devam eder — **sıradaki boş numara: T189**. Numara yeniden
+  numaradan devam eder — **sıradaki boş numara: T190**. Numara yeniden
   kullanılmaz.
 - Biçim: `- [ ] **T<n> (P0–P3)** - <alan> - **Başlık**`. Altında kısa
   **Neden / Kanıt / Bağlı / Doğrula / Kaynak** satırları.
@@ -316,6 +316,18 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
 - [ ] **T169 (P3)** - ci - Telefon kamerası ve çözücü yolu otomatik testte yok. `e2e/telefon-tarama.spec.ts` telefonu API istemcisiyle taklit ediyor; Playwright'ın headless shell'inde `getUserMedia` yok (`NotSupportedError`), geliştirme makinesinde Playwright'ın tam Chromium'u açılmıyor (`spawn UNKNOWN`). Yerelde kurulu Edge + sahte kamera aygıtı + sentetik EAN-13 Y4M ile uçtan uca geçti (2026-10-09, repoda değil). Seçenek: CI'da (Linux) tam Chromium + `--use-file-for-fake-video-capture` ile tek senaryo. Tetikleyici: çözücü ya da Next/Turbopack yükseltmesi.
 - [ ] **T170 (P3)** - ürün - Ürünün birimi sonradan değiştirilince (KG → ADET) eski koli çarpanları ve kesirli hareketler denetlenmiyor; birim kuralı (T130, `DAT-17`) yalnız yeni yazımlarda. Kritik seviye (`minStock`) da birim hassasiyetine bağlı değil (adetli üründe 0,5 kabul). Kaynak: WS-B, 2026-10-10.
 - [ ] **T172 (P3)** - import - İçe aktarma devrinde fiyatın ekonomik tarihi ("Açılış Fiyat Tarihi", `PRC-05`) ve "Tahmini" sütunu yok; devir bugünün alış fiyatıyla yazılıyor. Satır notları (devir atlandı / yazılamadı) ekranda ilk 50 satır, indirilebilir raporda yok. Plan polish'i; tetikleyici: eski stoğu geçmiş fiyatla değerlemek isteyen müşteri. Kaynak: WS-B, 2026-10-10.
+- [ ] **T189 (P3)** - test - **`db:reset`'in iki kurtarma yolu kalıcı testte yok**
+  - Neden: `docker stop` hatası ve asıl kapsayıcı silindikten sonra `docker volume rm` hatası
+    `db-reset.test.ts`'te üretilemiyor (CLI `docker`'ı kabuksuz çağırıyor, araya girecek bir
+    kanca yok). Bu yolların kodu değişirse gerileme fark edilmez.
+  - Kanıt: 2026-10-14'te geçici mutasyonla (çağrıya geçersiz bayrak) dört senaryo gerçek
+    Docker'da, ayrı `stok_test_reset_*` projelerinde doğrulandı: durdurma hiç gerçekleşmeden
+    hata → kapsayıcı kesintisiz çalışıyor; durdurup hata → aynı kapsayıcı yeniden açıldı;
+    volume silinemedi → aynı volume'le kapsayıcı yeniden kuruldu, başlangıçta çalışıyorsa
+    çalışır, duruyorsa başlatılmamış; her durumda volume `CreatedAt` ve veri işareti aynı.
+  - Doğrula: üretim koduna test kancası eklemeden hata enjeksiyonu (ör. yerel soket/pipe
+    üzerinden Docker API vekili) bulunursa bu dört senaryo `db-reset.test.ts`'e taşınır.
+  - Kaynak: WS-1.2b commit öncesi inceleme, 2026-10-14.
 
 ## Product / Future
 

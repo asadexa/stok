@@ -16,10 +16,13 @@ import {
   rolesCheckConstraint,
   unitsCheckConstraint,
 } from '@stok/shared'
-import { sql } from 'drizzle-orm'
+import { is, sql } from 'drizzle-orm'
+import { PgTable, getTableConfig } from 'drizzle-orm/pg-core'
 import { afterAll, describe, expect, it } from 'vitest'
+import * as schema from './schema'
 import { testAdminDb } from './testing'
 import { TEST_DB_NAME } from './test/db-name'
+import { APP_TABLES } from './wipe-guard'
 
 /**
  * ============================================================================
@@ -228,5 +231,29 @@ describe('şemanın taşıdığı diğer garantiler', () => {
     const r = [...rows][0]
     expect(r?.a).toBe(r?.b)
     expect(r?.c).toBe(r?.d)
+  })
+})
+
+/**
+ * WS-1.2b — `db:reset`'in uygulama tablosu izin listesi. Reset, listede
+ * olmayan bir `public` tablosu görünce volume'ü silmiyor; liste eskirse yeni
+ * bir migration'dan sonra her reset reddedilir, liste fazlaysa yabancı bir
+ * tablo uygulamanın sayılır. İki yöndeki ayrışmayı da burada yakalıyoruz:
+ * taze migrate edilmiş veritabanıyla ve Drizzle şemasıyla.
+ */
+describe('db:reset uygulama tablosu listesi (WS-1.2b)', () => {
+  it('APP_TABLES, migration sonrası public tablolarıyla birebir aynı', async () => {
+    const rows = await admin.db.execute<{ name: string }>(sql`
+      SELECT c.relname AS name FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p') ORDER BY 1
+    `)
+    expect([...rows].map((r) => r.name)).toEqual([...APP_TABLES].sort())
+  })
+
+  it('APP_TABLES = schema.ts tabloları + yalnız SQL migration ile gelen auth_attempts', () => {
+    const drizzleTables = Object.values(schema)
+      .filter((v) => is(v, PgTable))
+      .map((t) => getTableConfig(t as PgTable).name)
+    expect([...APP_TABLES].sort()).toEqual([...drizzleTables, 'auth_attempts'].sort())
   })
 })

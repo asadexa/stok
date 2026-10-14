@@ -42,13 +42,16 @@ koruması çalışıyor, "Bağlantıyı kes" telefon oturumunu kapatıyor. Andro
 denenmedi. Yerelde ayrıca Edge + sahte kamera aygıtı + sentetik EAN-13 ile
 uçtan uca geçti (kamera yolu CI'da yok: T169).
 
-T187/T186 (2026-10-13, yerel): lint 199 dosya 0 tanı, typecheck, test
-**911/911** (shared 69, db 124, core 550, web 168), drift "No schema changes", `next build` PASS.
-Playwright WS-1.1, 1.2a ve T187/T186'da koşulmadı (arayüz değişmedi; e2e demo veritabanına
-yazıyor, T150); son e2e sonucu yukarıdaki 24/24. GitHub CI sonucu commit'ten sonra yazılır.
+WS-1.2b (2026-10-14, yerel): lint 201 dosya 0 tanı, typecheck, test **991/991** (shared 69,
+db 204, core 550, web 168; `db-reset.test.ts` gerçek Docker'da geçici projeyle ~115 sn), drift
+"No schema changes", `next build` PASS. Playwright WS-1.1'den beri koşulmadı (arayüz değişmedi;
+e2e demo veritabanına yazıyor, T150); son e2e sonucu yukarıdaki 24/24. GitHub CI sonucu
+commit'ten sonra yazılır.
 
-GitHub CI: `development` `59e4d9f` (WS-1.2a) koşu #67 yeşil; üç iş de geçti (typecheck + test,
-Windows lint + typecheck + derleme, demo yolu). Doğrulama: GitHub API, 2026-10-13.
+GitHub CI: `development` `aab203b` (PRD-13) koşu #69 yeşil; üç iş de geçti (typecheck + test,
+Windows lint + typecheck + derleme, demo yolu). `581f291` (T187/T186) koşu #68 ilk denemede Linux
+web derlemesinde Turbopack font çözümleme hatasıyla kırmızı, aynı commit'in ikinci denemesi yeşil;
+kök neden bilinmiyor, tekrar ederse ayrı incelenecek. Doğrulama: GitHub API, 2026-10-14.
 master'daki son koşu #44 (2026-09-14) yeşil.
 9 Dependabot PR açık, 3'ü kırmızı (T140).
 
@@ -84,7 +87,7 @@ okutup `/hareket`te açma (`ENABLE_PHONE_SCANNER`, `PRD-12`, `ARC-14`).
 - **Ağ açıklığı**: veritabanı portu yalnız `127.0.0.1` (WS-1.1, S19), ama parolalar repodaki
   varsayılanlar; uygulama sunucusu (`next start`) yerel ağda HTTP ile açık (T183).
 - **Yedek / geri yükleme**: yerel yedek aracı ve tatbikat yok (WS-1.3a, WS-1.4); `pnpm db:reset`
-  hâlâ korumasız (WS-1.2b).
+  artık doğrulanmış ve onaylı (WS-1.2b), ama yedek gelene kadar volume silme geri alınamaz.
 
 ## P0 / P1 blocker'lar
 
@@ -105,7 +108,14 @@ işaretli (öne çıkanlar `DAT-15`, `DAT-16`, `SEC-14`, `OPS-01`, `OPS-02`, `UX
 
 ## Son tamamlanan workstream
 
-**T187 + T186 — Silme hedefinin doğrulanması** (2026-10-13): hedef adresten
+**WS-1.2b — Güvenli `db:reset`** (2026-10-14): `docker compose down -v` kaldırıldı.
+Onaysız çağrı yalnız kullanım yazar; `--dry-run` canlı ve salt okunur ön kontrol yapar; gerçek
+sıfırlama volume adıyla onay ister, kapsayıcıyı durdurup volume'ü ağsız geçici kapsayıcıda inceler,
+ancak küme tanınırsa (yalnız `stok`/`postgres`/şablonlar, bilinen rol ve uygulama tabloları) ve
+hedef değişmediyse siler; aksi halde kapsayıcıyı geri açar. Geliştirme volume'ünde ön kontrol
+`stok_test_*` veritabanları yüzünden reddediyor (beklenen). Ayrıntı: `SECURITY_MODEL` S12, README.
+
+Öncesinde **T187 + T186 — Silme hedefinin doğrulanması** (2026-10-13): hedef adresten
 kesin okunamıyorsa (sorgu parametresi, `%` kodlu ad, eksik port) yerel sayılmıyor; seed silmeden
 önce bağlanılan veritabanını yazılan adla ve tablolarının `public`'e çözüldüğünü karşılaştırıyor;
 `tenant:create` gösterilen ile bağlanılan veritabanı ayrışınca duruyor. Uzak hedef testi artık
@@ -122,9 +132,8 @@ cihazdan 5433 denemesi yapılmadı (T184).
 ## Sıradaki workstream
 
 **WS-1 — Güvenlik ve Veri Koruma** (kullanıcı onaylı R-1 planı, 2026-10-13): sıra
-1.1 ✓ → 1.2a ✓ (ortak silme kuralı) → 1.2b (güvenli `db:reset`) → 1.3a (yedek) → 1.4 (tatbikat) →
-1.3b (zamanlama); ayrı şerit 1.5a/1.5b (tünel kapısı, T167). Her dilim ayrı onayla başlar.
-1.2b'nin ön koşulu olan T187 ve T186 kapandı (yerel kapı yeşil).
+1.1 ✓ → 1.2a ✓ (ortak silme kuralı) → 1.2b ✓ (güvenli `db:reset`) → 1.3a (yedek) →
+1.4 (tatbikat) → 1.3b (zamanlama); ayrı şerit 1.5a/1.5b (tünel kapısı, T167). Her dilim ayrı onayla başlar.
 **Pilot ortamı:** WS-1.3a yedeği ve WS-1.4 tatbikatı geliştirilip o makinede yeşil geçmeden
 gerçek pilot laptopuna hiçbir WS-1 değişikliği uygulanmaz (ikisi de henüz yok). Tam saat dilimi
 işi (T122, `DAT-16`) bulut öncesi ayrıca.

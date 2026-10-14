@@ -92,6 +92,22 @@ gösterilir. Yazmadan önce hedef veritabanı (YEREL/UZAK) ve içindeki işletme
 gösterilir, "evet" yazılmadan hiçbir şey yazılmaz. `MIGRATION_DATABASE_URL`'deki
 veritabanına yazar.
 
+**Docker veritabanını tamamen sıfırlamak** (volume'ü ve içindeki bütün
+veritabanlarını siler; örnek veriyi yenilemek için `pnpm demo --seed` yeterli):
+
+```bash
+pnpm db:reset --dry-run                                  # salt okunur ön kontrol, kesinti yok
+pnpm db:reset --confirm-volume=<volume-adı>              # volume adı ön kontrol çıktısında yazar
+```
+
+Onaysız `pnpm db:reset` yalnız kullanımı yazar. Gerçek sıfırlama kapsayıcıyı
+durdurur, volume'ü ağı olmayan geçici bir kapsayıcıda yeniden inceler ve ancak
+küme tanınırsa siler: yalnız `stok`, `postgres` ve şablonlar; bilinen roller ve
+uygulama tabloları. Başka bir veritabanı (`pnpm test`'in bıraktığı `stok_test_*`
+dahil), rol, şema ya da tablo varsa hiçbir şey silmeden durur ve kapsayıcıyı
+yeniden açar; gözden çıkarılabilirse onları önce kendiniz silin. `stok`'ta demo
+dışı işletme varsa ayrıca `--wipe-non-demo-data=stok` gerekir.
+
 `--filter` ile çağırırken **`run` kelimesi zorunlu**: onsuz pnpm, Windows'ta
 `'migrate' is not recognized` hatası verir.
 
@@ -124,11 +140,12 @@ curl -X POST -H "Authorization: Bearer <CRON_SECRET>" http://localhost:3000/api/
 |---|---|
 | `pnpm lint` | Biome |
 | `pnpm typecheck` | Dört paketin tip kontrolü |
-| `pnpm test` | Birim + entegrasyon. Gerçek PostgreSQL gerekir; her paket kendi `stok_test_*` veritabanını sıfırdan kurar |
+| `pnpm test` | Birim + entegrasyon. Gerçek PostgreSQL gerekir; her paket kendi `stok_test_*` veritabanını sıfırdan kurar. `db:reset` testi Docker ister ve kendi geçici compose projesini açıp siler |
 | `pnpm --filter @stok/db exec drizzle-kit generate` | Şema ile migration'lar senkron mu ("No schema changes" beklenir) |
 | `pnpm --filter @stok/web run build` | Üretim derlemesi |
 | `pnpm --filter @stok/web run test:e2e` | Playwright; önce build gerekir, port 3000 boş olmalı, demo veritabanını kullanır |
-| `pnpm db:up` / `pnpm db:reset` | Docker veritabanını aç ve hazır olana kadar bekle / sıfırla |
+| `pnpm db:up` | Docker veritabanını aç ve hazır olana kadar bekle |
+| `pnpm db:reset --dry-run` / `--confirm-volume=<ad>` | Volume'ü sıfırlamadan önce salt okunur kontrol / doğrulanmış sıfırlama (yukarıda) |
 
 CI (GitHub Actions): lint, typecheck, gerçek PostgreSQL ile testler, migration
 drift, derleme, temiz checkout'tan `pnpm demo` + Playwright, ve Windows'ta

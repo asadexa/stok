@@ -10,7 +10,7 @@
   "scripts": {
     "db:down": "docker compose down",
     "db:logs": "docker compose logs -f db",
-    "db:reset": "docker compose down -v && docker compose up -d && node scripts/wait-for-db.mjs",
+    "db:reset": "pnpm --filter @stok/db run reset",
     "db:up": "docker compose up -d && node scripts/wait-for-db.mjs",
     "demo": "node scripts/demo.mjs",
     "dev": "pnpm --filter @stok/web run dev",

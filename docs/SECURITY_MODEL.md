@@ -123,21 +123,36 @@ güncellenir. Yeni tehdit yeni ID alır; ID yeniden kullanılmaz.
   adı onaylamaz (T125, T185). Gösterilen hedef ile bağlanılan hedef ayrışamaz
   (T187): sorgu parametreli, `%` kodlu ya da portsuz adres yerel sayılmaz; silmeden
   önce bağlanılan veritabanı (`current_database()`) yazılan adla, seed'in tabloları
-  `public` ile karşılaştırılır. Silme kuralı tek kaynakta, `db:reset` (WS-1.2b) de
-  onu kullanacak. `pnpm tenant:create` yalnız ekler; bağlanılan veritabanı
-  gösterilenle aynı değilse durur, değilse hedefi (YEREL/UZAK) ve kiracı sayısını
-  gösterip "evet" ister (T162, T187).
+  `public` ile karşılaştırılır. `pnpm db:reset` (WS-1.2b) bütün volume'ü siler ve
+  aynı kuralın üstüne kümeyi sınıflandırır: Docker yerel değilse, volume compose
+  `db` kapsayıcısına ait değilse ya da başka kapsayıcı kullanıyorsa, volume adı
+  onaylanmamışsa kapsayıcıya hiç dokunmaz; onaylıysa kapsayıcıyı durdurup volume'ü
+  ağsız, TCP dinlemeyen, salt okunur geçici bir kapsayıcıda inceler. Yalnız
+  `stok`/`postgres`/şablonlar, bilinen roller ve tablespace'ler, açık izin
+  listesindeki uygulama tabloları (FORCE RLS ve politikasıyla) varsa ve hedef
+  inceleme sonrası değişmediyse siler; aksi halde kapsayıcıyı geri açar. Docker ya
+  da katalog çıktısı beklenen biçimde değilse (eksik alan dahil) sonuç ret.
+  `--dry-run` canlı ve salt okunurdur, nihai onay değildir. `pnpm tenant:create`
+  yalnız ekler; bağlanılan veritabanı gösterilenle aynı değilse durur, değilse
+  hedefi (YEREL/UZAK) ve kiracı sayısını gösterip "evet" ister (T162, T187).
 - **Katman:** `db/init/01-roles.sql`, migration 0002, `biome.json`, runbook,
-  `packages/db/src/wipe-guard.ts`, `seed.ts`, `target.ts`, `tenant-create.ts`.
+  `packages/db/src/wipe-guard.ts`, `seed.ts`, `target.ts`, `tenant-create.ts`,
+  `db-reset.ts`.
 - **Test:** `rls.test.ts` (T46.4), `packages/db/src/smoke.test.ts` (uygulama ve
   sahip bağlantısı gerçekten farklı), `pnpm lint`, `wipe-guard.test.ts`,
   `seed-guard.test.ts` (uzak adres test içi yönlendiriciyle gerçekten erişilebilir,
-  bağlantı sayılıyor: T186), `target.test.ts`, `tenant-create.test.ts`.
+  bağlantı sayılıyor: T186), `target.test.ts`, `tenant-create.test.ts`,
+  `db-reset.test.ts` (gerçek Docker, her koşuda geçici `stok_test_reset_*` projesi),
+  `schema-sync.test.ts` (reset izin listesi migration'larla senkron).
 - **Açık:** "yerel" adrese bakılarak belirleniyor: `localhost`'a tünellenmiş bir
   üretim veritabanı YEREL görünür; orada seed'i yalnız seed'e ait olmayan kiracı
   kapısı durdurur. Veritabanı sahibinin `pg_catalog`'u arama yolunda sona koyup
   katalog fonksiyonlarını gölgelemesi kapsam dışı (öyle bir aktör veriyi doğrudan
   silebilir). `tenant:create` şema gölgesinde başka şemaya yazabilir (T188).
+  `db:reset`'te inceleme sonrası kontrol ile silme arasındaki milisaniyelerde kasıtlı
+  paralel Docker müdahalesi; yedek (WS-1.3a) gelene kadar `docker volume rm` geri
+  alınamaz. Durdurma ve volume silme hatasındaki kurtarma yolları gerçek Docker'da
+  geçici hata enjeksiyonuyla doğrulandı, kalıcı testte yok (T189).
 
 ### S13 — Kasa açığının gizlenmesi (fiyat manipülasyonu)
 - **Koruma:** liste fiyatını sunucu üründen okur ve harekete dondurur; istemcinin
