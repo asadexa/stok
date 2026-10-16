@@ -2,7 +2,20 @@ import { spawnSync } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import { join, resolve } from 'node:path'
 import process from 'node:process'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { pathToFileURL } from 'node:url'
+import {
+  DATA_DIR,
+  DockerRefused,
+  ROOT,
+  type Target,
+  docker,
+  dockerEndpoint,
+  dockerOk,
+  inspectOne,
+  lines,
+  parseJson,
+  targetFromContainer,
+} from './docker'
 import {
   CONFIRM_VOLUME_FLAG,
   DEMO_TENANT_IDS,
@@ -22,8 +35,8 @@ import {
  * GÜVENLİ `pnpm db:reset` (WS-1.2b)
  *
  * Eski komut `docker compose down -v` idi: volume'deki BÜTÜN kümeyi hiçbir
- * soru sormadan siliyordu. Kural `wipe-guard.ts`'te; burada yalnız Docker ve
- * sorgular var.
+ * soru sormadan siliyordu. Kural `wipe-guard.ts`'te, Docker katmanı
+ * `docker.ts`'te; burada akış ve sorgular var.
  *
  *   pnpm db:reset                          kullanım; Docker'a dokunmaz
  *   pnpm db:reset --dry-run                canlı, salt okunur, kesintisiz ön kontrol
@@ -40,8 +53,6 @@ import {
  * ============================================================================
  */
 
-const ROOT = fileURLToPath(new URL('../../../', import.meta.url))
-const DATA_DIR = '/var/lib/postgresql/data'
 const INSPECT_LABEL = 'stok.reset.inspect'
 
 const USAGE = [
@@ -54,7 +65,7 @@ const USAGE = [
   'Onaysız çağrı hiçbir şey yapmaz. Volume adı --dry-run çıktısında yazar.',
 ].join('\n')
 
-class ResetRefused extends Error {}
+class ResetRefused extends DockerRefused {}
 
 export type ResetMode =
   | { mode: 'usage' }
@@ -98,61 +109,7 @@ export function inspectionRunArgs(name: string, volume: string, image: string): 
 // Docker
 // ---------------------------------------------------------------------------
 
-/**
- * Kabuk YOK: `docker` Windows'ta da bir `.exe`, argümanlar (SQL dahil)
- * olduğu gibi gidiyor. Komutlar depo kökünde koşuyor; compose standart
- * `COMPOSE_FILE`/`COMPOSE_PROJECT_NAME` değişkenlerini kendisi okuyor.
- */
-function docker(args: string[], input?: string) {
-  const r = spawnSync('docker', args, { cwd: ROOT, encoding: 'utf8', input, maxBuffer: 16 << 20 })
-  if (r.error) throw new ResetRefused(`docker çalıştırılamadı: ${r.error.message}`)
-  return { ok: r.status === 0, out: (r.stdout ?? '').trim(), err: (r.stderr ?? '').trim() }
-}
-
-function dockerOk(args: string[], what: string, input?: string): string {
-  const r = docker(args, input)
-  if (!r.ok) throw new ResetRefused(`${what}: ${r.err || 'docker hata döndü'}`)
-  return r.out
-}
-
-const lines = (s: string) => s.split(/\r?\n/).filter(Boolean)
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
-
-function parseJson<T>(text: string, what: string): T {
-  try {
-    return JSON.parse(text) as T
-  } catch {
-    throw new ResetRefused(`${what} okunamadı; çıktı doğrulanamadı.`)
-  }
-}
-
-/**
- * `docker inspect` tek öğeli bir dizi döndürür. Beklenmeyen çıktı (boş,
- * dizi değil, birden çok öğe) ret: alanı eksik bir nesne aşağıda `undefined`
- * karşılaştırmalarına dönüşür ve kontrolleri sessizce geçirebilirdi.
- */
-// biome-ignore lint/suspicious/noExplicitAny: Docker'ın JSON'u; kullanılan alanlar aşağıda tek tek doğrulanıyor.
-function inspectOne(args: string[], what: string): any {
-  const list = parseJson<unknown>(dockerOk(args, `${what} okunamadı`), what)
-  if (!Array.isArray(list) || list.length !== 1 || typeof list[0] !== 'object' || list[0] === null) {
-    throw new ResetRefused(`${what} beklenen biçimde değil.`)
-  }
-  return list[0]
-}
-
-function dockerEndpoint(): string {
-  const fromEnv = process.env.DOCKER_HOST
-  if (fromEnv) return fromEnv
-  return dockerOk(['context', 'inspect', '--format', '{{.Endpoints.docker.Host}}'], 'Docker bağlamı okunamadı')
-}
-
-interface Target {
-  project: string
-  containerId: string
-  running: boolean
-  image: string
-  volume: string
-}
 
 /** Compose `db` kapsayıcısı → veri bağlaması → volume; zincirin her halkası doğrulanıyor. */
 function resolveTarget(): Target {
@@ -164,24 +121,7 @@ function resolveTarget(): Target {
         : `Compose \`db\` için ${ids.length} kapsayıcı var; hangisinin silineceği belirsiz.`,
     )
   }
-  const c = inspectOne(['inspect', ids[0]!], 'kapsayıcı bilgisi')
-  if (typeof c.Id !== 'string' || typeof c.Image !== 'string' || typeof c.State?.Running !== 'boolean') {
-    throw new ResetRefused('Kapsayıcı bilgisi beklenen biçimde değil.')
-  }
-  const labels = c.Config?.Labels ?? {}
-  const project: string | undefined = labels['com.docker.compose.project']
-  if (!project || labels['com.docker.compose.service'] !== 'db') {
-    throw new ResetRefused('Kapsayıcı bir compose `db` servisi değil.')
-  }
-  const mount = (c.Mounts ?? []).find((m: { Destination: string }) => m.Destination === DATA_DIR)
-  if (mount?.Type !== 'volume' || !mount.Name) {
-    throw new ResetRefused(`Veri dizini (${DATA_DIR}) adlandırılmış bir Docker volume'ü değil.`)
-  }
-  const v = inspectOne(['volume', 'inspect', mount.Name], 'volume bilgisi')
-  if (v.Labels?.['com.docker.compose.project'] !== project || !v.Labels?.['com.docker.compose.volume']) {
-    throw new ResetRefused(`Volume ${mount.Name} bu compose projesine (${project}) ait değil.`)
-  }
-  return { project, containerId: c.Id, running: c.State.Running, image: c.Image, volume: mount.Name }
+  return targetFromContainer(ids[0]!)
 }
 
 function targetState(t: Target): TargetState {
@@ -470,7 +410,9 @@ async function main(): Promise<number> {
     }
     return parsed.mode === 'dry-run' ? dryRun(parsed.args) : await reset(parsed.args)
   } catch (err) {
-    if (err instanceof ResetRefused) {
+    // `ResetRefused` bir `DockerRefused`; Docker katmanının (`docker.ts`)
+    // retleri de aynı biçimde basılıyor, yığın iziyle değil.
+    if (err instanceof DockerRefused) {
       console.error(`\n✗ ${err.message}\n  Sıfırlama yapılmadı.\n`)
       return 1
     }

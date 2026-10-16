@@ -137,13 +137,15 @@ güncellenir. Yeni tehdit yeni ID alır; ID yeniden kullanılmaz.
   hedefi (YEREL/UZAK) ve kiracı sayısını gösterip "evet" ister (T162, T187).
 - **Katman:** `db/init/01-roles.sql`, migration 0002, `biome.json`, runbook,
   `packages/db/src/wipe-guard.ts`, `seed.ts`, `target.ts`, `tenant-create.ts`,
-  `db-reset.ts`.
+  `db-reset.ts`, `docker.ts` (compose `db` → volume hedef zinciri; yedekle ortak).
 - **Test:** `rls.test.ts` (T46.4), `packages/db/src/smoke.test.ts` (uygulama ve
   sahip bağlantısı gerçekten farklı), `pnpm lint`, `wipe-guard.test.ts`,
   `seed-guard.test.ts` (uzak adres test içi yönlendiriciyle gerçekten erişilebilir,
   bağlantı sayılıyor: T186), `target.test.ts`, `tenant-create.test.ts`,
   `db-reset.test.ts` (gerçek Docker, her koşuda geçici `stok_test_reset_*` projesi),
-  `schema-sync.test.ts` (reset izin listesi migration'larla senkron).
+  `db-reset-target.test.ts` (Docker katmanının retleri: compose araması, kapsayıcı
+  yok, CLI yok, volume projeye ait değil), `schema-sync.test.ts` (reset izin
+  listesi migration'larla senkron).
 - **Açık:** "yerel" adrese bakılarak belirleniyor: `localhost`'a tünellenmiş bir
   üretim veritabanı YEREL görünür; orada seed'i yalnız seed'e ait olmayan kiracı
   kapısı durdurur. Veritabanı sahibinin `pg_catalog`'u arama yolunda sona koyup
