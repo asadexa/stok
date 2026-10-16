@@ -48,13 +48,15 @@ testleri geçici compose projeleriyle), drift "No schema changes", `next build` 
 Playwright WS-1.1'den beri koşulmadı (arayüz değişmedi; e2e demo veritabanına yazıyor, T150);
 son e2e sonucu yukarıdaki 24/24.
 
-GitHub CI: `development` `4fef58f` (WS-1.3a refactor) koşu #71 yeşil; üç iş de geçti (typecheck +
-test, Windows lint + typecheck + derleme, demo yolu). `94c1151` (WS-1.3a yedek) koşu #72 kırmızı:
-demo işi (yedek ve durum adımı dahil) ve Windows işi yeşil, test işinde `backup.test.ts`'in
-hazırlığı migration'da `ECONNRESET` aldı ve 8 test atlandı. Neden test düzeneği: `waitReady` geçici
-compose projesini bekleme betiğine aktarmıyordu, CI'da yalnız TCP'ye bakıldı ve Linux
-`docker-proxy`'si portu PostgreSQL hazır olmadan kabul etti. Düzeltme yerelde, CI'da henüz
-koşmadı. `581f291` (#68) ilk denemede
+GitHub CI: `development` `1e47741` (WS-1.3a test düzeltmesi) koşu #73 yeşil; üç iş de geçti
+(typecheck + test, Windows lint + typecheck + derleme, demo yolu). Test işinin günlüğünde
+`backup.test.ts` 8/8, `backup-policy.test.ts` 78/78, `@stok/db` 294/294; demo işinde "Yedek ve
+durum" adımı (`pnpm db:backup` ve `--status`) yeşil. Öncesinde `4fef58f` (#71) yeşil, `94c1151`
+(#72) kırmızıydı: `backup.test.ts`'in hazırlığı migration'da `ECONNRESET` aldı, 8 test atlandı.
+Neden test düzeneğiydi (geçici compose projesi bekleme betiğine aktarılmıyordu, Linux
+`docker-proxy`'si portu PostgreSQL hazır olmadan kabul etti); `1e47741` ortamı aktarıp migration'dan
+önce `SELECT 1` kapısı ekledi. Ortak `wait-for-db.mjs`'te kalan benzer pencere: T195.
+`581f291` (#68) ilk denemede
 Linux web derlemesinde Turbopack font çözümleme hatasıyla kırmızıydı, ikinci deneme yeşil; kök
 neden bilinmiyor, tekrar ederse ayrı incelenecek. master'daki son koşu #44 (2026-09-14) yeşil.
 9 Dependabot PR açık, 3'ü kırmızı (T140).
@@ -122,9 +124,10 @@ TABLE DATA girdileri) ve baştan sona okuma geçmeden döküm son adını ve `.s
 `pg_restore --list` tek başına yetmiyor: kesik ve baytı bozulmuş arşivi geçirdi (M1 ölçümü). Kaynak
 yalnız yerel Docker ve uygulamanın `DATABASE_URL`'inin gösterdiği veritabanı; dizin kuralı repo içi,
 OneDrive, göreli ve ağ yollarını reddediyor; saklama yalnız başarılı koşudan sonra, son 14.
-`--status` "kayıtlı" ile "şimdi doğrulanan"ı (yalnız en yeni, SHA-256) ayırıyor. Hazırlık
-commit'i `4fef58f`: Docker katmanı `db-reset.ts`'ten `docker.ts`'e taşındı, `db:reset` çıktısı
-bayt bayt aynı. Ayrıntı: `SECURITY_MODEL` S20, README. Açık: T190 (1.3b'den önce), T193, T194.
+`--status` "kayıtlı" ile "şimdi doğrulanan"ı (yalnız en yeni, SHA-256) ayırıyor. Commit'ler:
+`4fef58f` hazırlık (Docker katmanı `db-reset.ts`'ten `docker.ts`'e taşındı, `db:reset` çıktısı
+bayt bayt aynı), `94c1151` yedek, `1e47741` test hazırlığı düzeltmesi; CI #73 yeşil. Ayrıntı:
+`SECURITY_MODEL` S20, README. Açık: T190 (1.3b'den önce), T191, T193, T194, T195.
 
 Öncesinde **WS-1.2b — Güvenli `db:reset`** (`b12f5b3`, CI #70): volume adıyla onay, ağsız
 geçici kapsayıcıda izole inceleme, yalnız tanınan kümede silme. Geliştirme volume'ünde ön kontrol
