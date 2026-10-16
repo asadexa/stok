@@ -73,12 +73,47 @@ function port(): number {
   return Number(published.slice(published.lastIndexOf(':') + 1))
 }
 
+/**
+ * Bekleme betiği hangi kapsayıcıya `pg_isready` soracağını compose
+ * değişkenlerinden buluyor. Değişkenler aktarılmazsa depo kökündeki projeyi
+ * arıyor: CI test işinde öyle bir proje yok (veritabanı servis kapsayıcısı),
+ * betik yalnız TCP'ye bakıyor ve Linux'ta `docker-proxy` portu PostgreSQL
+ * hazır olmadan kabul ediyor. CI #72'de migration bu yüzden ECONNRESET aldı.
+ */
 function waitReady(): void {
   const r = spawnSync(process.execPath, [join(ROOT, 'scripts', 'wait-for-db.mjs'), String(port())], {
     cwd: ROOT,
+    env: { ...process.env, COMPOSE_FILE: file, COMPOSE_PROJECT_NAME: PROJECT },
     encoding: 'utf8',
   })
   if (r.status !== 0) throw new Error(`Test kümesi hazır olmadı: ${r.stdout}${r.stderr}`)
+}
+
+/**
+ * `waitReady` ilk kurulumda yine erken dönebilir: resmi imaj init betiklerini
+ * yalnız Unix soketinde dinleyen geçici bir sunucuyla çalıştırıyor
+ * (`listen_addresses=''`). Kapsayıcı içindeki `pg_isready` sokete sorduğu için
+ * onu "hazır" görüyor, Linux'ta `docker-proxy` de portu kabul ediyor. Yayımlanan
+ * porttan dönen `SELECT 1` ise ancak asıl sunucu TCP'de dinlerken mümkün;
+ * migration ondan sonra başlıyor. Başarısız denemeler sınırlı süre tekrarlanıyor,
+ * süre dolarsa son hata yazılıyor.
+ */
+async function waitForQuery(url: string, timeoutMs = 60_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  let lastError = ''
+  while (Date.now() < deadline) {
+    const q = postgres(url, { max: 1, connect_timeout: 5, onnotice: () => {} })
+    try {
+      await q`SELECT 1`
+      return
+    } catch (err) {
+      lastError = (err as Error).message
+    } finally {
+      await q.end({ timeout: 1 })
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500))
+  }
+  throw new Error(`Test kümesi ${timeoutMs / 1000} sn içinde sorgu kabul etmedi: ${lastError}`)
 }
 
 function state() {
@@ -173,7 +208,9 @@ describe('db:backup, izole Docker projesinde (WS-1.3a)', () => {
     const up = compose('up', '-d')
     if (!up.ok) throw new Error(`Test projesi açılamadı: ${up.err}`)
     waitReady()
-    const q = postgres(`postgresql://postgres:postgres@127.0.0.1:${port()}/stok`, { max: 1, onnotice: () => {} })
+    const url = `postgresql://postgres:postgres@127.0.0.1:${port()}/stok`
+    await waitForQuery(url)
+    const q = postgres(url, { max: 1, onnotice: () => {} })
     try {
       await migrate(drizzle(q), { migrationsFolder: join(PACKAGE_DIR, 'migrations') })
       await q`INSERT INTO public.tenants (id, name) VALUES (${DEMO_TENANT_IDS[0]!}, ${TENANT_NAME}), (${DEMO_TENANT_IDS[1]!}, 'Demo 2')`

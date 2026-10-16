@@ -294,7 +294,8 @@ güncellenir. Yeni tehdit yeni ID alır; ID yeniden kullanılmaz.
   - Dropbox, Google Drive gibi diğer senkron klasörleri algılanmıyor (T193). Elle repoya
     kopyalanan döküm araç dışında.
   - Paketli bir uygulamanın (ör. Claude masaüstü) alt sürecinde varsayılan dizin paketin
-    özel klasörüne yönleniyor; komut uyarıyor, normal terminaldeki davranış ölçülmedi (T192).
+    özel klasörüne yönleniyor (uygulama kaldırılınca silinir); komut bunu "Hedef" satırında ve
+    bir uyarıyla söylüyor. Normal terminalde varsayılan dizin doğrulandı (T192, kapandı).
   - Saklama volume kuşağını ayırmıyor: kazara reset sonrası 14 başarılı koşu eski dökümleri
     döndürür; zamanlamadan (WS-1.3b) önce ele alınacak (T190).
   - `--status` yalnız en yeni dökümün SHA-256'sını yeniden hesaplıyor; geri

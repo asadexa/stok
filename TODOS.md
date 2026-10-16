@@ -157,19 +157,6 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
     kilit tutan bir oturum açıkken `--lock-wait-timeout` ile yedeğin süre içinde reddedilmesi.
   - Kaynak: WS-1.3a planı, 2026-10-16.
 
-- [ ] **T192 (P2)** - operasyon - **Varsayılan yedek dizini normal bir terminalde doğrulanmadı (paketli uygulama yönlendirmesi)**
-  - Neden: Claude masaüstü uygulamasının (MSIX paketi) alt süreçlerinde `%LOCALAPPDATA%` altına
-    yeni yazılan klasör paketin özel `LocalCache`'ine yönleniyor; uygulama kaldırılınca silinir.
-    WS-1.3a'nın elle doğrulaması (W1) bu yüzden gerçek `%LOCALAPPDATA%\stok\yedek`'e değil
-    `...\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Local\stok\yedek`'e yazdı. Komut bunu artık
-    "Hedef" satırında ve bir uyarıyla söylüyor (`relocationNote`), ama normal terminaldeki
-    davranış ölçülmedi.
-  - Kanıt: 2026-10-16 W1/W2 çıktısı; `(Get-Item $env:LOCALAPPDATA\stok).Target` paket yolunu verdi.
-  - Bağlı: `OPS-10`, `OPS-11` (P-0'da pilot laptopunda komut zaten normal terminalden koşacak).
-  - Doğrula: Claude dışındaki bir terminalde `pnpm db:backup` ve `pnpm db:backup --status`;
-    "Hedef" `C:\Users\<kullanıcı>\AppData\Local\stok\yedek`, yönlendirme uyarısı yok.
-  - Kaynak: WS-1.3a BUILD, W1, 2026-10-16.
-
 - [ ] **T188 (P2)** - db - **`tenant:create`, tablolar başka şemaya çözülürse oraya yazabilir**
   - Neden: T187'de seed'e eklenen şema kontrolü (`search_path` veritabanı/rol ayarı ya da rolle
     aynı adlı şema) `tenant:create`'te yok; `provisionTenant` tablo adlarını şemasız yazıyor.
@@ -478,6 +465,15 @@ FIFO maliyet.
 ## Kapananlar
 
 _(Bu dosyada açılıp kapanan görevler buraya iner. T1–T119'un kapanış kayıtları arşivde.)_
+
+- [x] **T192 (P2)** - operasyon - **Varsayılan yedek dizini normal bir terminalde doğrulanmadı (paketli uygulama yönlendirmesi)**
+  - Sorun: Claude masaüstü uygulamasının (MSIX paketi) alt süreçlerinde `%LOCALAPPDATA%` altına
+    yeni yazılan klasör paketin özel `LocalCache`'ine yönleniyor; WS-1.3a'nın elle doğrulaması (W1)
+    bu yüzden gerçek `%LOCALAPPDATA%\stok\yedek`'i değil paket klasörünü sınadı. Komut bunu
+    "Hedef" satırında ve bir uyarıyla söylüyor (`relocationNote`).
+  - Kapanış (2026-10-16): kullanıcı Claude dışındaki normal bir Windows terminalinde
+    `pnpm db:backup` ve `pnpm db:backup --status`'u çalıştırdı, ikisi de beklenen sonucu verdi
+    (kullanıcı bildirimi; çıktı oturuma aktarılmadı).
 
 - [x] **T187 (P1)** - güvenlik - **Silme kapısının gösterdiği hedef ile seed'in bağlandığı hedef ayrışabiliyordu**
   - Sorun: `describeTarget` hedefi adresin ana makine, port ve yolundan okuyordu; postgres.js

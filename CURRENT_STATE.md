@@ -48,9 +48,13 @@ testleri geçici compose projeleriyle), drift "No schema changes", `next build` 
 Playwright WS-1.1'den beri koşulmadı (arayüz değişmedi; e2e demo veritabanına yazıyor, T150);
 son e2e sonucu yukarıdaki 24/24.
 
-GitHub CI: `development` `b12f5b3` (WS-1.2b) koşu #70 yeşil; üç iş de geçti (typecheck + test,
-Windows lint + typecheck + derleme, demo yolu). WS-1.3a commit'leri (`4fef58f` refactor ve
-yedek) henüz push edilmedi; CI sonucu push'tan sonra yazılır. `581f291` (#68) ilk denemede
+GitHub CI: `development` `4fef58f` (WS-1.3a refactor) koşu #71 yeşil; üç iş de geçti (typecheck +
+test, Windows lint + typecheck + derleme, demo yolu). `94c1151` (WS-1.3a yedek) koşu #72 kırmızı:
+demo işi (yedek ve durum adımı dahil) ve Windows işi yeşil, test işinde `backup.test.ts`'in
+hazırlığı migration'da `ECONNRESET` aldı ve 8 test atlandı. Neden test düzeneği: `waitReady` geçici
+compose projesini bekleme betiğine aktarmıyordu, CI'da yalnız TCP'ye bakıldı ve Linux
+`docker-proxy`'si portu PostgreSQL hazır olmadan kabul etti. Düzeltme yerelde, CI'da henüz
+koşmadı. `581f291` (#68) ilk denemede
 Linux web derlemesinde Turbopack font çözümleme hatasıyla kırmızıydı, ikinci deneme yeşil; kök
 neden bilinmiyor, tekrar ederse ayrı incelenecek. master'daki son koşu #44 (2026-09-14) yeşil.
 9 Dependabot PR açık, 3'ü kırmızı (T140).
@@ -90,8 +94,8 @@ okutup `/hareket`te açma (`ENABLE_PHONE_SCANNER`, `PRD-12`, `ARC-14`).
   tam okuma + SHA-256 ile doğrulanmış döküm, son 14 tanesi saklanıyor, `--status` durumu
   gösteriyor. Geri yükleme tatbikatı (WS-1.4) ve zamanlama (WS-1.3b) yok; dökümün geri
   yüklenebilirliği henüz kanıtsız. Döküm şifresiz (S20). Paketli bir uygulamanın (Claude
-  masaüstü) terminalinden varsayılan dizin uygulamanın özel klasörüne yönleniyor; normal
-  terminalde doğrulanmadı (T192).
+  masaüstü) terminalinden varsayılan dizin uygulamanın özel klasörüne yönleniyor (komut
+  uyarıyor); normal terminalde varsayılan dizin doğrulandı (T192, 2026-10-16).
 
 ## P0 / P1 blocker'lar
 
@@ -120,7 +124,7 @@ yalnız yerel Docker ve uygulamanın `DATABASE_URL`'inin gösterdiği veritaban�
 OneDrive, göreli ve ağ yollarını reddediyor; saklama yalnız başarılı koşudan sonra, son 14.
 `--status` "kayıtlı" ile "şimdi doğrulanan"ı (yalnız en yeni, SHA-256) ayırıyor. Hazırlık
 commit'i `4fef58f`: Docker katmanı `db-reset.ts`'ten `docker.ts`'e taşındı, `db:reset` çıktısı
-bayt bayt aynı. Ayrıntı: `SECURITY_MODEL` S20, README. Açık: T190 (1.3b'den önce), T192, T193, T194.
+bayt bayt aynı. Ayrıntı: `SECURITY_MODEL` S20, README. Açık: T190 (1.3b'den önce), T193, T194.
 
 Öncesinde **WS-1.2b — Güvenli `db:reset`** (`b12f5b3`, CI #70): volume adıyla onay, ağsız
 geçici kapsayıcıda izole inceleme, yalnız tanınan kümede silme. Geliştirme volume'ünde ön kontrol
