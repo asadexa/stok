@@ -239,6 +239,8 @@ describe('db:backup, izole Docker projesinde (WS-1.3a)', () => {
 
   it('doğrulanmış döküm, .sha256, son başarı ve log; kesinti yok; veri çıktıya ve log\'a sızmıyor', () => {
     expect(first.status, first.output).toBe(0)
+    // CI demo adımı bu satırı arıyor: çıkış 0 tek başına işin yapıldığını göstermiyor (T196).
+    expect(first.output).toContain('✓ Yedek alındı ve doğrulandı')
     const names = readdirSync(firstDir)
     const [dump] = inventory(names).recorded
     expect(dump).toBeDefined()

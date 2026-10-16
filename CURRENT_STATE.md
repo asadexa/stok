@@ -42,9 +42,9 @@ koruması çalışıyor, "Bağlantıyı kes" telefon oturumunu kapatıyor. Andro
 denenmedi. Yerelde ayrıca Edge + sahte kamera aygıtı + sentetik EAN-13 ile
 uçtan uca geçti (kamera yolu CI'da yok: T169).
 
-WS-1.3a (2026-10-16, yerel): lint 207 dosya 0 tanı, typecheck (4 paket), test **1081/1081**
-(shared 69, db 294, core 550, web 168; Docker'lı `db-reset`, `db-reset-target` ve `backup`
-testleri geçici compose projeleriyle), drift "No schema changes", `next build` PASS (29 rota).
+T196 düzeltmesi (2026-10-16, yerel): lint 209 dosya 0 tanı, typecheck (4 paket), test **1096/1096**
+(shared 69, db 309, core 550, web 168; Docker'lı `db-reset`, `db-reset-target` ve `backup`
+testleri geçici compose projeleriyle), drift "No schema changes", `next build` PASS.
 Playwright WS-1.1'den beri koşulmadı (arayüz değişmedi; e2e demo veritabanına yazıyor, T150);
 son e2e sonucu yukarıdaki 24/24.
 
@@ -127,7 +127,9 @@ OneDrive, göreli ve ağ yollarını reddediyor; saklama yalnız başarılı ko�
 `--status` "kayıtlı" ile "şimdi doğrulanan"ı (yalnız en yeni, SHA-256) ayırıyor. Commit'ler:
 `4fef58f` hazırlık (Docker katmanı `db-reset.ts`'ten `docker.ts`'e taşındı, `db:reset` çıktısı
 bayt bayt aynı), `94c1151` yedek, `1e47741` test hazırlığı düzeltmesi; CI #73 yeşil. Ayrıntı:
-`SECURITY_MODEL` S20, README. Açık: T190 (1.3b'den önce), T191, T193, T194, T195.
+`SECURITY_MODEL` S20, README. Bağımsız REVIEW: PASS WITH RISKS; bulgusu T196 (CLI'ın bağlantılı ya
+da uzantısız yoldan sessizce 0 dönmesi) düzeltildi. Açık: T190 (1.3b'den önce), T191, T193–T195,
+T197–T199.
 
 Öncesinde **WS-1.2b — Güvenli `db:reset`** (`b12f5b3`, CI #70): volume adıyla onay, ağsız
 geçici kapsayıcıda izole inceleme, yalnız tanınan kümede silme. Geliştirme volume'ünde ön kontrol

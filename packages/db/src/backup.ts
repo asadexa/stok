@@ -15,7 +15,6 @@ import { appendFile, open, rename, rm, unlink } from 'node:fs/promises'
 import { basename, dirname, join, resolve } from 'node:path'
 import process from 'node:process'
 import { pipeline } from 'node:stream/promises'
-import { pathToFileURL } from 'node:url'
 import { config } from 'dotenv'
 import {
   BACKUP_DIR_ENV,
@@ -51,6 +50,7 @@ import {
   syncRootsFromEnv,
   tocCommand,
 } from './backup-policy'
+import { isCliEntry } from './cli-entry'
 import { DockerRefused, ROOT, type Target, dockerEndpoint, dockerOk, lines, targetFromContainer } from './docker'
 import { type DatabaseTarget, describeTarget, formatTarget } from './target'
 import { isLocalDockerEndpoint } from './wipe-guard'
@@ -541,7 +541,8 @@ async function main(): Promise<number> {
   }
 }
 
-// Testler `verifyDump`'ı içe aktarıyor; CLI yalnız doğrudan çalıştırılınca koşar.
-if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
+// Testler `verifyDump`'ı içe aktarıyor; CLI yalnız doğrudan çalıştırılınca
+// koşar, junction/symlink içeren yoldan da (`cli-entry.ts`).
+if (isCliEntry(import.meta.url, process.argv[1])) {
   process.exitCode = await main()
 }

@@ -145,7 +145,8 @@ güncellenir. Yeni tehdit yeni ID alır; ID yeniden kullanılmaz.
   `db-reset.test.ts` (gerçek Docker, her koşuda geçici `stok_test_reset_*` projesi),
   `db-reset-target.test.ts` (Docker katmanının retleri: compose araması, kapsayıcı
   yok, CLI yok, volume projeye ait değil), `schema-sync.test.ts` (reset izin
-  listesi migration'larla senkron).
+  listesi migration'larla senkron), `cli-entry.test.ts` (reset junction/symlink ve uzantısız
+  yoldan da çalışıyor, çıktısız 0 dönmüyor: T196).
 - **Açık:** "yerel" adrese bakılarak belirleniyor: `localhost`'a tünellenmiş bir
   üretim veritabanı YEREL görünür; orada seed'i yalnız seed'e ait olmayan kiracı
   kapısı durdurur. Veritabanı sahibinin `pg_catalog`'u arama yolunda sona koyup
@@ -277,13 +278,17 @@ güncellenir. Yeni tehdit yeni ID alır; ID yeniden kullanılmaz.
   - Saklama yalnız başarılı koşudan sonra, en yeni 14 kayıtlı döküm; bu koşunun dökümü,
     desen dışı dosyalar ve `.sha256`'sız dökümler silinmez. Yeni dosyalar `wx` ile.
   - Log ve çıktı yalnız meta veri: satır verisi, parola ve bağlantı adresi yazılmıyor.
-- **Katman:** `packages/db/src/backup.ts`, `backup-policy.ts`, `docker.ts`.
+  - Komut, junction/symlink içeren ya da uzantısız yoldan çağrılsa da gerçekten çalışıyor;
+    çıktısız 0 dönmüyor. CI duman adımı çıkış kodunun yanında başarı satırlarını da arıyor (T196).
+- **Katman:** `packages/db/src/backup.ts`, `backup-policy.ts`, `docker.ts`, `cli-entry.ts`.
 - **Test:** `backup-policy.test.ts` (dizin kuralı win32 ve posix, TOC, saklama, kalıntı,
   durum), `backup.test.ts` (gerçek Docker, geçici `stok_test_backup_*` projesi: kesik ve
   bozuk arşiv reddi, yanlış veritabanı arşivi, yasak dizin, uzak uç, yanlış
   `DATABASE_URL`, saklama, `pg_dump` hatası, durmuş kapsayıcı, `--status` bozulmayı
   görüyor). On koruma `dogrula` ile kaldırılınca kırmızı görüldü (WS-1.3a). M1 ölçümü:
   kesik ve baytı bozulmuş arşivde `pg_restore --list` çıkış 0, tam okuma ret.
+  `cli-entry.test.ts` (iki CLI gerçek yol, bağlantı ve uzantısız yol üzerinden; içe aktarma CLI
+  başlatmıyor).
 - **Açık:**
   - Döküm şifresiz; diskte okunabilir. Pilot makinesinde BitLocker kontrolü P-0'ın
     parçası (`OPS-11`). Özel bir `STOK_BACKUP_DIR`'in erişim yetkileri denetlenmiyor.
@@ -300,6 +305,9 @@ güncellenir. Yeni tehdit yeni ID alır; ID yeniden kullanılmaz.
     döndürür; zamanlamadan (WS-1.3b) önce ele alınacak (T190).
   - `--status` yalnız en yeni dökümün SHA-256'sını yeniden hesaplıyor; geri
     yüklenebilirliğin kanıtı WS-1.4 tatbikatı.
+  - Kaynağın uygulamanınki olduğu port numarasıyla doğrulanıyor, sunucu kimliğiyle değil:
+    `localhost`/`::1` aynı portta başka bir loopback adresindeki ikinci bir PostgreSQL'e
+    gidebilir (T198, doğrulanmadı).
 
 ---
 

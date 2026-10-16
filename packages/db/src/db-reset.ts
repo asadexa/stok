@@ -1,8 +1,8 @@
 import { spawnSync } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
-import { join, resolve } from 'node:path'
+import { join } from 'node:path'
 import process from 'node:process'
-import { pathToFileURL } from 'node:url'
+import { isCliEntry } from './cli-entry'
 import {
   DATA_DIR,
   DockerRefused,
@@ -420,7 +420,8 @@ async function main(): Promise<number> {
   }
 }
 
-// Testler saf fonksiyonları içe aktarıyor; CLI yalnız doğrudan çalıştırılınca koşar.
-if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
+// Testler saf fonksiyonları içe aktarıyor; CLI yalnız doğrudan çalıştırılınca
+// koşar, junction/symlink içeren yoldan da (`cli-entry.ts`).
+if (isCliEntry(import.meta.url, process.argv[1])) {
   process.exitCode = await main()
 }

@@ -227,12 +227,32 @@ jobs:
       # compose `db` ve `pnpm demo`nun ürettiği `.env`. Asıl kanıt test
       # işindeki `backup.test.ts`; bu adım komut zincirini sınıyor. Döküm
       # koşucunun geçici dizininde kalıyor, hata artefaktına girmiyor.
+      #
+      # YEŞİL İÇİN OLUMLU KANIT ŞART (T131'deki ilke). CLI'ın giriş kontrolü
+      # yanlış dönünce komut hiçbir şey yapmadan 0 ile çıkıyordu (T196);
+      # yalnız çıkış koduna bakan adım bunu "yedek alındı" sayardı. Bu yüzden
+      # her komutun başarı satırı da aranıyor, yoksa adım kırmızı.
       - name: Yedek ve durum (kullanıcının komutu)
         env:
           STOK_BACKUP_DIR: ${{ runner.temp }}/yedek
         run: |
-          pnpm db:backup
-          pnpm db:backup --status
+          # Çıktı aranmak için yakalanıyor ve başarısızlıkta da basılıyor.
+          expect_output() {
+            local expected="$1" out
+            shift
+            if ! out="$("$@" 2>&1)"; then
+              printf '%s\n' "$out"
+              echo "::error::$* başarısız oldu (çıktı yukarıda)."
+              exit 1
+            fi
+            printf '%s\n' "$out"
+            if ! printf '%s\n' "$out" | grep -qF "$expected"; then
+              echo "::error::$* '$expected' satırını yazmadı; işi yaptığı kanıtlanamadı."
+              exit 1
+            fi
+          }
+          expect_output '✓ Yedek alındı ve doğrulandı' pnpm db:backup
+          expect_output 'SHA-256 eşleşiyor' pnpm db:backup --status
 
       - name: Web derlemesi
         run: pnpm --filter @stok/web run build

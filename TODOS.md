@@ -7,7 +7,7 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
 **Kurallar**
 
 - ID `T<n>`. Arşivdeki görevler numaralarını korur. Yeni görev en büyük
-  numaradan devam eder — **sıradaki boş numara: T196**. Numara yeniden
+  numaradan devam eder — **sıradaki boş numara: T200**. Numara yeniden
   kullanılmaz.
 - Biçim: `- [ ] **T<n> (P0–P3)** - <alan> - **Başlık**`. Altında kısa
   **Neden / Kanıt / Bağlı / Doğrula / Kaynak** satırları.
@@ -365,6 +365,40 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
     betik "hazır" demeden önce yayımlanan porta `SELECT 1` göndersin ya da `pg_isready`'yi
     `-h 127.0.0.1` ile TCP'den sorsun. Düzelince `backup.test.ts`'teki `waitForQuery` kaldırılabilir mi bakılır.
   - Kaynak: WS-1.3a CI #72 analizi, 2026-10-16.
+- [ ] **T197 (P3)** - test - **Doğrulamanın CLI'da son adı engellediği entegrasyon testiyle kanıtlı değil**
+  - Neden: `backup.test.ts`'in 2. testi `verifyDump`'ı doğrudan çağırıyor, 7. testi `pg_dump`
+    aşamasında düşüyor. `backup()` içindeki `verifyDump` çağrısı kaldırılsa ya da sonucu yok
+    sayılsa bütün testler yeşil kalır. Bugün sıra doğru; ileride bir düzenleme doğrulanmamış
+    dökümü son adla ve `.sha256`'yla kaydedebilir, saklama da sağlam eskileri silebilir.
+  - Kanıt: kod okuması, koşulmadı. `packages/db/src/backup.ts:384` (`verifyDump`, `renameNew`'den
+    önce); `backup.test.ts` test 2 ve 7. WS-1.3a `dogrula` D1 yalnız `verifyDump`'ın içini sınadı.
+  - Doğrula: kancasız entegrasyon testi. Geçici projede `current_stock`'un adını değiştir, CLI'ı
+    koş: çıkış 1, içindekiler reti, son adlı döküm ve `.partial` yok, `failed` log satırı var; adı
+    geri al. `dogrula`: `verifyDump` çağrısı kaldırılınca bu test kırmızı yanmalı.
+  - Bağlı: `OPS-10`, `SECURITY_MODEL` S20.
+  - Kaynak: WS-1.3a bağımsız REVIEW (Y2), 2026-10-16.
+- [ ] **T198 (P3)** - güvenlik - **Yedek kaynağının `DATABASE_URL` kontrolü sunucunun kimliğini değil port numarasını karşılaştırıyor**
+  - Neden: `assertAppDatabase` uygulama adresinin yerel olduğuna, portunun compose `db`'nin
+    yayımladığı portla aynı olduğuna ve veritabanı adının `stok` olduğuna bakıyor. `localhost` ya
+    da `::1` adresi, aynı port numarasında başka bir loopback adresinde dinleyen ikinci bir
+    PostgreSQL'e gidebilir. Uygulama oraya bağlıyken komut Docker'daki veritabanını
+    "uygulamanınki" diye yedekler.
+  - Kanıt: doğrulanmadı (çıkarım). `packages/db/src/backup.ts:214-216`. Bu makinede tetikleyici
+    yok: S19 ölçümünde tek dinleyici `127.0.0.1:5433`; `.env.example` `127.0.0.1` kullanıyor.
+  - Doğrula: pilottan önce `DATABASE_URL`'in `127.0.0.1` olduğunu denetle. Daha güçlü kontrol
+    gerekirse uygulamanın bağlantısından ve kapsayıcıdan aynı sunucu kimliği okunup karşılaştırılır.
+    Sınama: aynı portta `::1`'de ikinci bir PostgreSQL dinlerken komut reddetmeli.
+  - Bağlı: `OPS-10`, `SECURITY_MODEL` S19, S20.
+  - Kaynak: WS-1.3a bağımsız REVIEW (Y3), 2026-10-16.
+- [ ] **T199 (P3)** - operasyon - **`db:backup --status`, log'un son satırı okunamazsa "Son koşu" satırını hiç basmıyor**
+  - Neden: `lastLogEntry` bozuk son satırda `null` dönüyor; yorumu "durum 'bilinmiyor' der"
+    diyor. Ama `statusReport` "Son koşu" satırını yalnız `lastRun` varsa basıyor. Bozuk bir son
+    satır başarısız bir koşuyu gizler. Çıkış kodu bu satıra bakmıyor.
+  - Kanıt: `packages/db/src/backup-policy.ts:322` (yorum) ve `:400` (`if (s.lastRun)`).
+  - Doğrula: saf durum testi. Log boş değil ama son satırı bozuksa "Son koşu : bilinmiyor (log
+    okunamadı)" görünür; log yoksa satır yine yok.
+  - Bağlı: `OPS-10`, WS-1.3b (gözetimsiz koşuda son koşunun görünürlüğü).
+  - Kaynak: WS-1.3a bağımsız REVIEW (Y4), 2026-10-16.
 
 ## Product / Future
 
@@ -482,6 +516,23 @@ FIFO maliyet.
 ## Kapananlar
 
 _(Bu dosyada açılıp kapanan görevler buraya iner. T1–T119'un kapanış kayıtları arşivde.)_
+
+- [x] **T196 (P2)** - operasyon - **CLI, junction/symlink içeren ya da uzantısız yoldan çağrılınca hiçbir şey yapmadan 0 dönüyordu**
+  - Sorun: `backup.ts` ve `db-reset.ts` `main`'i `resolve(process.argv[1])` ile `import.meta.url`
+    eşitse koşturuyordu. Node ana modülü realpath ile çözüyor, `argv[1]`'i çözmüyor. Yol bir
+    junction ya da symlink içerince `node`/`tsx` ile doğrudan çağrılan `db:backup`, `--status` ve
+    `db:reset` çıktısız 0 dönüyordu: yedekte "yedek var" yanılgısının sessiz biçimi (S20). Uzantısız
+    çağrı da (`tsx src/backup`) aynı sonucu veriyordu: tsx yolu `.ts`'e çözüyor, `argv[1]` uzantısız
+    kalıyor. CI duman adımı yalnız çıkış koduna baktığı için bunu göremezdi. pnpm üzerinden çağrı
+    etkilenmiyordu: pnpm paket dizinini gerçek yola çeviriyor (ölçüldü).
+  - Kapanış (2026-10-16): ortak `packages/db/src/cli-entry.ts` iki tarafı da JS `realpathSync` ile
+    çözüyor; `argv[1]` yoksa modülün uzantısıyla yeniden deniyor. `cli-entry.test.ts` iki CLI'ı
+    gerçek yol, bağlantı (Windows'ta junction, CI'da symlink) ve uzantısız bağlantı üzerinden
+    koşuyor, içe aktarmanın CLI başlatmadığını gösteriyor. Eski kodda 3 bağlantı testi kırmızıydı
+    (çıkış 0). `dogrula`: realpath kaldırılınca 4, yalnız `argv[1]` çözülünce 1, iki CLI eski
+    kontrole dönünce 3, uzantı eki kaldırılınca 4, uzantı her zaman eklenince 1, dış `try`
+    kaldırılınca 1 test kırmızı yandı. CI demo adımı artık başarı satırlarını da arıyor. Kaynak:
+    WS-1.3a bağımsız REVIEW (Y1).
 
 - [x] **T192 (P2)** - operasyon - **Varsayılan yedek dizini normal bir terminalde doğrulanmadı (paketli uygulama yönlendirmesi)**
   - Sorun: Claude masaüstü uygulamasının (MSIX paketi) alt süreçlerinde `%LOCALAPPDATA%` altına
