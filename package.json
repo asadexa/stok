@@ -8,6 +8,7 @@
     "node": ">=22 <25"
   },
   "scripts": {
+    "db:backup": "pnpm --filter @stok/db run backup",
     "db:down": "docker compose down",
     "db:logs": "docker compose logs -f db",
     "db:reset": "pnpm --filter @stok/db run reset",

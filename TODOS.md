@@ -7,7 +7,7 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
 **Kurallar**
 
 - ID `T<n>`. Arşivdeki görevler numaralarını korur. Yeni görev en büyük
-  numaradan devam eder — **sıradaki boş numara: T190**. Numara yeniden
+  numaradan devam eder — **sıradaki boş numara: T195**. Numara yeniden
   kullanılmaz.
 - Biçim: `- [ ] **T<n> (P0–P3)** - <alan> - **Başlık**`. Altında kısa
   **Neden / Kanıt / Bağlı / Doğrula / Kaynak** satırları.
@@ -143,6 +143,32 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
     T90'dan önce yapılmalı.
 
 ## P2
+
+- [ ] **T190 (P2)** - operasyon - **Zamanlanmış yedekten (WS-1.3b) önce: kuşak koruması ve `pg_dump` bekleme sınırı**
+  - Neden: WS-1.3a'nın saklaması volume kuşağı ayırmıyor; kazara `db:reset` (ya da Docker Desktop
+    verisinin silinmesi) sonrası 14 başarılı koşu reset öncesi bütün dökümleri döndürür. Elle
+    kullanımda boş uygulama hemen fark edilir; gözetimsiz günlük koşuda iki hafta içinde sessizce
+    olur. Ayrıca `pg_dump` tablo kilidini sınırsız bekliyor (ör. süren bir migration): elle koşuda
+    Ctrl+C yeter, zamanlanmış koşu asılı kalır.
+  - Kanıt: WS-1.3a planı (hazy-humming-flurry) E-8 ve E-11, 1.3b'ye ertelendi;
+    `packages/db/src/backup-policy.ts` `planRetention`, `dumpCommand`.
+  - Bağlı: WS-1.3b, `OPS-10`.
+  - Doğrula: reset öncesi ve sonrası damgalı sahte dökümlerle saklama testi (eski kuşak silinmez);
+    kilit tutan bir oturum açıkken `--lock-wait-timeout` ile yedeğin süre içinde reddedilmesi.
+  - Kaynak: WS-1.3a planı, 2026-10-16.
+
+- [ ] **T192 (P2)** - operasyon - **Varsayılan yedek dizini normal bir terminalde doğrulanmadı (paketli uygulama yönlendirmesi)**
+  - Neden: Claude masaüstü uygulamasının (MSIX paketi) alt süreçlerinde `%LOCALAPPDATA%` altına
+    yeni yazılan klasör paketin özel `LocalCache`'ine yönleniyor; uygulama kaldırılınca silinir.
+    WS-1.3a'nın elle doğrulaması (W1) bu yüzden gerçek `%LOCALAPPDATA%\stok\yedek`'e değil
+    `...\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Local\stok\yedek`'e yazdı. Komut bunu artık
+    "Hedef" satırında ve bir uyarıyla söylüyor (`relocationNote`), ama normal terminaldeki
+    davranış ölçülmedi.
+  - Kanıt: 2026-10-16 W1/W2 çıktısı; `(Get-Item $env:LOCALAPPDATA\stok).Target` paket yolunu verdi.
+  - Bağlı: `OPS-10`, `OPS-11` (P-0'da pilot laptopunda komut zaten normal terminalden koşacak).
+  - Doğrula: Claude dışındaki bir terminalde `pnpm db:backup` ve `pnpm db:backup --status`;
+    "Hedef" `C:\Users\<kullanıcı>\AppData\Local\stok\yedek`, yönlendirme uyarısı yok.
+  - Kaynak: WS-1.3a BUILD, W1, 2026-10-16.
 
 - [ ] **T188 (P2)** - db - **`tenant:create`, tablolar başka şemaya çözülürse oraya yazabilir**
   - Neden: T187'de seed'e eklenen şema kontrolü (`search_path` veritabanı/rol ayarı ya da rolle
@@ -328,6 +354,13 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
   - Doğrula: üretim koduna test kancası eklemeden hata enjeksiyonu (ör. yerel soket/pipe
     üzerinden Docker API vekili) bulunursa bu dört senaryo `db-reset.test.ts`'e taşınır.
   - Kaynak: WS-1.2b commit öncesi inceleme, 2026-10-14.
+  - Ek (WS-1.3a, 2026-10-16): Docker katmanı `docker.ts`'e taşındı; `db-reset-target.test.ts`
+    dört reti sabitledi (compose araması, kapsayıcı yok, CLI yok, volume projeye ait değil).
+    Hâlâ testsiz: "birden çok kapsayıcı" ve "compose servisi değil" (`compose ps` süzgeci
+    yüzünden kancasız üretilemiyor), "veri dizini volume değil" (ayrı bind kurulumu ister).
+- [ ] **T191 (P3)** - test - Geçici compose projesi kuran üç test dosyası (`db-reset.test.ts`, `db-reset-target.test.ts`, `backup.test.ts`) fikstürü kopya olarak taşıyor: compose JSON'u ve "gözden çıkarılabilir proje" ön koşulu ayrışabilir. `db-reset.test.ts`, WS-1.3a refactor'ünün davranış kanıtı olduğu için bilerek değiştirilmedi. WS-1.4 (tatbikat) dördüncü kullanıcı olunca ortak test modülüne alınır. Kaynak: WS-1.3a, 2026-10-16.
+- [ ] **T193 (P3)** - güvenlik - Yedek dizini kuralı yalnız OneDrive'ı (ortam değişkenleri) tanıyor; Dropbox, Google Drive ve benzeri senkron klasörleri algılanmıyor. `STOK_BACKUP_DIR` böyle bir klasörü gösterirse döküm (parola özetleri, kişisel veri, alış fiyatları) buluta gider. Doğrulanmadı (bu makinede başka istemci yok). `SECURITY_MODEL` S20. Kaynak: WS-1.3a, 2026-10-16.
+- [ ] **T194 (P3)** - db - `pg_dump` çıktısı akışla alındığı için arşivde veri ofseti yok: `pg_restore -j` (paralel geri yükleme) kullanılamıyor, sıralı geri yükleme çalışır. 12 MB'ta önemsiz; veritabanı büyürse geri yükleme süresi uzar. Seçenek: kapsayıcıda dosyaya döküm + `docker cp` (WS-1.3a planı Soru 4, alternatif a). Doğrula: WS-1.4'te sıralı geri yükleme süresi ölçülür. Kaynak: WS-1.3a, 2026-10-16.
 
 ## Product / Future
 

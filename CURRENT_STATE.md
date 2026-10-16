@@ -4,7 +4,7 @@ Yalnız BUGÜNÜN gerçeği. Her merge'te ya da durum değiştiğinde güncellen
 satırlar silinir (tarihçe git'te). Ayrıntı yazılmaz: işler → `TODOS.md`,
 kararlar → `DECISIONS.md`, model → `PROJECT_BRAIN.md`.
 
-**Tarih:** 2026-10-13 · **Çalışma branch'i:** `development` · **Stabil referans:** `master`
+**Tarih:** 2026-10-16 · **Çalışma branch'i:** `development` · **Stabil referans:** `master`
 (`master` = `dac05ff`, devralma öncesi son kod; geliştirme `development`'ta yapılır)
 
 ## Deploy
@@ -42,17 +42,17 @@ koruması çalışıyor, "Bağlantıyı kes" telefon oturumunu kapatıyor. Andro
 denenmedi. Yerelde ayrıca Edge + sahte kamera aygıtı + sentetik EAN-13 ile
 uçtan uca geçti (kamera yolu CI'da yok: T169).
 
-WS-1.2b (2026-10-14, yerel): lint 201 dosya 0 tanı, typecheck, test **991/991** (shared 69,
-db 204, core 550, web 168; `db-reset.test.ts` gerçek Docker'da geçici projeyle ~115 sn), drift
-"No schema changes", `next build` PASS. Playwright WS-1.1'den beri koşulmadı (arayüz değişmedi;
-e2e demo veritabanına yazıyor, T150); son e2e sonucu yukarıdaki 24/24. GitHub CI sonucu
-commit'ten sonra yazılır.
+WS-1.3a (2026-10-16, yerel): lint 207 dosya 0 tanı, typecheck (4 paket), test **1081/1081**
+(shared 69, db 294, core 550, web 168; Docker'lı `db-reset`, `db-reset-target` ve `backup`
+testleri geçici compose projeleriyle), drift "No schema changes", `next build` PASS (29 rota).
+Playwright WS-1.1'den beri koşulmadı (arayüz değişmedi; e2e demo veritabanına yazıyor, T150);
+son e2e sonucu yukarıdaki 24/24.
 
-GitHub CI: `development` `aab203b` (PRD-13) koşu #69 yeşil; üç iş de geçti (typecheck + test,
-Windows lint + typecheck + derleme, demo yolu). `581f291` (T187/T186) koşu #68 ilk denemede Linux
-web derlemesinde Turbopack font çözümleme hatasıyla kırmızı, aynı commit'in ikinci denemesi yeşil;
-kök neden bilinmiyor, tekrar ederse ayrı incelenecek. Doğrulama: GitHub API, 2026-10-14.
-master'daki son koşu #44 (2026-09-14) yeşil.
+GitHub CI: `development` `b12f5b3` (WS-1.2b) koşu #70 yeşil; üç iş de geçti (typecheck + test,
+Windows lint + typecheck + derleme, demo yolu). WS-1.3a commit'leri (`4fef58f` refactor ve
+yedek) henüz push edilmedi; CI sonucu push'tan sonra yazılır. `581f291` (#68) ilk denemede
+Linux web derlemesinde Turbopack font çözümleme hatasıyla kırmızıydı, ikinci deneme yeşil; kök
+neden bilinmiyor, tekrar ederse ayrı incelenecek. master'daki son koşu #44 (2026-09-14) yeşil.
 9 Dependabot PR açık, 3'ü kırmızı (T140).
 
 ## Çalışan ana kapsam (web)
@@ -86,8 +86,12 @@ okutup `/hareket`te açma (`ENABLE_PHONE_SCANNER`, `PRD-12`, `ARC-14`).
   (T167); UPC-A 12/13 hane ölçülmedi (T168).
 - **Ağ açıklığı**: veritabanı portu yalnız `127.0.0.1` (WS-1.1, S19), ama parolalar repodaki
   varsayılanlar; uygulama sunucusu (`next start`) yerel ağda HTTP ile açık (T183).
-- **Yedek / geri yükleme**: yerel yedek aracı ve tatbikat yok (WS-1.3a, WS-1.4); `pnpm db:reset`
-  artık doğrulanmış ve onaylı (WS-1.2b), ama yedek gelene kadar volume silme geri alınamaz.
+- **Yedek / geri yükleme**: yerel yedek var (`pnpm db:backup`, WS-1.3a, `OPS-10`): içindekiler +
+  tam okuma + SHA-256 ile doğrulanmış döküm, son 14 tanesi saklanıyor, `--status` durumu
+  gösteriyor. Geri yükleme tatbikatı (WS-1.4) ve zamanlama (WS-1.3b) yok; dökümün geri
+  yüklenebilirliği henüz kanıtsız. Döküm şifresiz (S20). Paketli bir uygulamanın (Claude
+  masaüstü) terminalinden varsayılan dizin uygulamanın özel klasörüne yönleniyor; normal
+  terminalde doğrulanmadı (T192).
 
 ## P0 / P1 blocker'lar
 
@@ -108,35 +112,29 @@ işaretli (öne çıkanlar `DAT-15`, `DAT-16`, `SEC-14`, `OPS-01`, `OPS-02`, `UX
 
 ## Son tamamlanan workstream
 
-**WS-1.2b — Güvenli `db:reset`** (2026-10-14): `docker compose down -v` kaldırıldı.
-Onaysız çağrı yalnız kullanım yazar; `--dry-run` canlı ve salt okunur ön kontrol yapar; gerçek
-sıfırlama volume adıyla onay ister, kapsayıcıyı durdurup volume'ü ağsız geçici kapsayıcıda inceler,
-ancak küme tanınırsa (yalnız `stok`/`postgres`/şablonlar, bilinen rol ve uygulama tabloları) ve
-hedef değişmediyse siler; aksi halde kapsayıcıyı geri açar. Geliştirme volume'ünde ön kontrol
-`stok_test_*` veritabanları yüzünden reddediyor (beklenen). Ayrıntı: `SECURITY_MODEL` S12, README.
+**WS-1.3a — Doğrulanmış yerel yedek** (2026-10-16, `OPS-10`): `pnpm db:backup` compose `db`'deki
+`stok`'u `pg_dump` ile akışla `.partial`'a alıyor; içindekiler (`dbname`, beş temel tablonun TABLE ve
+TABLE DATA girdileri) ve baştan sona okuma geçmeden döküm son adını ve `.sha256`'sını almıyor.
+`pg_restore --list` tek başına yetmiyor: kesik ve baytı bozulmuş arşivi geçirdi (M1 ölçümü). Kaynak
+yalnız yerel Docker ve uygulamanın `DATABASE_URL`'inin gösterdiği veritabanı; dizin kuralı repo içi,
+OneDrive, göreli ve ağ yollarını reddediyor; saklama yalnız başarılı koşudan sonra, son 14.
+`--status` "kayıtlı" ile "şimdi doğrulanan"ı (yalnız en yeni, SHA-256) ayırıyor. Hazırlık
+commit'i `4fef58f`: Docker katmanı `db-reset.ts`'ten `docker.ts`'e taşındı, `db:reset` çıktısı
+bayt bayt aynı. Ayrıntı: `SECURITY_MODEL` S20, README. Açık: T190 (1.3b'den önce), T192, T193, T194.
 
-Öncesinde **T187 + T186 — Silme hedefinin doğrulanması** (2026-10-13): hedef adresten
-kesin okunamıyorsa (sorgu parametresi, `%` kodlu ad, eksik port) yerel sayılmıyor; seed silmeden
-önce bağlanılan veritabanını yazılan adla ve tablolarının `public`'e çözüldüğünü karşılaştırıyor;
-`tenant:create` gösterilen ile bağlanılan veritabanı ayrışınca duruyor. Uzak hedef testi artık
-gerçekten erişilebilir bir adresle ve bağlantı sayacıyla sınıyor. Ayrıntı: TODOS T187, T186,
-`SECURITY_MODEL` S12. Açık kalan: T188 (P2, gerçek pilotta yeni kiracıdan önce).
-
-Öncesinde **WS-1.2a — Ortak silme kuralı** (`59e4d9f`, CI #67): seed'in silme kapısı yan etkisiz
-`packages/db/src/wipe-guard.ts`'e taşındı (demo kiracı kimlikleri ve saf karar); seed sorguyu
-kendisi yapıyor ve mesajları birebir aynı. Bilinçli tek sıkılaştırma: adreste veritabanı adı
-yoksa ve onay boşsa silme reddediliyor (T185). `db:reset` henüz bu kuralı kullanmıyor (WS-1.2b).
-Ayrıntı: TODOS T185, `SECURITY_MODEL` S12. WS-1.1'den (`42486cc`) açık doğrulama: başka bir
-cihazdan 5433 denemesi yapılmadı (T184).
+Öncesinde **WS-1.2b — Güvenli `db:reset`** (`b12f5b3`, CI #70): volume adıyla onay, ağsız
+geçici kapsayıcıda izole inceleme, yalnız tanınan kümede silme. Geliştirme volume'ünde ön kontrol
+`stok_test_*` veritabanları yüzünden reddediyor (beklenen). Ayrıntı: `SECURITY_MODEL` S12.
 
 ## Sıradaki workstream
 
 **WS-1 — Güvenlik ve Veri Koruma** (kullanıcı onaylı R-1 planı, 2026-10-13): sıra
-1.1 ✓ → 1.2a ✓ (ortak silme kuralı) → 1.2b ✓ (güvenli `db:reset`) → 1.3a (yedek) →
-1.4 (tatbikat) → 1.3b (zamanlama); ayrı şerit 1.5a/1.5b (tünel kapısı, T167). Her dilim ayrı onayla başlar.
-**Pilot ortamı:** WS-1.3a yedeği ve WS-1.4 tatbikatı geliştirilip o makinede yeşil geçmeden
-gerçek pilot laptopuna hiçbir WS-1 değişikliği uygulanmaz (ikisi de henüz yok). Tam saat dilimi
-işi (T122, `DAT-16`) bulut öncesi ayrıca.
+1.1 ✓ → 1.2a ✓ → 1.2b ✓ → 1.3a ✓ (yedek) → **1.4 (geri yükleme tatbikatı)** → 1.3b (zamanlama);
+ayrı şerit 1.5a/1.5b (tünel kapısı, T167). Her dilim ayrı onayla başlar. R-1'in 1.5b'si de var
+olmayan `scripts/pilot.mjs`'e dayanıyor; kendi planında yeniden değerlendirilecek.
+**Pilot ortamı** (`OPS-11`): doğrulanmış yedek ve geri yükleme tatbikatı pilot laptopunda yeşil
+geçmeden oraya hiçbir WS-1 değişikliği uygulanmaz; tatbikat henüz yok. Tam saat dilimi işi (T122,
+`DAT-16`) bulut öncesi ayrıca.
 
 ## Production blocker düzeltmeleri
 

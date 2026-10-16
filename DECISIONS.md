@@ -94,6 +94,8 @@ Tehdit ve koruma ayrıntısı `docs/SECURITY_MODEL.md`'de.
 | OPS-02 | Saatlik cron için Vercel Pro mu, harici zamanlayıcı mı | Open | PLAN T42.1, T115 | Hobby günde bir cron veriyor |
 | OPS-03 | Üretim veritabanı: `stok_app` önce güçlü parolayla ELLE yaratılır, sonra `init`; migration'ı insan çalıştırır (build adımında değil, doğrudan 5432); `MIGRATION_DATABASE_URL` uygulamanın çalışma ortamına konmaz | Active | runbook §1–§3 · T119 | Adımlar runbook'ta |
 | OPS-09 | Alarm/rapor ilkesi: sorun yoksa e-posta gitmez; ilk geçici hata alarm değildir; sağlık alarmı saatlik ve tekrarsız. Gürültü yapan alarm, alarmı öldürür | Active | PLAN T35, T36 | Kalıcı FAILED işler bunu bozuyor: T126 |
+| OPS-10 | Yerel (pilot) yedek, `pnpm db:backup`: yalnız compose `db` kapsayıcısındaki ve uygulamanın `DATABASE_URL`'inin gösterdiği yerel `stok` yedeklenir. Dizin `%LOCALAPPDATA%\stok\yedek` ya da `STOK_BACKUP_DIR`; repo içi, OneDrive, göreli ve `\\` önekli yollar reddedilir. "Doğrulanmış döküm" = içindekiler (TOC) + tam okuma + SHA-256; `pg_restore --list` tek başına yetmez (kesik arşivi geçiriyor). Son 14 kayıtlı döküm tutulur; silme yalnız başarılı koşudan sonra | Active | WS-1 R-1 (2026-10-13; K1, K2, K4, Q-3), WS-1.3a | Başka yere yedek ve uygulama içi gösterge yok; roller dökümde yok, gerçek kurtarma prosedürü ayrı (T129). Geri yükleme kanıtı WS-1.4. Kuşak koruması ve `pg_dump` bekleme sınırı 1.3b'den önce (T190). `SECURITY_MODEL` S20 |
+| OPS-11 | Pilot kapısı: doğrulanmış yedek (WS-1.3a) ve geri yükleme tatbikatı (WS-1.4) pilot laptopunda yeşil geçmeden oraya hiçbir WS-1 değişikliği uygulanmaz; elle alınan döküm bunun yerine geçmez | Active | WS-1 R-1 (SC-6), 2026-10-13 | Tatbikat henüz yok; pilot laptopuna dokunulmadı |
 
 ## Tasarım
 

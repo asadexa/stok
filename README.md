@@ -108,6 +108,29 @@ dahil), rol, şema ya da tablo varsa hiçbir şey silmeden durur ve kapsayıcıy
 yeniden açar; gözden çıkarılabilirse onları önce kendiniz silin. `stok`'ta demo
 dışı işletme varsa ayrıca `--wipe-non-demo-data=stok` gerekir.
 
+**Yerel yedek** (Docker kurulumu):
+
+```bash
+pnpm db:backup             # doğrulanmış döküm alır
+pnpm db:backup --status    # dizini okur; Docker'a gitmez, hiçbir şey yazmaz
+```
+
+Döküm compose `db` kapsayıcısındaki `stok` veritabanından alınır; uygulamanın
+`DATABASE_URL`'i başka bir veritabanını gösteriyorsa komut reddeder. Varsayılan dizin
+Windows'ta `%LOCALAPPDATA%\stok\yedek`; değiştirmek için tam yolla `STOK_BACKUP_DIR`
+(PowerShell: `$env:STOK_BACKUP_DIR = 'D:\yedek\stok'`). Repo içi, OneDrive altı, göreli
+ve ağ yolları reddedilir. Döküm ancak içindekiler tablosu ve baştan sona okuma geçince
+son adını (`stok-<UTC damga>Z.dump`) ve `.sha256`'sını alır; en yeni 14 tanesi tutulur,
+silme yalnız başarılı yedekten sonra yapılır. `--status` yalnız en yeni dökümün
+SHA-256'sını yeniden hesaplar. Bu komut geri yükleme denemez; geri yüklenebilirlik ayrı
+tatbikatla kanıtlanır.
+
+Döküm şifresizdir ve bütün işletmelerin verisini (parola özetleri ve alış fiyatları dahil)
+içerir: dizini yalnız sizin hesabınız okuyabilmeli. Claude masaüstü uygulaması gibi
+paketli bir uygulamanın terminalinden çalıştırılırsa varsayılan dizin uygulamanın özel
+klasörüne yönlenebilir (uygulama kaldırılınca silinir); komut bunu yazar. Kalıcı yedek
+için normal bir terminal kullanın.
+
 `--filter` ile çağırırken **`run` kelimesi zorunlu**: onsuz pnpm, Windows'ta
 `'migrate' is not recognized` hatası verir.
 
@@ -140,16 +163,17 @@ curl -X POST -H "Authorization: Bearer <CRON_SECRET>" http://localhost:3000/api/
 |---|---|
 | `pnpm lint` | Biome |
 | `pnpm typecheck` | Dört paketin tip kontrolü |
-| `pnpm test` | Birim + entegrasyon. Gerçek PostgreSQL gerekir; her paket kendi `stok_test_*` veritabanını sıfırdan kurar. `db:reset` testi Docker ister ve kendi geçici compose projesini açıp siler |
+| `pnpm test` | Birim + entegrasyon. Gerçek PostgreSQL gerekir; her paket kendi `stok_test_*` veritabanını sıfırdan kurar. `db:reset` ve `db:backup` testleri Docker ister ve kendi geçici compose projelerini açıp siler |
 | `pnpm --filter @stok/db exec drizzle-kit generate` | Şema ile migration'lar senkron mu ("No schema changes" beklenir) |
 | `pnpm --filter @stok/web run build` | Üretim derlemesi |
 | `pnpm --filter @stok/web run test:e2e` | Playwright; önce build gerekir, port 3000 boş olmalı, demo veritabanını kullanır |
 | `pnpm db:up` | Docker veritabanını aç ve hazır olana kadar bekle |
 | `pnpm db:reset --dry-run` / `--confirm-volume=<ad>` | Volume'ü sıfırlamadan önce salt okunur kontrol / doğrulanmış sıfırlama (yukarıda) |
+| `pnpm db:backup` / `--status` | Doğrulanmış yerel yedek / yedek dizininin durumu (yukarıda) |
 
 CI (GitHub Actions): lint, typecheck, gerçek PostgreSQL ile testler, migration
-drift, derleme, temiz checkout'tan `pnpm demo` + Playwright, ve Windows'ta
-lint/typecheck/derleme.
+drift, derleme, temiz checkout'tan `pnpm demo` + `pnpm db:backup` + Playwright, ve
+Windows'ta lint/typecheck/derleme.
 
 ## Ortam değişkenleri
 
@@ -165,6 +189,7 @@ Tam liste ve açıklamalar `.env.example`'da.
 | `SMTP_URL`, `REPORT_FROM_EMAIL` | e-posta için | Rapor ve alarm e-postaları |
 | `DB_POOL_MAX`, `DB_IDLE_TIMEOUT` | serverless'ta | Havuz boyutu ve boşta kapanma süresi |
 | `ENABLE_PHONE_SCANNER` | pilot | `true` iken telefonla okutma açık (`/tara`, `/api/tara/*`, `/hareket` paneli); yalnız `true`/`false`. Varsayılan kapalı |
+| `STOK_BACKUP_DIR` | yedek için | `pnpm db:backup` dizini, tam yol. Windows'ta varsayılan `%LOCALAPPDATA%\stok\yedek`; başka platformda zorunlu. Boş değer reddedilir |
 
 `NODE_ENV` bilerek tanımlanmaz: Next kendisi ayarlar.
 

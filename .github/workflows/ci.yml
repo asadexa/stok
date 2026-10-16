@@ -223,6 +223,17 @@ jobs:
       - name: Demo kurulumu (kullanıcının çalıştırdığı komut)
         run: pnpm demo --seed --no-server
 
+      # WS-1.3a — kullanıcının yedek komutu: kök takma ad → tsx → gerçek
+      # compose `db` ve `pnpm demo`nun ürettiği `.env`. Asıl kanıt test
+      # işindeki `backup.test.ts`; bu adım komut zincirini sınıyor. Döküm
+      # koşucunun geçici dizininde kalıyor, hata artefaktına girmiyor.
+      - name: Yedek ve durum (kullanıcının komutu)
+        env:
+          STOK_BACKUP_DIR: ${{ runner.temp }}/yedek
+        run: |
+          pnpm db:backup
+          pnpm db:backup --status
+
       - name: Web derlemesi
         run: pnpm --filter @stok/web run build
 

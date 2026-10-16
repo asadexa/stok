@@ -152,9 +152,10 @@ güncellenir. Yeni tehdit yeni ID alır; ID yeniden kullanılmaz.
   katalog fonksiyonlarını gölgelemesi kapsam dışı (öyle bir aktör veriyi doğrudan
   silebilir). `tenant:create` şema gölgesinde başka şemaya yazabilir (T188).
   `db:reset`'te inceleme sonrası kontrol ile silme arasındaki milisaniyelerde kasıtlı
-  paralel Docker müdahalesi; yedek (WS-1.3a) gelene kadar `docker volume rm` geri
-  alınamaz. Durdurma ve volume silme hatasındaki kurtarma yolları gerçek Docker'da
-  geçici hata enjeksiyonuyla doğrulandı, kalıcı testte yok (T189).
+  paralel Docker müdahalesi. `docker volume rm` geri alınamaz; silmeden önce
+  `pnpm db:backup` ile doğrulanmış döküm alınabiliyor (S20), ama geri yükleme kanıtı
+  WS-1.4 tatbikatına kadar yok. Durdurma ve volume silme hatasındaki kurtarma yolları
+  gerçek Docker'da geçici hata enjeksiyonuyla doğrulandı, kalıcı testte yok (T189).
 
 ### S13 — Kasa açığının gizlenmesi (fiyat manipülasyonu)
 - **Koruma:** liste fiyatını sunucu üründen okur ve harekete dondurur; istemcinin
@@ -257,6 +258,47 @@ güncellenir. Yeni tehdit yeni ID alır; ID yeniden kullanılmaz.
     bağlanabilir. Parola rotasyonu WS-1 dışında.
   - Gerçek ikinci bir cihazdan deneme yapılmadı; ret aynı makineden ağ adresleriyle ölçüldü.
   - Uygulama sunucusu (`next start`) yerel ağda HTTP ile bütün arayüzlerde açık (T183).
+
+### S20 — Yerel yedek dökümü (`pnpm db:backup`, WS-1.3a)
+- **Tehdit:** döküm bütün kiracıların verisini taşıyor (süper kullanıcıyla alınıyor, RLS'e
+  takılmıyor): parola özetleri, kişisel veri, alış fiyatları (INV-10). Yanlış yere yazılırsa
+  sızar (public repo, buluta senkron klasör); yanlış veritabanından alınırsa ya da yarım
+  kalırsa "yedek var" yanılgısı doğar; saklama yanlış çalışırsa sağlam yedeği siler.
+- **Koruma:**
+  - Dizin `%LOCALAPPDATA%\stok\yedek` ya da `STOK_BACKUP_DIR`. Gerçek yol (`realpath`,
+    junction/`subst`/eşlenmiş sürücü çözülerek) repo içiyse, OneDrive altındaysa, göreli,
+    sürücüsüz ya da `\\` önekliyse ret; dizin yaratılmadan önce ve sonra denetleniyor.
+    Gerçek konum istenenden farklıysa (paketli uygulama yönlendirmesi) çıktıda söyleniyor.
+  - Kaynak: yalnız yerel Docker ucu, compose `db` kapsayıcısı (`docker.ts` zinciri) ve
+    uygulamanın `DATABASE_URL`'inin gösterdiği yerel port ile `stok` veritabanı (`OPS-10`).
+  - Döküm `.partial`'a yazılıyor; içindekiler (`dbname: stok`, temel tabloların `TABLE` ve
+    `TABLE DATA` girdileri) ve tam okuma geçmeden son adını ve `.sha256`'sını almıyor.
+    Doğrulama veritabanına bağlanmıyor (`-d` yok); geri yükleme değil.
+  - Saklama yalnız başarılı koşudan sonra, en yeni 14 kayıtlı döküm; bu koşunun dökümü,
+    desen dışı dosyalar ve `.sha256`'sız dökümler silinmez. Yeni dosyalar `wx` ile.
+  - Log ve çıktı yalnız meta veri: satır verisi, parola ve bağlantı adresi yazılmıyor.
+- **Katman:** `packages/db/src/backup.ts`, `backup-policy.ts`, `docker.ts`.
+- **Test:** `backup-policy.test.ts` (dizin kuralı win32 ve posix, TOC, saklama, kalıntı,
+  durum), `backup.test.ts` (gerçek Docker, geçici `stok_test_backup_*` projesi: kesik ve
+  bozuk arşiv reddi, yanlış veritabanı arşivi, yasak dizin, uzak uç, yanlış
+  `DATABASE_URL`, saklama, `pg_dump` hatası, durmuş kapsayıcı, `--status` bozulmayı
+  görüyor). On koruma `dogrula` ile kaldırılınca kırmızı görüldü (WS-1.3a). M1 ölçümü:
+  kesik ve baytı bozulmuş arşivde `pg_restore --list` çıkış 0, tam okuma ret.
+- **Açık:**
+  - Döküm şifresiz; diskte okunabilir. Pilot makinesinde BitLocker kontrolü P-0'ın
+    parçası (`OPS-11`). Özel bir `STOK_BACKUP_DIR`'in erişim yetkileri denetlenmiyor.
+  - Yedek ve volume aynı diskte: disk arızasına ve cihaz kaybına karşı korumuyor (başka
+    yere yedek kapsam dışı, `OPS-10`).
+  - Döküm roller ve küme geneli nesneleri içermiyor; gerçek kurtarma prosedürü yazılmadı
+    (`OPS-10`, T129).
+  - Dropbox, Google Drive gibi diğer senkron klasörleri algılanmıyor (T193). Elle repoya
+    kopyalanan döküm araç dışında.
+  - Paketli bir uygulamanın (ör. Claude masaüstü) alt sürecinde varsayılan dizin paketin
+    özel klasörüne yönleniyor; komut uyarıyor, normal terminaldeki davranış ölçülmedi (T192).
+  - Saklama volume kuşağını ayırmıyor: kazara reset sonrası 14 başarılı koşu eski dökümleri
+    döndürür; zamanlamadan (WS-1.3b) önce ele alınacak (T190).
+  - `--status` yalnız en yeni dökümün SHA-256'sını yeniden hesaplıyor; geri
+    yüklenebilirliğin kanıtı WS-1.4 tatbikatı.
 
 ---
 

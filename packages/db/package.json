@@ -12,6 +12,7 @@
     "./provision": "./src/provision.ts"
   },
   "scripts": {
+    "backup": "tsx src/backup.ts",
     "generate": "drizzle-kit generate",
     "init": "tsx src/init-db.ts",
     "migrate": "drizzle-kit migrate",
