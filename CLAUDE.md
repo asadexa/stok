@@ -13,6 +13,7 @@ tutulmaz. Her görevde bütün MD'leri baştan okuma; ihtiyacın olanı aç.
 | Hâlâ geçerli bir karar (ID'siyle) ya da açık (`Open`) karar | `DECISIONS.md` |
 | Bir kararın neden öyle olduğu, elenen yollar | `docs/ADR/` (DECISIONS'taki referanstan) |
 | **Güvenlik, kiracı izolasyonu, auth, fiyat gizliliği, yönetim uçları** üzerinde çalışırken | `docs/SECURITY_MODEL.md` (S1–S17; kod yorumlarındaki "tehdit S7") |
+| Bir özelliğin ne çözdüğü, nasıl çalıştığı, kabul kriterleri ve sınırları; yeni özellik planlarken ya da var olanı değiştirirken | `docs/TEKNIK_SARTNAME.md` (özellik kataloğu, F-ID) |
 | Henüz uygulanmamış bir özelliğin aktif tasarımı | `docs/designs/` |
 | Ertelenen işler ve yol boyunca bulunan sorunlar | `TODOS.md` |
 | Kurulum, komutlar, ortam değişkenleri | `README.md` |
@@ -48,9 +49,14 @@ eder" türünden yorum yazılmaz.
 | Ölçek | Bağlam | Süreç |
 |---|---|---|
 | **Küçük** (tek dosya, belirgin düzeltme) | Minimum: ilgili dosya + gerekirse CURRENT_STATE | Hedefli test, minimum değişiklik, refactor yok, gstack yok |
-| **Orta** (birkaç dosya, bir akış) | İlgili MD bölümleri + ilgili DECISIONS | Kısa Plan Mode; gerekirse Graphify ile etki analizi; gerekirse gstack Engineering Review |
-| **Büyük / mimari** (yeni katman, şema, güvenlik modeli, workstream) | PROJECT_BRAIN + ilgili DECISIONS/ADR | Plan Mode; gerekirse Graphify; gstack CEO/Product Review + Engineering Review; UI ağırlıklıysa Design Review |
+| **Orta** (birkaç dosya, bir akış) | İlgili MD bölümleri + ilgili DECISIONS + ilgili TEKNIK_SARTNAME kaydı | Kısa Plan Mode; gerekirse Graphify ile etki analizi; uygunsa gstack CEO/Product ya da Engineering Review; BUILD ve yeterli test |
+| **Büyük / mimari / yeni ürün modülü** (yeni katman, şema, güvenlik modeli, workstream) | PROJECT_BRAIN + ilgili DECISIONS/ADR + TEKNIK_SARTNAME | Plan Mode; gerekirse Graphify; uygun gstack CEO/Product Review + Engineering Review; kullanıcı onayı; BUILD; riskle orantılı doğrulama; UI ağırlıklıysa Design Review |
 | **Milestone** (deploy, yayın öncesi) | CURRENT_STATE + runbook | Uygun olduğunda gstack Production / QA / CI review |
+
+- **Kritik alanlar** (veri bütünlüğü, auth, yetki, kiracı izolasyonu, canlıya yayın): gerekli
+  kapsamda daha sıkı kontrol. Kırmızı çizgiler ve temel güvenlik kuralları gevşemez.
+- **Review'lar** gereksiz özelliği ve aşırı mühendisliği de ayıklar.
+- **Öncelik:** çalışan özellik → kullanıcıyla doğrulama → geri bildirim → iyileştirme.
 
 - **gstack proje hafızası değildir.** İnceleme çıktısı TODOS'a (iş) ve
   DECISIONS/ADR'ye (karar) işlenir; ayrı bir rapor dosyası birikmez.
@@ -66,6 +72,9 @@ anla → ölç / yeniden üret → planla → minimum implementasyon → hedefli
 → commit / push → CI
 ```
 
+- **Doğrulama riskle orantılı**: gerçek riski ve kabul kriterlerini karşılayan kanıt yeterli.
+  Her değişiklikte varsayımsal uç senaryo listesi, geniş mutasyon testi ya da uzun rapor
+  zorunlu değil.
 - Güvenlik, auth, kiracı izolasyonu, invariant, para ya da kritik doğrulama
   koruması eklendiyse **`dogrula`**: korumayı kaldır, kırmızıyı gör, geri koy.
 - UI değiştiyse **gerçek tarayıcı**: `demo-testi` (Playwright ya da ajan tarayıcısı).
@@ -77,7 +86,8 @@ anla → ölç / yeniden üret → planla → minimum implementasyon → hedefli
 - Fırsatçı refactor yapma; görev dışı bulguyu `gorev-kaydet` ile TODOS'a yaz ve devam et.
 - **Commit ve push için kullanıcı onayı bekle.** Onay bir eyleme özgüdür, sonrakilere taşınmaz.
 
-**"Bitti" demeden önce** (hepsi yeşil olmalı):
+**"Bitti" demeden önce** (kod değiştiyse hepsi yeşil olmalı; yalnız doküman değiştiyse
+`git diff --check` ve `node scripts/check-pnpm-filter.mjs` yeter):
 
 ```bash
 pnpm lint
@@ -105,6 +115,11 @@ Değişiklik bitince yalnız etkilenen dosyayı güncelle:
 - **ADR**: yalnız uzun ömürlü, mimariyi etkileyen, değiştirmesi pahalı ve gerçek
   alternatifi olan kararlar için (`docs/ADR/README.md`).
 - **SECURITY_MODEL**: bir koruma eklendiyse ya da bir açık kapandıysa ilgili S satırı.
+- **TEKNIK_SARTNAME**: yeni özelliğin planı onaylanınca kaydı `Planlandı` olarak açılır,
+  BUILD'de `Geliştiriliyor`, bitince `Uygulandı` olur; akış, katman, dosyalar, kabul ve
+  sınırlar gerçek koda göre güncellenir. Davranışı değişen özelliğin kaydı da güncellenir.
+  Kısa tutulur: kararın kendisi DECISIONS'ta, iş TODOS'ta, durum CURRENT_STATE'te kalır;
+  kayıt onlara ID ile gösterir.
 - **docs/designs/**: tasarımı uygulanıp ilgili görevler kapanınca `docs/archive/`'a taşınır.
 - **PROJECT_BRAIN**: yalnız model değiştiğinde.
 

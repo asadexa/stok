@@ -7,7 +7,7 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
 **Kurallar**
 
 - ID `T<n>`. Arşivdeki görevler numaralarını korur. Yeni görev en büyük
-  numaradan devam eder — **sıradaki boş numara: T200**. Numara yeniden
+  numaradan devam eder — **sıradaki boş numara: T204**. Numara yeniden
   kullanılmaz.
 - Biçim: `- [ ] **T<n> (P0–P3)** - <alan> - **Başlık**`. Altında kısa
   **Neden / Kanıt / Bağlı / Doğrula / Kaynak** satırları.
@@ -34,6 +34,77 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
   - Bağlı: T140. Kaynak: devralma denetimi 2026-10-08.
 
 ## P1
+
+Yol haritasının üstü (ekip kararı 2026-10-17), bu sırayla: (1) T200 PLAN: Plan Mode,
+CEO/Product ve Engineering Review; (2) T200'ün ilk BUILD dilimi; (3) HTTPS test ortamı (T144;
+üretim T42 ayrı), B2B'yi geciktirmeden yakın adım; (4) T201, V1'in devamı. Diğer P1 işler ve
+güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
+
+- [ ] **T200 (P1)** - entegrasyon - **B2B V1: tedarikçi ürün, fiyat ve stok verisini çekme ve karşılaştırma**
+  - Neden: tedarikçinin ürün, barkod, fiyat ve stok bilgisi bugün elle yeniden yazılıyor ya da
+    hiç görünmüyor; aynı ürün için tedarikçiler karşılaştırılamıyor.
+  - Ürün kararı: `PRD-14` (onaylı, uygulanmadı). Kabul kriterleri `docs/TEKNIK_SARTNAME.md` F-12.
+  - Yapılacak (V1): sağlayıcıdan bağımsız tedarikçi kalemi modeli; dosya kaynağı ve örnek API
+    verisi; ürün ↔ tedarikçi eşleşmesi (bir ürüne birden çok tedarikçi); "Verileri Getir";
+    son fiyat ve stok kaydı, fiyat geçmişi yalnız değişimde; tedarikçiler arası karşılaştırma.
+  - Sıra: önce PLAN (Plan Mode, CEO/Product ve Engineering Review, kullanıcı onayı). İlk çalışan
+    BUILD dilimi: tedarikçi, ürün eşleşmesi, fiyat değişimi ve karşılaştırma.
+  - Sınırlar: tedarikçi verisi ürün kartının alış/satış fiyatını ve `current_stock`'u
+    değiştirmez, hareket üretmez (INV-3). Tedarikçi stoğu "Açılış Stoğu"na (`openingQty`)
+    asla eşlenmez: o sütun devir hareketi yazar (`DAT-18`). Farklı para birimi, vergi ya da
+    fiyat türü doğrudan karşılaştırılmaz. Kiracı izolasyonu korunur (INV-4); tedarikçi fiyatı
+    alış niteliğinde olduğu için varsayılan olarak çalışana gitmez (INV-10).
+  - Yeniden kullanım adayı: `packages/core/src/import.ts` (`parseProductFile` → `previewImport`
+    → `commitImport`; satır bazlı hata; `COLUMN_ALIASES`), barkod ve stok kodu eşleşmesi.
+    `products.brand` zaten var.
+  - Açık sorular: ilk gerçek sağlayıcı ve veri biçimi (seçilmedi); belirsiz eşleşmenin nasıl
+    onaylanacağı; tedarikçi kataloğundan yeni ürün açılıp açılmayacağı; para birimi ve vergi
+    verisinin kaynakta nasıl geldiği; aynı barkodun farklı birim ya da koli çarpanıyla gelmesi
+    (`DAT-17`); barkodsuz ürünün eşleşmesi (T177); fiyat geçmişinin saklama süresi.
+  - Bağlı: T201, T202, T203, T171, T177. Karıştırılmaz: T53 (bizim sunduğumuz REST), T182 (POS
+    satış aktarımı).
+  - Doğrula: F-12 kabul kriterleri; özellikle "Verileri Getir" sonrası hareket sayısı,
+    `current_stock` ve ürün kartı fiyatları aynı, değişmeyen fiyat geçmiş satırı üretmiyor.
+  - Kaynak: kullanıcı önerisi 2026-10-16; ekip kararı 2026-10-17.
+- [ ] **T144 (P1)** - operasyon - **İnternetten erişilebilir HTTPS test ortamı (staging) yok**
+  - Neden: uygulama yalnız localhost'ta. Giriş, ürün yükleme ve stok hareketlerinin gerçek
+    bir alan adında HTTPS ile çalıştığı çevrim içi bir test ortamı gerekiyor (`OPS-12`).
+  - Sıra: T200'ün ilk BUILD diliminden sonraki yakın adım; B2B geliştirmesini geciktirmez.
+  - Yapılacak: barındırma seçimi (`OPS-01` Open; aday Vercel + Supabase, onaysız
+    kesinleşmez); runbook adımlarıyla ayrı test veritabanı ve `stok_app` rolü; yalnız sentetik
+    veri; HTTPS alan adı; sağlık ucu ve duman testi.
+  - Sınırlar: test ve üretim ayrı ortam ve veritabanı; teste gerçek müşteri verisi girmez.
+    Bulut veritabanının yedeği sağlayıcının yedeğidir, yerel `db:backup` (`OPS-10`) değildir;
+    tatbikat T129. Telefon köprüsü oturumları süreç belleğinde: çok örnekli dağıtımda
+    `ENABLE_PHONE_SCANNER` kapalı kalır (`ARC-14`).
+  - Önkoşul: internete açılmadan önce Supabase fonksiyon yetkileri (T124). Bilinen sınırlar:
+    UTC sunucuda gün sınırı (T122), cron planı (`OPS-02`, T112), harici izleme yok (T129).
+  - Bağlı: T42 (üretim, ayrı iş), `OPS-01`, `OPS-12`, T124, T129, T167. Özellik kaydı
+    `docs/TEKNIK_SARTNAME.md` F-13.
+  - Doğrula: alan adından HTTPS ile giriş, ürün aktarma ve stok hareketi; `/api/v1/health`
+    200; uygulama bağlantısı `stok_app` (superuser değil) ve RLS açık.
+  - Kaynak: eski P2 kaydı ("Staging ortamı yok"); ekip kararıyla P1, 2026-10-17.
+- [ ] **T201 (P1)** - entegrasyon - **B2B harici API kaynağı: yetkili veri çekme, gizli bilgi ve hata yönetimi**
+  - Neden: V1 örnek API verisiyle doğrulanacak, gerçek API sağlayıcı seçilince bağlanacak. Her
+    sağlayıcı için ayrı ve denetimsiz çekme kodu yazılırsa gizli bilgi, hata ve mükerrer
+    kayıt sorunları her seferinde yeniden açılır.
+  - Sıra: B2B V1'in devamı, T200'ün ilk dilimi sonrası. Gerçek sağlayıcı belirlenmeden
+    "her sağlayıcıyla çalışır" iddiası yok: sözleşme örnek veriyle sınanır, gerçek uyum
+    sağlayıcı seçilince kanıtlanır.
+  - Yapılacak: sağlayıcı bağdaştırıcısının sözleşmesi (çıktısı T200'ün tedarikçi kalemi);
+    kimlik doğrulama; gizli bilginin kiracı bazında korunması (log, URL ve hata metnine
+    gitmez: `PROJECT_BRAIN` §12.7); hata yönetimi (sessiz başarısızlık yok, §12.5); tekrarlı
+    ve idempotent çekme (sayfalama, oran sınırı, yeniden deneme).
+  - Sınırlar: hiçbir zaman stok hareketi üretmez. Ayrı API sunucusu ya da dış servis
+    varsayılmaz (§14: monolit). Yeni kütüphane ya da gizli bilgi deposu seçimi onay ister.
+  - Açık sorular: kimlik doğrulama biçimleri; gizli bilginin nerede ve nasıl saklanacağı
+    (şifreleme, anahtar yönetimi, döndürme); barındırmanın dış ağ çağrısına etkisi (`OPS-01`);
+    kişisel veri gelirse KVKK (T164); yeni tehditler için `SECURITY_MODEL`'e S satırı.
+  - Bağlı: `PRD-14`, T200, T203. `ARC-07` (bizim REST yüzeyimiz; bu iş ters yön, istemci
+    tarafı). Karıştırılmaz: T53, T182.
+  - Doğrula: gizli bilginin log/hata/URL'de görünmediği, tekrarlı çekmenin mükerrer
+    üretmediği, hata yolunun veriyi değiştirmediği testler (`dogrula`).
+  - Kaynak: kullanıcı önerisi 2026-10-16; ekip kararı 2026-10-17.
 
 - [ ] **T121 (P1)** - cron - **Gün sonu raporu, saatlik zamanlamada yanlış günü raporluyor**
   - Neden: `vercel.json` cron'u saatlik (`0 * * * *`). `runCron` "bugün"ü
@@ -133,6 +204,7 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
   - Kod tarafı T114–T119 ile hazır. Hesap kurulumu, plan kararı (`OPS-02`) ve ilk
     migration insana ait; adımlar `docs/uretim-runbook.md`'de.
   - Önkoşul: T121–T126, T129. Zamanlayıcının canlıda kurulması (T112) bu işin parçası.
+  - Sıra: önce çevrim içi test ortamı (T144, `OPS-12`); üretim ayrı ortam ve veritabanı.
 
 - [ ] **T110 (P1)** - arayüz - **JS kapalıyken formlar kullanılamıyor (streaming Suspense)**
   - BLOKE: `UX-08`. Depodaki tarayıcılar gerçekten JS'sizse P0'a çıkar.
@@ -254,8 +326,6 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
     - `0010_cron_tenants.sql` yorumu "`requested_by` NOT NULL" diyor; sütun nullable.
     - ADR-005'in "mobil geri alınamaz" bağlamı ile `ARC-13` (EAS OTA) çelişiyor.
     - Runbook komutları POSIX `VAR=… komut` söz dizimiyle yazılmış; PowerShell/CMD'de çalışmaz.
-
-- [ ] **T144 (P2)** - operasyon - **Staging ortamı yok**
 
 - [ ] **T106 (P2)** - tasarım - **Dokunma hedefi kuralı ile kod ayrışık**
   - BLOKE: `UX-04`. Kodda 44 px (`h-11`) butonlar da var (kullanıcılar, boş durum,
@@ -426,6 +496,9 @@ kullanıcılı ama ortak laptop kullanımına özel hedef yok; önce kritik stok
 tükenme tahmini sonra; öncelik günlük stok takibi, 2026 yıl sonu envanteri zorunlu hedef
 değil. Kayıtlarda "Ürün kararı" onaylı kapsamdır; "Teknik not" henüz onaylanmamış tasarım girdisidir.
 
+- En üst öncelik (ekip kararı 2026-10-17): önce T200 (B2B V1, `PRD-14`: PLAN, sonra ilk BUILD
+  dilimi), ardından T144 (HTTPS test ortamı, `OPS-12`), sonra T201 (V1'in devamı); sıra ve
+  kayıtlar P1'de.
 - Öncelikli: T155 (sayım), T175 (telefondan ürün yönetimi), T176 (uygulama içi gün sonu
   raporu), T177 (barkodsuz ürün).
 - Kritik stok takibi mevcut, yeniden geliştirilmeyecek (doğrulandı 2026-10-13): ürün bazlı
@@ -436,7 +509,8 @@ değil. Kayıtlarda "Ürün kararı" onaylı kapsamdır; "Teknik not" henüz ona
 - Değerlendirilecek: T178 (seri barkod okutma). Mevcut hâli yeterli, iş açılmadı: barkoddan
   hızlı ürün tanımlama.
 - Ertelendi: T179 (tükenme tahmini), T180 (geçmiş tarihli stok), T181 (web'de PIN geçişi), T156
-  (etiket). Koşullu: T182 (satış aktarımı).
+  (etiket). Koşullu: T182 (satış aktarımı). Sonraki sürüm: T202 (B2B sipariş), T203 (B2B
+  periyodik senkron).
 
 - [ ] **T155** - Sayım (stocktake) akışı (eski E2, P1; ürün önceliği 2026-10-13). Sayım tabloları o gün eklenir (`PROJECT_BRAIN` §12.10).
   - Ürün kararı: barkodlu ve barkodsuz ürün sayımı; ürün ya da kategori bazlı kısmi sayım;
@@ -498,6 +572,12 @@ değil. Kayıtlarda "Ürün kararı" onaylı kapsamdır; "Teknik not" henüz ona
   kabul ediyor (`schemas.ts:383`). Mobil karşılığı T32.
 - [ ] **T182** - entegrasyon - **POS / satış programından satış aktarımı** (koşullu, 2026-10-13).
   Pilot işletmenin satışı nerede kaydettiği öğrenilene kadar açılmaz. Önkoşul: T127.
+- [ ] **T202** - entegrasyon - **B2B üzerinden sipariş** (sonraki sürüm, 2026-10-17). V1'de yok
+  (`PRD-14`). Tam sipariş yönetimi `PROJECT_BRAIN` §14'te kapsam dışı; açılmadan önce ayrı ürün
+  kararı ister. Önkoşul: T200, T201.
+- [ ] **T203** - entegrasyon - **B2B verisinin otomatik periyodik senkronu** (sonraki sürüm,
+  2026-10-17). V1'de yenileme yalnız "Verileri Getir" düğmesiyle (`PRD-14`). Bağlı: T201,
+  `OPS-02` (zamanlayıcı), T139 (cron kiracıları sırayla işliyor).
 - [ ] **T157** - Maliyet takibi + kâr raporu (eski E8, P2). BLOKE: `DAT-15`. Geçmiş hareketlerde fiyat verisi yok.
 - [ ] **T158** - Raf/konum yönetimi arayüzü (eski E9, P3). Şema hazır.
 - [ ] **T159** - Mobilde tam katalog senkronu (P2). Tetikleyici: sahada "ürün adını göremiyorum" şikâyeti.
@@ -509,7 +589,8 @@ değil. Kayıtlarda "Ürün kararı" onaylı kapsamdır; "Teknik not" henüz ona
 - [ ] **T163** - Parola kurtarma. Son yönetici parolasını unutursa veritabanına elle müdahale gerekiyor.
 - [ ] **T164** - KVKK: aydınlatma metni, saklama süresi, kiracı verisini dışa aktarma ve silme (tehdit S10).
 
-**Yön (henüz madde değil):** çok depo / transfer, tedarikçi ve satın alma siparişi,
+**Yön (henüz madde değil):** çok depo / transfer, satın alma siparişi (B2B tedarikçi verisi
+T200'de, B2B sipariş T202'de),
 e-Fatura / e-Arşiv, Logo / Mikro / Paraşüt köprüsü, SaaS kayıt / abonelik / faturalama,
 FIFO maliyet.
 

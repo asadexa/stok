@@ -4,7 +4,7 @@ Yalnız BUGÜNÜN gerçeği. Her merge'te ya da durum değiştiğinde güncellen
 satırlar silinir (tarihçe git'te). Ayrıntı yazılmaz: işler → `TODOS.md`,
 kararlar → `DECISIONS.md`, model → `PROJECT_BRAIN.md`.
 
-**Tarih:** 2026-10-16 · **Çalışma branch'i:** `development` · **Stabil referans:** `master`
+**Tarih:** 2026-10-17 · **Çalışma branch'i:** `development` · **Stabil referans:** `master`
 (`master` = `dac05ff`, devralma öncesi son kod; geliştirme `development`'ta yapılır)
 
 ## Deploy
@@ -48,7 +48,9 @@ testleri geçici compose projeleriyle), drift "No schema changes", `next build` 
 Playwright WS-1.1'den beri koşulmadı (arayüz değişmedi; e2e demo veritabanına yazıyor, T150);
 son e2e sonucu yukarıdaki 24/24.
 
-GitHub CI: `development` `1e47741` (WS-1.3a test düzeltmesi) koşu #73 yeşil; üç iş de geçti
+GitHub CI: `development` `8a96c74` (T196) koşu #75 yeşil; üç iş de geçti, demo işindeki "Yedek ve
+durum" adımı artık başarı satırlarını da arıyor (test sayıları herkese açık API'de görünmüyor).
+Öncesinde `1e47741` (WS-1.3a test düzeltmesi) koşu #73 yeşil; üç iş de geçti
 (typecheck + test, Windows lint + typecheck + derleme, demo yolu). Test işinin günlüğünde
 `backup.test.ts` 8/8, `backup-policy.test.ts` 78/78, `@stok/db` 294/294; demo işinde "Yedek ve
 durum" adımı (`pnpm db:backup` ve `--status`) yeşil. Öncesinde `4fef58f` (#71) yeşil, `94c1151`
@@ -137,7 +139,18 @@ geçici kapsayıcıda izole inceleme, yalnız tanınan kümede silme. Geliştirm
 
 ## Sıradaki workstream
 
-**WS-1 — Güvenlik ve Veri Koruma** (kullanıcı onaylı R-1 planı, 2026-10-13): sıra
+**Yol haritasının üstü** (ekip kararı, 2026-10-17; hiçbiri başlamadı), bu sırayla:
+1. **T200 B2B V1 PLAN** (`PRD-14`): Plan Mode, CEO/Product Review, Engineering Review, kullanıcı onayı.
+2. **T200 ilk BUILD dilimi**: tedarikçi, ürün eşleşmesi, fiyat değişimi ve karşılaştırma.
+3. **HTTPS test ortamı** (T144, `OPS-12`): yakın adım, B2B'yi geciktirmez. Barındırma `OPS-01`
+   (Open); üretim ayrı iş (T42).
+4. **T201 harici API kaynağı**: V1'in devamı. Gerçek sağlayıcı seçilmeden genel entegrasyon
+   iddia edilmez.
+Özellik kayıtları `docs/TEKNIK_SARTNAME.md` F-12, F-13. Diğer P1 işler ve güvenlik/veri koruma
+gereklilikleri olduğu gibi geçerli.
+
+**WS-1 — Güvenlik ve Veri Koruma** (kullanıcı onaylı R-1 planı, 2026-10-13; kalan dilimler ve
+öncelikleri korunuyor): sıra
 1.1 ✓ → 1.2a ✓ → 1.2b ✓ → 1.3a ✓ (yedek) → **1.4 (geri yükleme tatbikatı)** → 1.3b (zamanlama);
 ayrı şerit 1.5a/1.5b (tünel kapısı, T167). Her dilim ayrı onayla başlar. R-1'in 1.5b'si de var
 olmayan `scripts/pilot.mjs`'e dayanıyor; kendi planında yeniden değerlendirilecek.
@@ -154,5 +167,5 @@ geçmeden oraya hiçbir WS-1 değişikliği uygulanmaz; tatbikat henüz yok. Tam
 Paralelde, insan işi ve kod dışı: T120 (sahiplik), T140 (Dependabot triyajı +
 branch koruması + zorunlu CI kontrolleri).
 
-Ardından ürün hazırlığı (T127; kapsam kararıyla), en son staging deploy
-(T42, T129, T144).
+Ardından ürün hazırlığı (T127; kapsam kararıyla), en son üretim deploy'u (T42, T129). Çevrim
+içi test ortamı (T144) P1'e çıktı; önkoşulu (T124) ve bilinen sınırları T144 kaydında.

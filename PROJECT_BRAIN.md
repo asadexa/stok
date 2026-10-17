@@ -63,6 +63,9 @@ ve sunucuda zorlanır; arayüzde düğmeyi gizlemek yetki kontrolü değildir.
   bayrağı açıkken ayrıca telefon tarama köprüsü `/api/tara/*` (`ARC-14`, S18).
 - **Planlanmış, yazılmamış**: native mobil uygulama (`PRD-03`), mobilin ihtiyaç
   duyduğu `/api/v1` REST sözleşmesi (`ARC-07`, `ARC-09`), offline outbox (`ARC-10`).
+  Yüksek öncelikli (2026-10-17): tedarikçi verisini dışarıdan **çeken** B2B V1 (`PRD-14`;
+  bizim REST sunmamızdan ayrı) ve HTTPS alan adıyla çevrim içi test ortamı (`OPS-12`).
+  Özellik kayıtları `docs/TEKNIK_SARTNAME.md`'de.
 - **Bilinçli kapsam dışı**: §14.
 
 Hangi özelliğin bugün çalıştığı, kısmi olduğu ya da bozuk olduğu `CURRENT_STATE.md`'de.
@@ -280,7 +283,9 @@ Bunlardan birini bozan değişiklik, testler yeşil olsa bile bozuktur.
 
 Abonelik/faturalama ve kiracı self-servis kaydı (ilk müşteri gelmeden erken),
 mikroservis / ayrı API servisi (monolit aynı işi yapıyor), FIFO maliyet (ilk
-yöntem kararı `DAT-15`), e-Fatura ve Logo/Mikro/Paraşüt köprüsü, tedarikçi ve
-sipariş yönetimi, mock API katmanı (gerçek Postgres + seed var), ayrı donanım
+yöntem kararı `DAT-15`), e-Fatura ve Logo/Mikro/Paraşüt köprüsü, tam tedarikçi ve
+sipariş yönetimi (satın alma siparişi, tedarikçi cari hesabı; tedarikçinin ürün, fiyat ve
+stok verisini çekmek B2B V1'de kapsamda: `PRD-14`; B2B sipariş sonraki sürüm adayı, ayrı
+karar ister), mock API katmanı (gerçek Postgres + seed var), ayrı donanım
 terminali desteği (telefonun kendisi terminal), çoklu dil. Ertelenen özellikler
 (sayım, etiket, maliyet raporu, konum, çok depo) `TODOS.md` → "Product / Future".
