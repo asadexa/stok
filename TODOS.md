@@ -131,6 +131,11 @@ güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
   - Yeniden üretildi (2026-10-10 00:25 ve 01:36, yerel UTC+3, DB UTC): `cron.test.ts`'in
     üç testi (T88.1 kasa açığı ×2, T36 sağlık alarmı) yerel saatle kırmızı, `TZ=UTC` ile
     19/19 yeşil. Gece 00:00–03:00 arası yerel test koşusu bu yüzden kırılıyor.
+  - Ek (2026-10-18): T36 testinin ("her şey yolundayken") kırmızısı saat dilimi değil koşu
+    saatiydi: alarm anı sabit bugün 10:00, hareketler "şimdi" yazılıyordu; süreç saatiyle
+    08:00'den önce koşunca kırmızı (CI #76, UTC 00:05; `TZ=UTC` de yetmiyordu). Test son
+    hareketi alarm anından 1 saat önceye yazacak biçimde düzeltildi; yerel saat 00–21 arası
+    sekiz noktada yeşil. Kayıttaki diğer iki test (T88.1) T122'ye bağlı kalıyor.
   - Kısmen ele alındı (WS-C-lite, T173): Excel hücreleri ve dosya adı sabit
     Europe/Istanbul. Hâlâ sunucu saatine bağlı olanlar: ekran `formatDateTime`
     (`apps/web/src/lib/format.ts`, bulutta UTC gösterir), tarih filtresinin gün sınırı

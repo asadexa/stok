@@ -495,10 +495,26 @@ describe('sistem sağlığı alarmı (T36)', () => {
   }
 
   it('her şey yolundayken E-POSTA GÖNDERMİYOR', async () => {
+    // Son hareket alarm anından 1 saat önce, mesai içinde. Dosyanın
+    // hareketleri "şimdi" yazılıyor; yalnız onlara güvenmek testi koşu
+    // saatine bağlıyordu: 08:00'den önce koşunca son hareket 10:00'dan 2
+    // saatten eski kalıyor, mesai içi sessizlik alarmı (doğru biçimde)
+    // çalıyor ve test kırmızı yanıyordu (CI #76, UTC 00:05). Kayıt
+    // `createMovement`'ı atlıyor çünkü zamanı o kapı belirliyor; sınanan şey
+    // alarm. 09:00, yarınki gece ve mesai senaryolarının sessizliğini kısaltmaz.
+    await admin.db.execute(sql`
+      INSERT INTO stock_movements
+        (tenant_id, product_id, user_id, delta, reason, idempotency_key, created_at)
+      VALUES
+        (${tenant.tenantId}, ${tenant.products['A4-001']!.id}, ${tenant.adminUserId}, 1, 'PURCHASE',
+         ${randomUUID()}, ${new Date(MESAI.getTime() - 3_600_000).toISOString()}::timestamptz)
+    `)
     const mail = createInMemoryTransport()
     const is = await alarmIsi(mail, MESAI)
 
     expect(is?.status, 'alarm işi çalışmadı').toBe('SUCCEEDED')
+    // Mesai dışında sessizlik kuralı hiç bakmazdı ve test boş yere yeşil kalırdı.
+    expect(is?.result, 'kontrol mesai içinde yapılmalı').toMatchObject({ mesaide: true, fired: 0 })
     // Her saat gelen "her şey yolunda" postası, gerçekten sorun olan saatte
     // de okunmamasını sağlardı.
     expect(mail.sent.filter((m) => m.subject.includes('uyarısı'))).toHaveLength(0)
