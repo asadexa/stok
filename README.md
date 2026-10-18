@@ -56,14 +56,21 @@ kullanıcı kaydeder. Özellik varsayılan olarak kapalıdır.
   dağıtımında (ör. Vercel) bu köprü doğru çalışmaz, orada kapalı kalmalıdır (`ARC-14`).
 - iPhone Safari'de sınandı; Android henüz denenmedi.
 
-**Bir kez:** Cloudflare Tunnel'ı kurun, sonra yeni bir PowerShell penceresi açın. Proje bir
-kez `BASLAT.bat` ile kurulmuş olmalı (paketler, `.env`, veritabanı); Docker Desktop açık olmalı.
+**Bir kez:** Cloudflare Tunnel'ı kurun, sonra yeni bir PowerShell ya da Komut İstemi (CMD)
+penceresi açın. Proje bir kez `BASLAT.bat` ile kurulmuş olmalı (paketler, `.env`, veritabanı);
+Docker Desktop açık olmalı.
 
 ```powershell
 winget install --id Cloudflare.cloudflared -e
 ```
 
-**1. PowerShell penceresi, sunucu** (proje klasöründe):
+**PowerShell mi, CMD mi?** Komutlar ikisinde aynıdır, yalnız ortam değişkeni farklı yazılır:
+PowerShell'de `$env:ENABLE_PHONE_SCANNER = 'true'`, CMD'de `set ENABLE_PHONE_SCANNER=true`.
+Birinin satırı ötekinde çalışmaz ve bayrak açılmaz: CMD `$env:` satırına anlamsız bir hata
+verir ("Başka dosya yok"), PowerShell ise `set …` satırını hiç hata vermeden geçer. PowerShell'de
+komut satırı `PS` ile başlar.
+
+**1. Sunucu penceresi** (proje klasöründe). PowerShell:
 
 ```powershell
 $env:ENABLE_PHONE_SCANNER = 'true'
@@ -71,12 +78,22 @@ pnpm --filter @stok/web run build
 pnpm --filter @stok/web run start
 ```
 
-Bayrak yalnız bu pencere için geçerlidir. Derleme ilk seferde ve kod değiştikten sonra
-gerekir. Veritabanı kapalıysa önce `pnpm db:up`. Sunucu "AUTH_SECRET depoda açıkça yazan
-örnek bir değer" diye açılmazsa `.env`'deki `AUTH_SECRET`'i yenileyin (üretme komutu
-`.env.example`'da); `BASLAT.bat` yeni bir `.env`'e zaten rastgele değer yazar.
+Komut İstemi (CMD); `=` işaretinin iki yanına boşluk koymayın, `echo` satırı `true` yazmalı:
 
-**2. PowerShell penceresi, tünel:**
+```bat
+set ENABLE_PHONE_SCANNER=true
+echo %ENABLE_PHONE_SCANNER%
+pnpm --filter @stok/web run build
+pnpm --filter @stok/web run start
+```
+
+Bayrak yalnız ayarlandığı terminal oturumunda geçerlidir: o pencere kapanınca kaybolur, başka
+bir pencerede sunucuyu açacaksanız orada yeniden ayarlayın. Derleme ilk seferde ve kod
+değiştikten sonra gerekir. Veritabanı kapalıysa önce `pnpm db:up`. Sunucu "AUTH_SECRET depoda
+açıkça yazan örnek bir değer" diye açılmazsa `.env`'deki `AUTH_SECRET`'i yenileyin (üretme
+komutu `.env.example`'da); `BASLAT.bat` yeni bir `.env`'e zaten rastgele değer yazar.
+
+**2. İkinci pencere, tünel** (PowerShell ya da CMD; komut ikisinde aynı):
 
 ```powershell
 cloudflared tunnel --url http://localhost:3000
@@ -108,7 +125,7 @@ Ctrl+C ile kapatın.
 | Port 3000 kullanımda (`EADDRINUSE`) | Başka bir `BASLAT.bat`, `pnpm demo` ya da `next start` penceresi açık olabilir; onu Ctrl+C ile kapatın. Hangi işlemin kullandığını görmek için PowerShell'de `netstat -ano \| findstr :3000` |
 | "pnpm kurulamadı" | Başlatıcının hata mesajındaki `npm install -g pnpm@…` komutunu elle çalıştırın, sonra yeni bir pencerede tekrar deneyin |
 | Telefonda kamera açılmıyor | Adres `https://` ile başlamalı (tünel adresi). "Kamera izni verilmedi" yazıyorsa tarayıcının site ayarlarından kamera izni verin; "başka bir uygulama kullanıyor" yazıyorsa o uygulamayı kapatın |
-| QR bağlantısı çalışmıyor | Sunucu `ENABLE_PHONE_SCANNER = 'true'` ile `next start` olarak açık olmalı (bayraksız `/tara` 404 verir); tünel penceresi açık olmalı; "Telefon adresi" alanı `https://` ile başlamalı. QR 2 dakika ve tek kullanımlıktır: **Yeni QR oluştur**. Sunucu yeniden başladıysa eşleşme düşmüştür, yeni QR oluşturun |
+| QR bağlantısı çalışmıyor | Sunucu, aynı pencerede `ENABLE_PHONE_SCANNER` `true` yapılarak (PowerShell ve CMD biçimi yukarıda) `next start` olarak açık olmalı (bayraksız `/tara` 404 verir); tünel penceresi açık olmalı; "Telefon adresi" alanı `https://` ile başlamalı. QR 2 dakika ve tek kullanımlıktır: **Yeni QR oluştur**. Sunucu yeniden başladıysa eşleşme düşmüştür, yeni QR oluşturun |
 
 ## Temel özellikler
 
