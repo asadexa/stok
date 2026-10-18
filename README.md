@@ -8,7 +8,7 @@ takip sistemi. Türkçe arayüz, çok kiracılı (multi-tenant), değiştirileme
 
 Yerel geliştirme ve demo içindir; gerçek işletme verisi olan bir bilgisayarda kullanmayın.
 
-1. **Gerekenler:** [Node.js](https://nodejs.org) 22, 23 ya da 24 ve
+1. **Gerekenler:** İlk olarak [Git for Windows](https://git-scm.com/install/windows) projeyi indirmek için gereklidir. [Node.js](https://nodejs.org) 22, 23 ya da 24 ve
    [Docker Desktop](https://www.docker.com/products/docker-desktop/) (açık olmalı). pnpm'i
    başlatıcı kendisi kurar. İlk çalıştırmada internet bağlantısı gerekir.
 2. **Projeyi indirin:** GitHub'da **Code → Download ZIP** ile indirip bir klasöre açın ya da
