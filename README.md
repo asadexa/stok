@@ -51,7 +51,16 @@ varsa onu kullanır), şemayı uygular, örnek veriyi yükler ve sunucuyu
 `http://localhost:3000`'de açar. Windows (CMD/PowerShell), macOS ve Linux'ta
 aynı komut. Veriyi sıfırlayıp yeniden yüklemek için `pnpm demo --seed`. Seed
 yalnız yerel veritabanında çalışır ve kendi demo verisi dışında bir işletme
-bulursa hiçbir şey silmeden durur.
+bulursa hiçbir şey silmeden durur. `.env` uzak bir veritabanını gösteriyorsa
+`pnpm demo` hiçbir adımı uygulamadan durur.
+
+**Windows'ta çift tıklayarak:** proje klasöründeki `BASLAT.bat` dosyasına çift
+tıklayın. Node.js 22–24'ü denetler, gerekli pnpm sürümü yoksa yönetici izni
+istemeden kullanıcı hesabınıza kurar, sonra `pnpm demo`'yu çalıştırır ve adresi
+(`http://localhost:3000`) gösterir. Docker Desktop'ın açık olması gerekir (ya da
+5433'te kendi PostgreSQL'iniz). Mevcut veriye dokunmaz; örnek veri yalnız
+veritabanında hiç ürün yoksa yüklenir. Hata olursa pencere açık kalır ve nedeni
+yazar. Durdurmak için pencerede Ctrl+C. Yalnız geliştirme ve demo içindir.
 
 | Rol | E-posta | Parola |
 |---|---|---|

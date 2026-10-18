@@ -46,6 +46,7 @@ Katman kuralları `PROJECT_BRAIN` §5, ilkeler §12. Kayıtlarda yalnız özelli
 | F-09 | Arka plan işleri, cron, e-posta ve sistem sağlığı | Uygulandı (kısmi) |
 | F-10 | Telefonla barkod okutma köprüsü (pilot) | Uygulandı (pilot, varsayılan kapalı) |
 | F-11 | Yerel yedek ve güvenli veritabanı sıfırlama | Uygulandı |
+| F-14 | Windows tek tıkla başlatma (`BASLAT.bat`) | Uygulandı |
 | F-12 | B2B tedarikçi verisi V1 | **Planlandı** |
 | F-13 | İnternetten erişilebilir test ortamı | **Planlandı** |
 
@@ -164,6 +165,20 @@ Katman kuralları `PROJECT_BRAIN` §5, ilkeler §12. Kayıtlarda yalnız özelli
 - **Dosyalar:** `packages/db/src/backup.ts`, `backup-policy.ts`, `db-reset.ts`, `docker.ts`, `cli-entry.ts`.
 - **Sınırlar:** yalnız yerel Docker; bulut veritabanının yedeği değildir. Geri yükleme tatbikatı (WS-1.4)
   ve zamanlama (WS-1.3b) yok; T190, T197–T199.
+
+### F-14 — Windows tek tıkla başlatma (`BASLAT.bat`)
+- **İhtiyaç:** yerel uygulamayı terminal açmadan, çift tıklayarak başlatmak.
+- **Akış:** kendi klasörüne geçer → Node 22–24 denetimi → `packageManager`'daki pnpm sürümü yoksa
+  `npm install -g` ile kullanıcı hesabına kurar → `pnpm demo` (F-02/F-03'ün veritabanını hazırlar,
+  sunucuyu açar) → adres `http://localhost:3000`. Hata olursa Türkçe mesaj, pencere açık kalır,
+  çıkış kodu korunur.
+- **Neden böyle:** kurulum adımları tek yerde (`scripts/demo.mjs`); başlatıcı yalnız onun
+  çalışacağı ortamı denetler. `--seed` ve `db:reset` bilerek yok, ikisi de veri siler. Demo, `.env`
+  uzak bir veritabanını gösterirse hiçbir adımı uygulamadan durur.
+- **Dosyalar:** `BASLAT.bat`, `scripts/demo.mjs`, `.gitattributes` (`.bat` her checkout'ta CRLF).
+- **Sınırlar:** yalnız geliştirme ve demo; gerçek işletme verisi olan bir bilgisayarda yerel
+  veritabanına migration uygular (pilot için `OPS-11` geçerli). Docker Desktop ve Node.js
+  otomatik kurulmaz; açık değilse demo nedeni yazar.
 
 ---
 

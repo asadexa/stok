@@ -1,0 +1,4 @@
+# Windows başlatıcısı (BASLAT.bat) CRLF olmalı: LF satır sonlu bir .bat'ta cmd'nin
+# goto/etiket araması bozulabiliyor. core.autocrlf=false olan bir checkout da
+# çalışan dosyayı alsın.
+*.bat text eol=crlf

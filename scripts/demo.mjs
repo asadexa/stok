@@ -169,6 +169,26 @@ async function main() {
   const env = readEnvFile('.env')
   if (!env.DATABASE_URL) die('.env içinde DATABASE_URL yok.')
 
+  // Demo yalnız BU MAKİNEDEKİ veritabanına kurar: aşağıda init, migrate ve
+  // (ürün yoksa) seed çalışıyor. .env uzak bir adresi (ör. Supabase)
+  // gösterirse bunlar habersizce oraya uygulanırdı; çift tıklanan bir
+  // başlatıcı (BASLAT.bat) bunu üretime migration'a çevirirdi. Yerel kuralı
+  // packages/db/src/target.ts ile aynı: yalnız localhost, 127.0.0.1, ::1.
+  for (const key of ['DATABASE_URL', 'MIGRATION_DATABASE_URL']) {
+    if (!env[key]) continue
+    let host
+    try {
+      host = new URL(env[key]).hostname.replace(/^\[(.*)\]$/, '$1')
+    } catch {
+      die(`${key} çözümlenemedi.`)
+    }
+    if (!['localhost', '127.0.0.1', '::1'].includes(host)) {
+      die(`.env içindeki ${key} yerel değil (${host}).
+  Demo yalnız bu bilgisayardaki veritabanına kurulum, migration ve örnek veri uygular.
+  Uzak ya da üretim veritabanı için docs/uretim-runbook.md adımlarını izleyin.`)
+    }
+  }
+
   let dbPort
   try {
     dbPort = Number(new URL(env.DATABASE_URL).port || 5432)
