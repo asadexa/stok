@@ -4,6 +4,112 @@ Küçük ve orta ölçekli depolar ve perakende işletmeler için barkod tabanl�
 takip sistemi. Türkçe arayüz, çok kiracılı (multi-tenant), değiştirilemez
 (append-only) stok defteri: stok bir sayı olarak tutulmaz, hareketlerin toplamıdır.
 
+## Hızlı başlangıç (Windows)
+
+Yerel geliştirme ve demo içindir; gerçek işletme verisi olan bir bilgisayarda kullanmayın.
+
+1. **Gerekenler:** [Node.js](https://nodejs.org) 22, 23 ya da 24 ve
+   [Docker Desktop](https://www.docker.com/products/docker-desktop/) (açık olmalı). pnpm'i
+   başlatıcı kendisi kurar. İlk çalıştırmada internet bağlantısı gerekir.
+2. **Projeyi indirin:** GitHub'da **Code → Download ZIP** ile indirip bir klasöre açın ya da
+   `git clone` ile kopyalayın. Ağ klasörü değil, bu bilgisayardaki bir klasör kullanın.
+3. **Başlatın:** proje klasöründeki `BASLAT.bat` dosyasına çift tıklayın.
+4. **İlk çalıştırmada kendiliğinden hazırlananlar** (`pnpm demo` yapar, birkaç dakika
+   sürebilir): gerekirse pnpm (yönetici izni istemeden, kullanıcı hesabınıza), `.env` ayar
+   dosyası (rastgele `AUTH_SECRET` ile), paketler, Docker'da PostgreSQL veritabanı ve şema,
+   veritabanı boşsa örnek veri.
+5. **Açın:** pencerede "Sunucu başlatılıyor" yazınca tarayıcıda **http://localhost:3000**
+   adresine gidin ve aşağıdaki hesaplardan biriyle girin.
+6. **Kapatma ve yeniden başlatma:** pencerede **Ctrl+C**'ye basın ("Terminate batch job
+   (Y/N)?" sorulursa `Y`) ya da pencereyi kapatın. Tekrar başlatmak için aynı dosyaya çift
+   tıklayın. Veriler korunur: veritabanı Docker volume'ünde durur, örnek veri yalnız
+   veritabanında hiç ürün yoksa yüklenir.
+
+| Rol | E-posta | Parola |
+|---|---|---|
+| Yönetici | `admin@yilmaz.example` | `admin123` |
+| Çalışan | `ahmet@yilmazkirtasiye.example` | `calisan123` |
+| Başka işletme | `admin@demir.example` | `admin123` |
+
+Veri silen işlemler normal başlatmanın parçası değildir, yalnız elle çalıştırılır: örnek
+veriyi baştan yüklemek için `pnpm demo --seed`, Docker veritabanını tamamen sıfırlamak için
+`pnpm db:reset` (ikisi de "Kurulum ayrıntıları" bölümünde). macOS ve Linux'ta aynı akış
+proje klasöründe `pnpm demo` komutudur.
+
+## Telefon kamerasıyla barkod okutma (pilot)
+
+Telefonun kamerasıyla okunan barkod, bilgisayardaki giriş/çıkış ekranında (`/hareket`)
+açılır. Telefon yalnız barkodu iletir; stok hareketini bilgisayarda **Kaydet**'e basan
+kullanıcı kaydeder. Özellik varsayılan olarak kapalıdır.
+
+**Bilmeniz gerekenler:**
+
+- Bu akış `BASLAT.bat`'ın açtığı geliştirme sunucusuyla (`next dev`) değil, üretim derlemesi
+  ve tek süreçli `next start` ile çalışır. İkisi aynı anda açık olamaz, ikisi de 3000
+  portunu kullanır: önce BASLAT penceresini Ctrl+C ile kapatın.
+- Telefon kamerası yalnız HTTPS adreste açılır. Bilgisayardaki sunucuya HTTPS adresini
+  Cloudflare'in geçici tüneli verir (hesap gerekmez).
+- **Tünel açıkken uygulamanın tamamı, giriş sayfası dahil, internetten erişilebilir.** Demo
+  parolaları bu dosyada açıkça yazıyor: tüneli yalnız deneme süresince açık tutun (T167).
+  Sunucu ayrıca yerel ağdan HTTP ile erişilebilir (T183).
+- Eşleşmeler sunucunun belleğinde tutulur: sunucu yeniden başlarsa düşer. Çok örnekli bulut
+  dağıtımında (ör. Vercel) bu köprü doğru çalışmaz, orada kapalı kalmalıdır (`ARC-14`).
+- iPhone Safari'de sınandı; Android henüz denenmedi.
+
+**Bir kez:** Cloudflare Tunnel'ı kurun, sonra yeni bir PowerShell penceresi açın. Proje bir
+kez `BASLAT.bat` ile kurulmuş olmalı (paketler, `.env`, veritabanı); Docker Desktop açık olmalı.
+
+```powershell
+winget install --id Cloudflare.cloudflared -e
+```
+
+**1. PowerShell penceresi, sunucu** (proje klasöründe):
+
+```powershell
+$env:ENABLE_PHONE_SCANNER = 'true'
+pnpm --filter @stok/web run build
+pnpm --filter @stok/web run start
+```
+
+Bayrak yalnız bu pencere için geçerlidir. Derleme ilk seferde ve kod değiştikten sonra
+gerekir. Veritabanı kapalıysa önce `pnpm db:up`. Sunucu "AUTH_SECRET depoda açıkça yazan
+örnek bir değer" diye açılmazsa `.env`'deki `AUTH_SECRET`'i yenileyin (üretme komutu
+`.env.example`'da); `BASLAT.bat` yeni bir `.env`'e zaten rastgele değer yazar.
+
+**2. PowerShell penceresi, tünel:**
+
+```powershell
+cloudflared tunnel --url http://localhost:3000
+```
+
+Çıktıdaki `https://…trycloudflare.com` adresini kopyalayın.
+
+**3. Bilgisayarda:** `http://localhost:3000/hareket` (giriş yapın) → **Telefon adresi (tünel)**
+alanına tünel adresini yapıştırın → **Telefonla Barkod Okut**. Ekranda bir QR kodu çıkar;
+2 dakika geçerlidir, süresi dolarsa **Yeni QR oluştur**.
+
+**4. Telefonda:** kamera uygulamasıyla QR'ı okutun, açılan sayfada kameraya izin verin. QR
+okunmazsa paneldeki adresi telefonda elle açın. Bilgisayarda "Telefon bağlı ✓" görünür.
+
+**5. Okutma ve kayıt:** barkodu telefon kamerasına tutun. Ürün bilgisayardaki giriş/çıkış
+formunda açılır; miktarı ve sebebi bilgisayarda girip **Kaydet**'e basın, stok ancak o zaman
+değişir. Sonraki ürün için telefonda **Sonraki Ürünü Tara**. Bilgisayardaki formu
+değiştirdiyseniz yeni okuma formu ezmez, panelde bildirilir.
+
+**Bitirince:** bilgisayarda **Bağlantıyı kes**, tünel penceresini ve ardından sunucuyu
+Ctrl+C ile kapatın.
+
+## Sık karşılaşılan sorunlar
+
+| Sorun | Ne yapın |
+|---|---|
+| "Node.js bulunamadı" ya da "Node.js vXX uygun değil" | [nodejs.org](https://nodejs.org)'dan 22, 23 ya da 24 kurun, sonra `BASLAT.bat`'ı yeniden çalıştırın |
+| "Ne çalışan bir Postgres ne de Docker bulundu" | Docker Desktop'ı açın, çalışır duruma gelmesini bekleyip tekrar çift tıklayın. 5433'te kendi PostgreSQL'iniz varsa `.env`'deki `DATABASE_URL` ve `MIGRATION_DATABASE_URL`'i ona göre düzenleyin |
+| Port 3000 kullanımda (`EADDRINUSE`) | Başka bir `BASLAT.bat`, `pnpm demo` ya da `next start` penceresi açık olabilir; onu Ctrl+C ile kapatın. Hangi işlemin kullandığını görmek için PowerShell'de `netstat -ano \| findstr :3000` |
+| "pnpm kurulamadı" | Başlatıcının hata mesajındaki `npm install -g pnpm@…` komutunu elle çalıştırın, sonra yeni bir pencerede tekrar deneyin |
+| Telefonda kamera açılmıyor | Adres `https://` ile başlamalı (tünel adresi). "Kamera izni verilmedi" yazıyorsa tarayıcının site ayarlarından kamera izni verin; "başka bir uygulama kullanıyor" yazıyorsa o uygulamayı kapatın |
+| QR bağlantısı çalışmıyor | Sunucu `ENABLE_PHONE_SCANNER = 'true'` ile `next start` olarak açık olmalı (bayraksız `/tara` 404 verir); tünel penceresi açık olmalı; "Telefon adresi" alanı `https://` ile başlamalı. QR 2 dakika ve tek kullanımlıktır: **Yeni QR oluştur**. Sunucu yeniden başladıysa eşleşme düşmüştür, yeni QR oluşturun |
+
 ## Temel özellikler
 
 - **Giriş / çıkış**: barkod (USB okuyucu ya da elle) → ürün ve mevcut stok →
@@ -35,10 +141,10 @@ packages/core     iş mantığı: tek yazma kapısı, auth, yetki, import/export
 apps/web          Next.js arayüzü
 ```
 
-## Kurulum ve çalıştırma
+## Kurulum ayrıntıları ve yönetici komutları
 
-Gerekenler: Node 22 (`.nvmrc`; 22–24 desteklenir), pnpm 11, PostgreSQL 17.
-Docker zorunlu değil.
+Windows'ta en kolay yol yukarıdaki "Hızlı başlangıç". Gerekenler: Node 22 (`.nvmrc`;
+22–24 desteklenir), pnpm 11, PostgreSQL 17. Docker zorunlu değil.
 
 **Tek komut (demo):**
 
@@ -46,27 +152,13 @@ Docker zorunlu değil.
 pnpm demo
 ```
 
-Veritabanını hazırlar (Docker varsa kaldırır; 5433'te kendi PostgreSQL'iniz
-varsa onu kullanır), şemayı uygular, örnek veriyi yükler ve sunucuyu
-`http://localhost:3000`'de açar. Windows (CMD/PowerShell), macOS ve Linux'ta
-aynı komut. Veriyi sıfırlayıp yeniden yüklemek için `pnpm demo --seed`. Seed
-yalnız yerel veritabanında çalışır ve kendi demo verisi dışında bir işletme
-bulursa hiçbir şey silmeden durur. `.env` uzak bir veritabanını gösteriyorsa
+`BASLAT.bat`'ın da çalıştırdığı komut. Veritabanını hazırlar (Docker varsa kaldırır;
+5433'te kendi PostgreSQL'iniz varsa onu kullanır), şemayı uygular, veritabanında hiç ürün
+yoksa örnek veriyi yükler ve sunucuyu `http://localhost:3000`'de açar. Windows
+(CMD/PowerShell), macOS ve Linux'ta aynı komut. Veriyi sıfırlayıp yeniden yüklemek için
+`pnpm demo --seed`. Seed yalnız yerel veritabanında çalışır ve kendi demo verisi dışında bir
+işletme bulursa hiçbir şey silmeden durur. `.env` uzak bir veritabanını gösteriyorsa
 `pnpm demo` hiçbir adımı uygulamadan durur.
-
-**Windows'ta çift tıklayarak:** proje klasöründeki `BASLAT.bat` dosyasına çift
-tıklayın. Node.js 22–24'ü denetler, gerekli pnpm sürümü yoksa yönetici izni
-istemeden kullanıcı hesabınıza kurar, sonra `pnpm demo`'yu çalıştırır ve adresi
-(`http://localhost:3000`) gösterir. Docker Desktop'ın açık olması gerekir (ya da
-5433'te kendi PostgreSQL'iniz). Mevcut veriye dokunmaz; örnek veri yalnız
-veritabanında hiç ürün yoksa yüklenir. Hata olursa pencere açık kalır ve nedeni
-yazar. Durdurmak için pencerede Ctrl+C. Yalnız geliştirme ve demo içindir.
-
-| Rol | E-posta | Parola |
-|---|---|---|
-| Yönetici | `admin@yilmaz.example` | `admin123` |
-| Çalışan | `ahmet@yilmazkirtasiye.example` | `calisan123` |
-| Başka işletme | `admin@demir.example` | `admin123` |
 
 **Adım adım:**
 
@@ -142,23 +234,6 @@ için normal bir terminal kullanın.
 
 `--filter` ile çağırırken **`run` kelimesi zorunlu**: onsuz pnpm, Windows'ta
 `'migrate' is not recognized` hatası verir.
-
-**Telefonla barkod okutma (pilot):** telefon kamerası yalnız HTTPS'te açıldığı için
-laptoptaki sunucuya bir tünel gerekir (örnek: Cloudflare'in hesap gerektirmeyen geçici
-tüneli, Windows'ta `winget install --id Cloudflare.cloudflared -e`). Bayrak sunucuyu
-başlatan terminalde verilir (PowerShell: `$env:ENABLE_PHONE_SCANNER = 'true'`) ya da
-`.env`'e yazılır.
-
-```bash
-pnpm --filter @stok/web run build
-pnpm --filter @stok/web run start                 # bayrak açık terminalde
-cloudflared tunnel --url http://localhost:3000    # ikinci terminal; https adresini kopyala
-```
-
-Laptopta `http://localhost:3000/hareket` → "Telefon adresi (tünel)" alanına tünel
-adresi → **Telefonla Barkod Okut** → telefonun kamera uygulamasıyla QR'ı okut. Yalnız
-tek süreçli `next start` ile çalışır (oturumlar bellekte; `ARC-14`). Tünel açıkken
-uygulamanın tamamı internetten erişilebilir: yalnız kullanım süresince açık tutun (T167).
 
 **Gün sonu turunu elle tetiklemek** (`.env`'de `CRON_SECRET` tanımlı olmalı):
 
