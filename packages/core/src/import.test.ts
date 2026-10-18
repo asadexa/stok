@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { type TestTenant, seedTestTenant, testAdminDb, testAppDb } from '@stok/db/testing'
 import ExcelJS from 'exceljs'
+import JSZip from 'jszip'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { Actor } from './authz'
 import {
@@ -138,6 +139,45 @@ describe('dosya çözümleme', () => {
     const file = await parseProductFile(buffer, 'urunler.xlsx', opts)
     expect(file.rows[0]?.cells.name).toBe('Şeffaf Poşet')
     expect(file.rows[0]?.cells.purchasePrice).toBe('12.5')
+  })
+
+  it('önekli SpreadsheetML xlsx dosyasını da okuyor (.NET Open XML SDK, ChatGPT)', async () => {
+    // Bu biçim ExcelJS'te TypeError atıyor, ekranda "beklenmeyen hata"
+    // görünüyordu. Parçalar SDK çıktısı gibi elle yazıldı: önek `x:`, mutlak
+    // rels hedefi, `t="str"` hücreler, boş `<x:sst/>`.
+    const ns = 'xmlns:x="http://schemas.openxmlformats.org/spreadsheetml/2006/main"'
+    const rel = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'
+    const zip = new JSZip()
+    zip.file(
+      '[Content_Types].xml',
+      '<?xml version="1.0" encoding="utf-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml" /><Default Extension="xml" ContentType="application/xml" /><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml" /><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml" /></Types>',
+    )
+    zip.file(
+      '_rels/.rels',
+      `<?xml version="1.0" encoding="utf-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Type="${rel}/officeDocument" Target="/xl/workbook.xml" Id="R1" /></Relationships>`,
+    )
+    zip.file(
+      'xl/_rels/workbook.xml.rels',
+      `<?xml version="1.0" encoding="utf-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Type="${rel}/worksheet" Target="/xl/worksheets/sheet1.xml" Id="R2" /><Relationship Type="${rel}/sharedStrings" Target="/xl/sharedStrings.xml" Id="R3" /></Relationships>`,
+    )
+    zip.file(
+      'xl/workbook.xml',
+      `<?xml version="1.0" encoding="utf-8"?><x:workbook ${ns}><x:sheets><x:sheet name="Urunler" sheetId="1" r:id="R2" xmlns:r="${rel}" /></x:sheets></x:workbook>`,
+    )
+    zip.file('xl/sharedStrings.xml', `<?xml version="1.0" encoding="utf-8"?><x:sst ${ns} />`)
+    zip.file(
+      'xl/worksheets/sheet1.xml',
+      `<?xml version="1.0" encoding="utf-8"?><x:worksheet ${ns}><x:sheetData>
+        <x:row r="1"><x:c r="A1" t="str"><x:v>Stok Kodu</x:v></x:c><x:c r="B1" t="str"><x:v>Ürün Adı</x:v></x:c><x:c r="C1" t="str"><x:v>Alış Fiyatı</x:v></x:c></x:row>
+        <x:row r="2"><x:c r="A2" t="str"><x:v>X-1</x:v></x:c><x:c r="B2" t="str"><x:v>Şeffaf Poşet</x:v></x:c><x:c r="C2"><x:v>12.5</x:v></x:c></x:row>
+      </x:sheetData></x:worksheet>`,
+    )
+    const buffer = await zip.generateAsync({ type: 'nodebuffer' })
+
+    const file = await parseProductFile(buffer, 'urunler.xlsx', opts)
+    expect(file.rows).toEqual([
+      { rowNumber: 2, cells: { sku: 'X-1', name: 'Şeffaf Poşet', purchasePrice: '12.5' } },
+    ])
   })
 })
 

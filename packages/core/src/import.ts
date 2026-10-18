@@ -18,6 +18,7 @@ import {
 import { type Db, productBarcodes, products, stockMovements, withTenant } from '@stok/db'
 import { and, eq, inArray, isNull } from 'drizzle-orm'
 import ExcelJS from 'exceljs'
+import JSZip from 'jszip'
 import { type Actor, requirePermission } from './authz'
 import type { SheetColumn } from './excel'
 import { createMovement } from './movements'
@@ -323,7 +324,8 @@ export async function parseProductFile(
 
 async function parseXlsx(buffer: Buffer): Promise<string[][]> {
   const workbook = new ExcelJS.Workbook()
-  await workbook.xlsx.load(buffer as unknown as Parameters<typeof workbook.xlsx.load>[0])
+  const readable = await unprefixSpreadsheetMl(buffer)
+  await workbook.xlsx.load(readable as unknown as Parameters<typeof workbook.xlsx.load>[0])
   const sheet = workbook.worksheets[0]
   if (!sheet) throw new AppError('IMPORT_NO_HEADER', 'workbook has no sheet')
 
@@ -336,6 +338,36 @@ async function parseXlsx(buffer: Buffer): Promise<string[][]> {
     matrix.push(cells.map((c) => c ?? ''))
   })
   return matrix
+}
+
+const SPREADSHEETML_NS = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'
+/** XML bildiriminden sonraki ilk öğe, önekliyse: `<x:workbook xmlns:x="…">`. JS'te `\s` BOM'u da kapsıyor. */
+const PREFIXED_ROOT = /^\s*(?:<\?[\s\S]*?\?>\s*)?<([A-Za-z_]\w*):[A-Za-z_][\w.-]*[^>]*>/
+
+/**
+ * ExcelJS etiketleri öneksiz arıyor (`<workbook>`, `<row>`, `<c>`) ve ad
+ * alanı çözmüyor; .NET Open XML SDK ise SpreadsheetML'i önekli yazıyor
+ * (`<x:workbook>`). Bu biçimdeki dosyalarda (ChatGPT'nin ürettiği xlsx ve SDK
+ * kullanan programların dışa aktarımları) ExcelJS kitabı bulamayıp TypeError
+ * atıyor, kullanıcı "beklenmeyen hata" görüyordu. Kök öğesi SpreadsheetML'e
+ * bağlı bir önekle başlayan parçalardan o önek atılıyor.
+ *
+ * Kökü öneksiz parçalara dokunulmuyor: ExcelJS'in zaten okuduğu dosyalarda
+ * davranış değişmesin, çizim gibi öneki ExcelJS'in de beklediği parçalar
+ * (`xdr:wsDr`) bozulmasın. Değişen parça yoksa dosya yeniden paketlenmiyor.
+ */
+async function unprefixSpreadsheetMl(buffer: Buffer): Promise<Buffer> {
+  const zip = await JSZip.loadAsync(buffer)
+  let changed = false
+  for (const entry of Object.values(zip.files)) {
+    if (entry.dir || !entry.name.endsWith('.xml')) continue
+    const xml = await entry.async('string')
+    const root = PREFIXED_ROOT.exec(xml)
+    if (!root?.[0].includes(`xmlns:${root[1]}="${SPREADSHEETML_NS}"`)) continue
+    zip.file(entry.name, xml.replace(new RegExp(`<(/?)${root[1]}:`, 'g'), '<$1'))
+    changed = true
+  }
+  return changed ? zip.generateAsync({ type: 'nodebuffer' }) : buffer
 }
 
 /** Hücre değerini metne çevirir. Formül sonucu ve zengin metin dahil. */

@@ -93,6 +93,9 @@ importers:
       jose:
         specifier: ^6.2.9
         version: 6.2.9
+      jszip:
+        specifier: ^3.10.1
+        version: 3.10.1
       nodemailer:
         specifier: ^9.0.5
         version: 9.0.5

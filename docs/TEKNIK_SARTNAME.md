@@ -73,6 +73,8 @@ Katman kuralları `PROJECT_BRAIN` §5, ilkeler §12. Kayıtlarda yalnız özelli
   zorunlu, hatalar satır bazlı (tek bozuk satır yüzlerce doğru satırı düşürmesin). Eksik sütun
   "temizle" değil "dokunma": yalnız ad ve kod içeren düzeltme dosyası fiyatları silmesin.
 - **Teknoloji:** ExcelJS ve kendi CSV ayrıştırıcısı (`core`); sütun eş adları `COLUMN_ALIASES`.
+  ExcelJS önekli SpreadsheetML'i (`<x:workbook>`, .NET Open XML SDK ve ChatGPT çıktısı) okuyamıyor;
+  bu parçaların öneki ExcelJS'ten önce JSZip ile atılıyor.
 - **Kararlar:** `DAT-18` (açılış stoğu), `PRC-05` (devirde fiyat zorunlu).
 - **Dosyalar:** `packages/core/src/import.ts`, `apps/web/src/app/(panel)/urunler/aktar/`.
 - **Kabul:** önizleme yazmaz; bozuk satır diğerlerini düşürmez; tek istekte en fazla 2.000 satır.
