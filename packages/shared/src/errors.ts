@@ -228,6 +228,40 @@ export const ERROR_CODES = {
     tr: (d) => `Dosyada ${d.limit} satırdan fazla var. Dosyayı bölerek yükleyin.`,
   },
 
+  // --- Tedarikçi verisi (T200, PRD-14) ---
+  SUPPLIER_NAME_EXISTS: {
+    http: 409,
+    retryable: false,
+    tr: (d) => `"${d.name}" adlı bir tedarikçi zaten var`,
+  },
+  SUPPLIER_FEED_UNREADABLE: {
+    http: 400,
+    retryable: false,
+    tr: () => 'Dosya okunamadı. Yalnız .xlsx, .csv ve .json dosyaları desteklenir.',
+  },
+  SUPPLIER_FEED_MISSING_COLUMN: {
+    http: 400,
+    retryable: false,
+    // Bulunan başlıklar metinde: IMPORT_MISSING_COLUMN ile aynı gerekçe.
+    tr: (d) =>
+      'Dosyada "Ürün Adı", "Fiyat" ve "Tedarikçi Kodu" ya da "Barkod" sütunları olmalı. ' +
+      `Bulunanlar: ${d.found || '—'}`,
+  },
+  SUPPLIER_FEED_DUPLICATE_COLUMN: {
+    http: 400,
+    retryable: false,
+    // Reddediliyor, ilki seçilmiyor: "Liste Fiyatı" ile "Net Fiyat" yan
+    // yanaysa hangisinin okunduğunu kullanıcı göremez ve yanlış fiyat
+    // sessizce kaydedilirdi.
+    tr: (d) =>
+      `"${d.field}" için birden fazla sütun var: ${d.columns}. Birini silip dosyayı tekrar yükleyin.`,
+  },
+  SUPPLIER_FEED_NO_VALID_ROWS: {
+    http: 400,
+    retryable: false,
+    tr: () => 'Dosyada kaydedilebilecek geçerli satır yok',
+  },
+
   // --- Şeffaf: kullanıcı hiçbir şey görmez, doğru davranış budur ---
   DUPLICATE_MOVEMENT: {
     http: 200,

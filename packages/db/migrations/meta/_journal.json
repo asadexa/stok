@@ -85,6 +85,13 @@
       "when": 1788166613865,
       "tag": "0011_health_alarm_job",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1792436124848,
+      "tag": "0012_suppliers",
+      "breakpoints": true
     }
   ]
 }

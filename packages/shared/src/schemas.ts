@@ -12,6 +12,14 @@ import {
 } from './prices'
 import { MOVEMENT_REASON_VALUES, MOVEMENT_REASONS, type MovementReason } from './reasons'
 import { ROLE_VALUES, type Role } from './roles'
+import {
+  CURRENCY_VALUES,
+  type Currency,
+  SUPPLIER_PRICE_TYPE_VALUES,
+  type SupplierPriceType,
+  TAX_MODE_VALUES,
+  type TaxMode,
+} from './suppliers'
 import { UNIT_VALUES, type Unit, unitDecimals } from './units'
 
 /** Ürün oluşturma, barkod ekleme ve içe aktarma aynı cümleyi söylesin. */
@@ -332,6 +340,92 @@ export const updateProductSchema = z.object({
 })
 
 export type UpdateProductInput = z.infer<typeof updateProductSchema>
+
+/**
+ * ============================================================================
+ * TEDARİKÇİ VERİSİ (T200, PRD-14)
+ * ============================================================================
+ */
+
+const currencyEnum = z.enum(CURRENCY_VALUES as [Currency, ...Currency[]])
+const taxModeEnum = z.enum(TAX_MODE_VALUES as [TaxMode, ...TaxMode[]])
+const supplierPriceTypeEnum = z.enum(
+  SUPPLIER_PRICE_TYPE_VALUES as [SupplierPriceType, ...SupplierPriceType[]],
+)
+
+/**
+ * Tedarikçi fiyatı: NUMERIC(14,4), sıfırdan büyük.
+ *
+ * Ürün kartının parasından (`moneySchema`, 2 ondalık) AYRI: B2B listelerinde
+ * küçük kalemler 3-4 ondalıkla fiyatlanıyor. Fazla basamak reddediliyor,
+ * yuvarlanmıyor; PostgreSQL yuvarlasaydı her yenilemede kaydedilen ile
+ * dosyadaki fiyat ayrışır ve sahte fiyat değişimi yazılırdı. Üst sınır
+ * NUMERIC(14,4)'ün tavanının altında: `toFixed(4)` bu büyüklükte tam.
+ */
+export const supplierPriceSchema = z
+  .number({ invalid_type_error: 'Fiyat sayı olmalı' })
+  .positive('Fiyat sıfırdan büyük olmalı')
+  .max(99_999_999.9999, 'Fiyat en fazla 99.999.999,9999 olabilir')
+  .refine((n) => decimalsOf(n) <= 4, { message: 'Fiyatta en fazla 4 ondalık basamak olabilir' })
+
+/** Tedarikçi stoğu. Eksi stok veri hatası: satır reddedilir. */
+const supplierStockSchema = z
+  .number({ invalid_type_error: 'Stok sayı olmalı' })
+  .nonnegative('Stok eksi olamaz')
+  .max(9_999_999_999.999, 'Stok en fazla 9.999.999.999,999 olabilir')
+  .refine(hasValidPrecision, { message: `Stokta en fazla ${MAX_DECIMALS} ondalık basamak` })
+
+/**
+ * Yeni tedarikçi.
+ *
+ * Para birimi, KDV durumu ve fiyat türü ZORUNLU: dosyada bu sütunlar çoğu
+ * zaman yok ve her yüklemede sorulsaydı yanlış seçim fark edilmeden
+ * kaydedilirdi. Tedarikçide bir kez beyan ediliyor, dosyadaki sütun satırda
+ * öncelikli.
+ *
+ * `unitPriceDeclared` VARSAYILAN OLARAK `false` (T200, B2): fiyatın kaç ürün
+ * birimine ait olduğu belirsiz sayılır. Yalnız yönetici açıkça "fiyatlar 1
+ * ürün birimi içindir" derse karşılaştırmaya girer. Varsayılan `true`
+ * olsaydı koli fiyatı adet fiyatıyla aynı sıraya girer, koli 12 kat pahalı
+ * görünürdü.
+ */
+export const createSupplierSchema = z.object({
+  name: z.string().trim().min(1, 'Tedarikçi adı boş olamaz').max(120),
+  defaultCurrency: currencyEnum,
+  defaultTaxMode: taxModeEnum,
+  defaultPriceType: supplierPriceTypeEnum,
+  unitPriceDeclared: z.boolean().default(false),
+})
+
+export type CreateSupplierInput = z.infer<typeof createSupplierSchema>
+
+/**
+ * Tedarikçi kaynağından gelen TEK kalem, varsayılanlar uygulandıktan sonra.
+ * Dosya (xlsx/csv) ve JSON sözleşmesi aynı şemaya iner; T201'in HTTP kaynağı
+ * da buraya yazacak. Kaynağa göre ayrı doğrulama, bir yolda geçip ötekinde
+ * patlayan satırlar üretirdi.
+ *
+ * `priceQty` yalnız kaynak AÇIKÇA söylerse dolu. Barkod çarpanından
+ * türetilmez: koli barkodu, fiyatın koliye ait olduğunu kanıtlamaz.
+ */
+export const supplierFeedItemSchema = z.object({
+  supplierCode: z.string().trim().min(1, 'Tedarikçi kodu ve barkod boş').max(100),
+  barcode: barcodeSchema.optional(),
+  name: z.string().trim().min(1, 'Ürün adı boş').max(300),
+  brand: z.string().trim().max(100).optional(),
+  price: supplierPriceSchema,
+  currency: currencyEnum,
+  taxMode: taxModeEnum,
+  priceType: supplierPriceTypeEnum,
+  priceQty: qtySchema.optional(),
+  stockQty: supplierStockSchema.optional(),
+  sourceUpdatedAt: z
+    .string()
+    .datetime({ offset: true, message: 'Güncelleme zamanı saat dilimli ISO 8601 olmalı' })
+    .optional(),
+})
+
+export type SupplierFeedItem = z.infer<typeof supplierFeedItemSchema>
 
 /**
  * ============================================================================

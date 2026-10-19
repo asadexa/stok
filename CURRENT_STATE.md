@@ -4,7 +4,7 @@ Yalnız BUGÜNÜN gerçeği. Her merge'te ya da durum değiştiğinde güncellen
 satırlar silinir (tarihçe git'te). Ayrıntı yazılmaz: işler → `TODOS.md`,
 kararlar → `DECISIONS.md`, model → `PROJECT_BRAIN.md`.
 
-**Tarih:** 2026-10-17 · **Çalışma branch'i:** `development` · **Stabil referans:** `master`
+**Tarih:** 2026-10-19 · **Çalışma branch'i:** `development` · **Stabil referans:** `master`
 (`master` = `dac05ff`, devralma öncesi son kod; geliştirme `development`'ta yapılır)
 
 ## Deploy
@@ -48,7 +48,8 @@ testleri geçici compose projeleriyle), drift "No schema changes", `next build` 
 Playwright WS-1.1'den beri koşulmadı (arayüz değişmedi; e2e demo veritabanına yazıyor, T150);
 son e2e sonucu yukarıdaki 24/24.
 
-GitHub CI: `development` `8a96c74` (T196) koşu #75 yeşil; üç iş de geçti, demo işindeki "Yedek ve
+GitHub CI: son koşu #82 (`93b38f6`, 2026-10-18) yeşil (GitHub API'den okundu, iş ayrıntısı
+görülmedi). Önceki ayrıntılı kayıt: `development` `8a96c74` (T196) koşu #75 yeşil; üç iş de geçti, demo işindeki "Yedek ve
 durum" adımı artık başarı satırlarını da arıyor (test sayıları herkese açık API'de görünmüyor).
 Öncesinde `1e47741` (WS-1.3a test düzeltmesi) koşu #73 yeşil; üç iş de geçti
 (typecheck + test, Windows lint + typecheck + derleme, demo yolu). Test işinin günlüğünde
@@ -139,9 +140,10 @@ geçici kapsayıcıda izole inceleme, yalnız tanınan kümede silme. Geliştirm
 
 ## Sıradaki workstream
 
-**Yol haritasının üstü** (ekip kararı, 2026-10-17; hiçbiri başlamadı), bu sırayla:
-1. **T200 B2B V1 PLAN** (`PRD-14`): Plan Mode, CEO/Product Review, Engineering Review, kullanıcı onayı.
-2. **T200 ilk BUILD dilimi**: tedarikçi, ürün eşleşmesi, fiyat değişimi ve karşılaştırma.
+**Yol haritasının üstü** (ekip kararı, 2026-10-17), bu sırayla:
+1. **T200 B2B V1 PLAN** (`PRD-14`): ✓ kullanıcı onaylı (2026-10-19; `PRD-15`, `DAT-19`, ADR-006).
+2. **T200 ilk BUILD dilimi**: 1a çekirdek (shared, db migration 0012, core, testler) yerelde bitti,
+   commit bekliyor; arayüz yok. 1b ekranlar ve e2e sırada. Ayrıntı F-12.
 3. **HTTPS test ortamı** (T144, `OPS-12`): yakın adım, B2B'yi geciktirmez. Barındırma `OPS-01`
    (Open); üretim ayrı iş (T42).
 4. **T201 harici API kaynağı**: V1'in devamı. Gerçek sağlayıcı seçilmeden genel entegrasyon

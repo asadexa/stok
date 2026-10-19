@@ -29,6 +29,11 @@ describe('çalışanın yapamadıkları (tehdit S6, S7)', () => {
     expect(can('STAFF', 'price:read')).toBe(false)
   })
 
+  it('tedarikçi verisini göremez ve yönetemez (INV-10, PRD-14)', () => {
+    expect(can('STAFF', 'supplier:read')).toBe(false)
+    expect(can('STAFF', 'supplier:manage')).toBe(false)
+  })
+
   it('başkasının hareketlerini göremez', () => {
     expect(can('STAFF', 'movement:read:all')).toBe(false)
   })

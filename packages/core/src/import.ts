@@ -277,9 +277,8 @@ export async function parseProductFile(
   options: ImportOptions = {},
 ): Promise<ParsedFile> {
   const limit = options.rowLimit ?? IMPORT_ROW_LIMIT
-  const isCsv = fileName.toLowerCase().endsWith('.csv')
 
-  const matrix = isCsv ? parseCsv(buffer) : await parseXlsx(buffer)
+  const matrix = await readSheet(buffer, fileName)
   const headerRow = matrix[0]
   if (!headerRow || headerRow.every((c) => c.trim() === '')) {
     throw new AppError('IMPORT_NO_HEADER', 'file has no header row')
@@ -320,6 +319,16 @@ export async function parseProductFile(
     .filter((h) => AMBIGUOUS_QTY_HEADERS.includes(normalizeHeader(h)))
 
   return { rows, columns: Object.keys(columns) as (keyof ParsedRow)[], ignoredQtyColumns }
+}
+
+/**
+ * `.csv` ya da `.xlsx` dosyasını hücre metinleri matrisine çevirir; başlık
+ * yorumlamaz. Tedarikçi dosyası (T200) da bu okuyucuyu kullanıyor: ikinci bir
+ * okuyucu, BOM, `;` ayırıcı ve önekli SpreadsheetML derslerini yeniden
+ * öğrenmek zorunda kalırdı.
+ */
+export async function readSheet(buffer: Buffer, fileName: string): Promise<string[][]> {
+  return fileName.toLowerCase().endsWith('.csv') ? parseCsv(buffer) : parseXlsx(buffer)
 }
 
 async function parseXlsx(buffer: Buffer): Promise<string[][]> {

@@ -7,7 +7,7 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
 **Kurallar**
 
 - ID `T<n>`. Arşivdeki görevler numaralarını korur. Yeni görev en büyük
-  numaradan devam eder — **sıradaki boş numara: T204**. Numara yeniden
+  numaradan devam eder — **sıradaki boş numara: T208**. Numara yeniden
   kullanılmaz.
 - Biçim: `- [ ] **T<n> (P0–P3)** - <alan> - **Başlık**`. Altında kısa
   **Neden / Kanıt / Bağlı / Doğrula / Kaynak** satırları.
@@ -44,6 +44,9 @@ güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
   - Neden: tedarikçinin ürün, barkod, fiyat ve stok bilgisi bugün elle yeniden yazılıyor ya da
     hiç görünmüyor; aynı ürün için tedarikçiler karşılaştırılamıyor.
   - Ürün kararı: `PRD-14` (onaylı, uygulanmadı). Kabul kriterleri `docs/TEKNIK_SARTNAME.md` F-12.
+  - İlerleme (2026-10-19): PLAN onaylı (B1–B3, `PRD-15`, `DAT-19`, ADR-006). Dilim 1a (shared, db
+    migration 0012, core, testler) bitti, commit bekliyor. Kalan: 1b (ekranlar, eylemler, e2e),
+    sonra Dilim 2 (kod eşitliğinden öneri, genel karşılaştırma listesi).
   - Yapılacak (V1): sağlayıcıdan bağımsız tedarikçi kalemi modeli; dosya kaynağı ve örnek API
     verisi; ürün ↔ tedarikçi eşleşmesi (bir ürüne birden çok tedarikçi); "Verileri Getir";
     son fiyat ve stok kaydı, fiyat geçmişi yalnız değişimde; tedarikçiler arası karşılaştırma.
@@ -221,6 +224,43 @@ güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
 
 ## P2
 
+- [ ] **T204 (P2)** - güvenlik - **Web eylemleri ham hatayı logluyor; Drizzle hata mesajı sorgu parametrelerini (fiyat, barkod) taşıyor**
+  - Neden: beklenmeyen bir veritabanı hatasında Drizzle'ın hata mesajı `Failed query: …` ile
+    birlikte `params: [...]` satırını da içeriyor. `console.error('[import action]', err)` gibi
+    ham hata loglayan bir eylem, içe aktarılan alış/satış fiyatlarını ve barkodları stdout'a, oradan
+    log toplayıcıya yazar. `PROJECT_BRAIN` §12.7 ve `observability.ts` "fiyat ve barkod loglanmaz"
+    diyor; INV-10'un log yolu bu durumda açık.
+  - Kanıt: T200 1a'da `dogrula` sırasında fark filtresi kaldırılınca `suppliers.test.ts` hata
+    çıktısında `params: [{"supplier_code":"A","barcode":"sup-P-1-U",…,"price":"9.0000",…}]`
+    görüldü (2026-10-19). Ham hata loglayan yerler: `apps/web/src/app/(panel)/urunler/aktar/actions.ts:45`,
+    `hareket/phone-scan-actions.ts:35`, `server/export.ts:26`, `server/form.ts:181`, `server/http.ts:35`.
+    Hangisinin fiyat taşıyan sorguya ulaştığı tek tek doğrulanmadı.
+  - Yapılacak: beklenmeyen hatada yalnız SQLSTATE/constraint ve hata sınıfı loglanır
+    (`pgErrorCode`, `pgConstraint`). T200 1b'nin tedarikçi eylemleri bu kuralla yazılacak.
+  - Bağlı: S7, INV-10, T200.
+  - Doğrula: kayıtta DB hatası üreten bir test, log yazıcısında fiyat ve barkod geçmediğini sınar.
+  - Kaynak: T200 Dilim 1a, `dogrula`, 2026-10-19.
+- [ ] **T205 (P2)** - core - **Virgülsüz noktalı sayı ("1.234") ondalık okunuyor; Türkçe binlik ayırıcı olabilir**
+  - Neden: `parseTurkishNumber` virgül yoksa noktayı ondalık sayıyor. Türkçe hazırlanmış bir CSV'de
+    "1.234" bin iki yüz otuz dört demek olabilir; fiyat bin kat düşük, sessizce kaydedilir. xlsx'in
+    sayı hücresi etkilenmez (hücre sayı olarak gelir); risk metin hücrelerinde ve CSV'de.
+  - Kanıt: `packages/core/src/import.ts` `parseTurkishNumber`. Ürün içe aktarma (F-02) ve tedarikçi
+    dosyası (F-12) aynı fonksiyonu kullanıyor. Gerçek bir dosyada görülmedi (tahmini bulgu).
+  - Yapılacak: biçim kararı (belirsiz yazımı satır hatası mı saymalı) ve iki içe aktarmada aynı kural.
+    Tedarikçi tarafında 1b önizlemesi okunan fiyatı gösterecek; bu tek başına kalıcı çözüm değil.
+  - Bağlı: F-02, F-12, T200.
+  - Doğrula: "1.234" ve "1.234,00" içeren CSV'nin önizlemesi.
+  - Kaynak: T200 Dilim 1a, 2026-10-19.
+- [ ] **T207 (P2)** - test - **`invariant.test.ts` (1000 hareket) bu makinede 30 sn sınırını aşıyor; yerel `pnpm test` kırmızı**
+  - Neden: test ~32 sn sürüyor, vitest sınırı 30 sn. Invariant BOZULMUYOR (sınır yükseltilince
+    defter = projeksiyon, yeşil); sorun süre payı. Yerel kapı kırmızı göründüğünde gerçek bir
+    kırmızı gözden kaçabilir. CI #82 (Linux) yeşil.
+  - Kanıt: 2026-10-19, Windows 11 + Docker Desktop. HEAD `93b38f6` kodunda (T200 değişiklikleri
+    stash'te) 32,3 sn ve 32,5 sn; T200 1a ile 31,5 sn. Yani T200 kaynaklı değil.
+  - Yapılacak: bu teste açık bir zaman sınırı mı, hareket başına maliyetin ölçümü mü (ör. T171 ile
+    ortak darboğaz) karar. Kararsız test sayıp kapı dışına almak YOK (T109).
+  - Doğrula: yerel `pnpm --filter @stok/core run test` yeşil; süre ölçümü kayıtlı.
+  - Kaynak: T200 Dilim 1a kapıları, 2026-10-19.
 - [ ] **T190 (P2)** - operasyon - **Zamanlanmış yedekten (WS-1.3b) önce: kuşak koruması ve `pg_dump` bekleme sınırı**
   - Neden: WS-1.3a'nın saklaması volume kuşağı ayırmıyor; kazara `db:reset` (ya da Docker Desktop
     verisinin silinmesi) sonrası 14 başarılı koşu reset öncesi bütün dökümleri döndürür. Elle
@@ -389,6 +429,17 @@ güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
 
 ## P3
 
+- [ ] **T206 (P3)** - altyapı - **Repo kökünde izlenmeyen `~/` klasörü yerel `pnpm lint`'i düşürüyor**
+  - Neden: kökte `~/.claude/skills/gstack` kopyası duruyor (git'te izlenmiyor, `.gitignore`'da yok).
+    Biome onu da tarıyor: yerelde `pnpm lint` 1.072 dosyaya bakıp 97 hatayla düşüyor; CI temiz
+    checkout'ta etkilenmiyor. Yerel kapı kırmızı göründüğü için gerçek bir lint hatası gözden kaçabilir.
+  - Kanıt: 2026-10-19 `pnpm lint` → 1.072 dosya, hataların hepsi `~\.claude\skills\gstack\…`;
+    proje klasörleriyle `biome lint apps packages scripts db design .github` → 215 dosya, 0 tanı.
+    Klasör 2026-08-27 tarihli; muhtemelen bir araç `~`'yi yerel yol olarak açtı (doğrulanmadı).
+  - Yapılacak: klasörün sahibine sorup kaldırmak ya da `.gitignore`/Biome `files.ignore` ile dışlamak.
+    Silme kullanıcı onayı ister.
+  - Doğrula: `pnpm lint` yerelde 215 civarı dosyayla temiz.
+  - Kaynak: T200 Dilim 1a kapıları, 2026-10-19.
 - [ ] **T145 (P3)** - güvenlik - scrypt N=2¹⁴ → 2¹⁷ (girişte yeniden özetleme ile). `packages/db/src/password.ts:31`
 - [ ] **T146 (P3)** - migration - Additive kuralını (`DAT-13`) zorlayan otomatik kontrol yok; 0009 `RENAME COLUMN` ihlal etmiş.
 - [ ] **T147 (P3)** - gizlilik - Hareket formunun hata yolunda girilen fiyatlar URL'de taşınıyor (tarayıcı geçmişi, erişim logları).

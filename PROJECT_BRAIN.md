@@ -64,7 +64,7 @@ ve sunucuda zorlanır; arayüzde düğmeyi gizlemek yetki kontrolü değildir.
 - **Planlanmış, yazılmamış**: native mobil uygulama (`PRD-03`), mobilin ihtiyaç
   duyduğu `/api/v1` REST sözleşmesi (`ARC-07`, `ARC-09`), offline outbox (`ARC-10`).
   Yüksek öncelikli (2026-10-17): tedarikçi verisini dışarıdan **çeken** B2B V1 (`PRD-14`;
-  bizim REST sunmamızdan ayrı) ve HTTPS alan adıyla çevrim içi test ortamı (`OPS-12`).
+  çekirdeği ve veri modeli yazıldı, ekranı yok: F-12, ADR-006; bizim REST sunmamızdan ayrı) ve HTTPS alan adıyla çevrim içi test ortamı (`OPS-12`).
   Özellik kayıtları `docs/TEKNIK_SARTNAME.md`'de.
 - **Bilinçli kapsam dışı**: §14.
 

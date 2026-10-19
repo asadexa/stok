@@ -47,6 +47,8 @@ export const PERMISSIONS = [
   'user:manage',
   'count:start',
   'count:approve',
+  'supplier:read',
+  'supplier:manage',
 ] as const
 
 export type Permission = (typeof PERMISSIONS)[number]
@@ -69,6 +71,8 @@ const ADMIN_PERMISSIONS: PermissionSet = {
   'user:manage': true,
   'count:start': true,
   'count:approve': true,
+  'supplier:read': true,
+  'supplier:manage': true,
 }
 
 const STAFF_PERMISSIONS: PermissionSet = {
@@ -90,6 +94,12 @@ const STAFF_PERMISSIONS: PermissionSet = {
   'export:excel': false, // toplu veri dışarı çıkarma admin işi
   'user:manage': false,
   'count:approve': false, // sayımı yapan onaylayamaz, ayrı göz gerekir
+  // Tedarikçi fiyatı alış fiyatı niteliğinde (INV-10, PRD-14). Çalışana
+  // fiyatı gizlenmiş bir okuma da verilmedi: tedarikçi ekranı fiyatsız
+  // anlamsız, alan alan gizlemek ise ikinci bir redaksiyon katmanı ve ikinci
+  // bir sızıntı yolu olurdu.
+  'supplier:read': false,
+  'supplier:manage': false,
 }
 
 export const ROLE_PERMISSIONS = {

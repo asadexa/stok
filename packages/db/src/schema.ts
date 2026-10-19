@@ -1,5 +1,6 @@
 import {
   barcodeKindsCheckConstraint,
+  currencyCheckConstraint,
   jobKindsCheckConstraint,
   jobStatusesCheckConstraint,
   multiplierCheckConstraint,
@@ -7,6 +8,10 @@ import {
   priceSourcesCheckConstraint,
   reasonsCheckConstraint,
   rolesCheckConstraint,
+  supplierMatchLinkCheckConstraint,
+  supplierMatchStateCheckConstraint,
+  supplierPriceTypeCheckConstraint,
+  taxModeCheckConstraint,
   unitsCheckConstraint,
 } from '@stok/shared'
 import { sql } from 'drizzle-orm'
@@ -60,6 +65,9 @@ const qtyCol = (name: string) => numeric(name, { precision: 14, scale: 3 })
 
 /** Para: NUMERIC(12,2). Asla float. */
 const moneyCol = (name: string) => numeric(name, { precision: 12, scale: 2 })
+
+/** Tedarikçi fiyatı: NUMERIC(14,4). B2B listelerinde 3-4 ondalık var (T200, B3). */
+const supplierPriceCol = (name: string) => numeric(name, { precision: 14, scale: 4 })
 
 // ---------------------------------------------------------------------------
 
@@ -462,6 +470,202 @@ export const backgroundJobs = pgTable(
   ],
 )
 
+/**
+ * ============================================================================
+ * TEDARİKÇİ VERİSİ (T200, PRD-14, ADR-006)
+ *
+ * Stok defterinden TAMAMEN AYRI. Tedarikçinin fiyatı ve stoğu bir bilgi,
+ * bizim stoğumuz ise defterin sonucu (ADR-001). Buradaki hiçbir tablo
+ * `stock_movements`, `current_stock` ya da ürün kartının fiyatlarına yazmaz;
+ * yazsaydı tedarikçinin "elimde 500 var"ı bizim rafımıza girerdi.
+ *
+ *   suppliers                 tedarikçi + varsayılan fiyat koşulları
+ *       │
+ *   supplier_items            kalemin GÜNCEL hâli (son geçerli yenileme)
+ *       │
+ *   supplier_price_changes    yalnız DEĞİŞİMDE, append-only
+ * ============================================================================
+ */
+export const suppliers = pgTable(
+  'suppliers',
+  {
+    id: pk(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
+    name: text('name').notNull(),
+    /** "ABC Gıda" ile "abc gıda" aynı tedarikçi: tekillik bunun üstünde (DAT-11). */
+    nameNorm: text('name_norm').generatedAlwaysAs(sql`tr_norm(name)`),
+    /** Dosyada sütunu olmayan satırların koşulları. Satırdaki sütun önceliklidir. */
+    defaultCurrency: text('default_currency').notNull(),
+    defaultTaxMode: text('default_tax_mode').notNull(),
+    defaultPriceType: text('default_price_type').notNull(),
+    /**
+     * Yönetici "bu listedeki fiyatlar 1 ürün birimi içindir" diye AÇIKÇA
+     * beyan etti mi. Varsayılan hayır: fiyatın miktarı belirsiz sayılır ve
+     * karşılaştırmaya girmez (T200, B2). Sayı değil bayrak, çünkü onaylı
+     * tek beyan "1 ürün birimi"; başka bir miktar satırdaki açık sütundan gelir.
+     */
+    unitPriceDeclared: boolean('unit_price_declared').notNull().default(false),
+    /** Son BAŞARILI yenileme. Hata ya da geçersiz dosya bunu ilerletmez. */
+    lastRefreshedAt: timestamp('last_refreshed_at', { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex('suppliers_tenant_name_uq').on(t.tenantId, t.nameNorm),
+    check('suppliers_currency_ck', sql.raw(currencyCheckConstraint('default_currency'))),
+    check('suppliers_tax_mode_ck', sql.raw(taxModeCheckConstraint('default_tax_mode'))),
+    check(
+      'suppliers_price_type_ck',
+      sql.raw(supplierPriceTypeCheckConstraint('default_price_type')),
+    ),
+  ],
+)
+
+export const supplierItems = pgTable(
+  'supplier_items',
+  {
+    id: pk(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
+    supplierId: uuid('supplier_id')
+      .notNull()
+      .references(() => suppliers.id),
+    /** Tedarikçinin kendi kodu; tedarikçi içinde doğal anahtar. Kod yoksa barkod. */
+    supplierCode: text('supplier_code').notNull(),
+    barcode: text('barcode'),
+    name: text('name').notNull(),
+    brand: text('brand'),
+    price: supplierPriceCol('price').notNull(),
+    currency: text('currency').notNull(),
+    taxMode: text('tax_mode').notNull(),
+    priceType: text('price_type').notNull(),
+    /**
+     * Fiyatın ait olduğu miktar, ürünün biriminde. NULL = BELİRSİZ.
+     *
+     * Yalnız açık beyandan dolar: satırdaki "Fiyat Miktarı" ya da tedarikçinin
+     * birim beyanı. Barkod çarpanından TÜRETİLMEZ: koli barkoduyla eşleşmek,
+     * fiyatın koliye ait olduğunu kanıtlamaz (T200). Belirsiz fiyat
+     * karşılaştırmaya ve sıralamaya girmez.
+     */
+    priceQty: qtyCol('price_qty'),
+    /** Tedarikçinin bildirdiği stok. NULL = bildirilmedi. Bizim stoğumuz DEĞİL. */
+    stockQty: qtyCol('stock_qty'),
+    /** Kaynağın kendi veri zamanı (yalnız saat dilimli olarak gelirse). */
+    sourceUpdatedAt: timestamp('source_updated_at', { withTimezone: true }),
+    /**
+     * Kalemin en son BAŞARILI bir yenilemede görüldüğü an. Dosyada olmayan
+     * kalemin bu değeri değişmez: kaynağın tam liste mi kısmi liste mi
+     * gönderdiği bilinmiyor, yokluk bilgi sayılmıyor (ADR-006).
+     */
+    fetchedAt: timestamp('fetched_at', { withTimezone: true }).notNull(),
+    productId: uuid('product_id').references(() => products.id),
+    matchState: text('match_state').notNull().default('UNMATCHED'),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex('supplier_items_code_uq').on(t.tenantId, t.supplierId, t.supplierCode),
+    // Ürün sayfasındaki karşılaştırma: bir ürünün bütün tedarikçi kalemleri.
+    index('supplier_items_product_idx')
+      .on(t.tenantId, t.productId)
+      .where(sql`product_id IS NOT NULL`),
+    check('supplier_items_currency_ck', sql.raw(currencyCheckConstraint('currency'))),
+    check('supplier_items_tax_mode_ck', sql.raw(taxModeCheckConstraint('tax_mode'))),
+    check('supplier_items_price_type_ck', sql.raw(supplierPriceTypeCheckConstraint('price_type'))),
+    check('supplier_items_match_state_ck', sql.raw(supplierMatchStateCheckConstraint('match_state'))),
+    check('supplier_items_match_link_ck', sql.raw(supplierMatchLinkCheckConstraint())),
+    check('supplier_items_price_ck', sql`price > 0`),
+    check('supplier_items_price_qty_ck', sql`price_qty IS NULL OR price_qty > 0`),
+    check('supplier_items_stock_ck', sql`stock_qty IS NULL OR stock_qty >= 0`),
+  ],
+)
+
+/**
+ * İki fiyat KARŞILAŞTIRILABİLİR Mİ: para birimi, KDV durumu, fiyat türü aynı
+ * ve fiyat miktarı iki tarafta da BİLİNİYOR ve eşit. Kural tek yerde,
+ * veritabanında: hem `is_comparable` hem `change_pct` bu metinden üretiliyor
+ * (PostgreSQL üretilen sütunun başka bir üretilen sütuna bakmasına izin
+ * vermiyor). Uygulama kendi kopyasını tutsaydı ekrandaki yüzde ile
+ * kaydedilen tür ayrışabilirdi.
+ */
+const PRICE_CHANGE_COMPARABLE = `old_currency = new_currency
+  AND old_tax_mode = new_tax_mode
+  AND old_price_type = new_price_type
+  AND old_price_qty IS NOT NULL
+  AND new_price_qty IS NOT NULL
+  AND old_price_qty = new_price_qty`
+
+/**
+ * FİYAT GEÇMİŞİ. Yalnız değişimde ve append-only (ADR-006).
+ *
+ * `stok_app`'ten UPDATE/DELETE geri alınmış (migration 0012): geçmiş bir
+ * tedarikçi pazarlığında kanıttır, uygulama onu sessizce düzeltememeli.
+ * Saklama süresi henüz kararlaştırılmadı; silme gerekirse sahip rolüyle
+ * yapılacak ayrı bir iştir.
+ */
+export const supplierPriceChanges = pgTable(
+  'supplier_price_changes',
+  {
+    id: pk(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
+    supplierItemId: uuid('supplier_item_id')
+      .notNull()
+      .references(() => supplierItems.id),
+    oldPrice: supplierPriceCol('old_price').notNull(),
+    oldCurrency: text('old_currency').notNull(),
+    oldTaxMode: text('old_tax_mode').notNull(),
+    oldPriceType: text('old_price_type').notNull(),
+    oldPriceQty: qtyCol('old_price_qty'),
+    newPrice: supplierPriceCol('new_price').notNull(),
+    newCurrency: text('new_currency').notNull(),
+    newTaxMode: text('new_tax_mode').notNull(),
+    newPriceType: text('new_price_type').notNull(),
+    newPriceQty: qtyCol('new_price_qty'),
+    isComparable: boolean('is_comparable').generatedAlwaysAs(
+      sql.raw(`(${PRICE_CHANGE_COMPARABLE})`),
+    ),
+    /**
+     * Yüzde değişim, bir ondalık. Yalnız karşılaştırılabilir satırda dolu.
+     * Hassasiyetsiz `numeric`: 0,0001 → 9999 gibi bir değişim sabit
+     * hassasiyetli bir sütunu taşırır ve bütün yenilemeyi düşürürdü.
+     * `old_price > 0` CHECK'i sıfıra bölmeyi imkânsız kılıyor.
+     */
+    changePct: numeric('change_pct').generatedAlwaysAs(
+      sql.raw(
+        `CASE WHEN ${PRICE_CHANGE_COMPARABLE} THEN round((new_price - old_price) * 100 / old_price, 1) END`,
+      ),
+    ),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index('supplier_price_changes_item_idx').on(t.tenantId, t.supplierItemId, t.createdAt.desc()),
+    // DEĞİŞMEYEN FİYAT GEÇMİŞ ÜRETMEZ (PRD-14). Uygulama farkı zaten süzüyor;
+    // kural burada da duruyor ki satırı kim yazarsa yazsın korunsun (§12.1).
+    check(
+      'supplier_price_changes_distinct_ck',
+      sql`(old_price, old_currency, old_tax_mode, old_price_type, old_price_qty)
+          IS DISTINCT FROM (new_price, new_currency, new_tax_mode, new_price_type, new_price_qty)`,
+    ),
+    check('supplier_price_changes_old_price_ck', sql`old_price > 0`),
+    check('supplier_price_changes_new_price_ck', sql`new_price > 0`),
+    check('supplier_price_changes_old_currency_ck', sql.raw(currencyCheckConstraint('old_currency'))),
+    check('supplier_price_changes_new_currency_ck', sql.raw(currencyCheckConstraint('new_currency'))),
+    check('supplier_price_changes_old_tax_mode_ck', sql.raw(taxModeCheckConstraint('old_tax_mode'))),
+    check('supplier_price_changes_new_tax_mode_ck', sql.raw(taxModeCheckConstraint('new_tax_mode'))),
+    check(
+      'supplier_price_changes_old_price_type_ck',
+      sql.raw(supplierPriceTypeCheckConstraint('old_price_type')),
+    ),
+    check(
+      'supplier_price_changes_new_price_type_ck',
+      sql.raw(supplierPriceTypeCheckConstraint('new_price_type')),
+    ),
+  ],
+)
+
 export const schema = {
   tenants,
   users,
@@ -471,4 +675,7 @@ export const schema = {
   stockMovements,
   currentStock,
   backgroundJobs,
+  suppliers,
+  supplierItems,
+  supplierPriceChanges,
 }

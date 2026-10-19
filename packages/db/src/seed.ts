@@ -193,6 +193,9 @@ class SeedRefused extends Error {}
  * kalabilirdi.
  */
 const WIPED_TABLES = [
+  'supplier_price_changes',
+  'supplier_items',
+  'suppliers',
   'current_stock',
   'stock_movements',
   'product_barcodes',

@@ -2,10 +2,14 @@ import {
   AUTH_ATTEMPT_SCOPE_VALUES,
   BARCODE_KINDS,
   BARCODE_KIND_VALUES,
+  CURRENCY_VALUES,
   JOB_KIND_VALUES,
   JOB_STATUS_VALUES,
   MOVEMENT_REASON_VALUES,
   ROLE_VALUES,
+  SUPPLIER_MATCH_STATE_VALUES,
+  SUPPLIER_PRICE_TYPE_VALUES,
+  TAX_MODE_VALUES,
   UNIT_VALUES,
   authScopesCheckConstraint,
   barcodeKindsCheckConstraint,
@@ -18,9 +22,10 @@ import {
 } from '@stok/shared'
 import { is, sql } from 'drizzle-orm'
 import { PgTable, getTableConfig } from 'drizzle-orm/pg-core'
-import { afterAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { pgErrorCode } from './pg-errors'
 import * as schema from './schema'
-import { testAdminDb } from './testing'
+import { detUuid, testAdminDb } from './testing'
 import { TEST_DB_NAME } from './test/db-name'
 import { APP_TABLES } from './wipe-guard'
 
@@ -109,6 +114,31 @@ describe('DB CHECK constraint kod ile senkron', () => {
     expect(valuesIn(statuses!)).toEqual([...JOB_STATUS_VALUES].sort())
   })
 
+  it('tedarikçi sözlükleri (para birimi, KDV, fiyat türü, eşleşme) kod ile senkron (T200)', async () => {
+    // Liste koda eklenip migration üretilmezse dosyadaki yeni para birimi
+    // önizlemeden geçer, kayıtta 23514 ile patlar: kullanıcı 500 görür.
+    const expected: [string, readonly string[]][] = [
+      ['suppliers_currency_ck', CURRENCY_VALUES],
+      ['suppliers_tax_mode_ck', TAX_MODE_VALUES],
+      ['suppliers_price_type_ck', SUPPLIER_PRICE_TYPE_VALUES],
+      ['supplier_items_currency_ck', CURRENCY_VALUES],
+      ['supplier_items_tax_mode_ck', TAX_MODE_VALUES],
+      ['supplier_items_price_type_ck', SUPPLIER_PRICE_TYPE_VALUES],
+      ['supplier_items_match_state_ck', SUPPLIER_MATCH_STATE_VALUES],
+      ['supplier_price_changes_old_currency_ck', CURRENCY_VALUES],
+      ['supplier_price_changes_new_currency_ck', CURRENCY_VALUES],
+      ['supplier_price_changes_old_tax_mode_ck', TAX_MODE_VALUES],
+      ['supplier_price_changes_new_tax_mode_ck', TAX_MODE_VALUES],
+      ['supplier_price_changes_old_price_type_ck', SUPPLIER_PRICE_TYPE_VALUES],
+      ['supplier_price_changes_new_price_type_ck', SUPPLIER_PRICE_TYPE_VALUES],
+    ]
+    for (const [name, values] of expected) {
+      const def = await constraintDefinition(name)
+      expect(def, `${name} veritabanında yok`).toBeDefined()
+      expect(valuesIn(def!), name).toEqual([...values].sort())
+    }
+  })
+
   it('barcodes_kind_ck tam olarak BARCODE_KINDS listesini içeriyor', async () => {
     // Yeni bir barkod türü eklenip migration üretilmezse, arayüz türü
     // seçtirir ve INSERT 23514 ile patlar — kullanıcı 500 görür.
@@ -170,7 +200,7 @@ describe('DB CHECK constraint kod ile senkron', () => {
 })
 
 describe('şemanın taşıdığı diğer garantiler', () => {
-  it('miktar NUMERIC(14,3), para NUMERIC(12,2)', async () => {
+  it('miktar NUMERIC(14,3), para NUMERIC(12,2), tedarikçi fiyatı NUMERIC(14,4)', async () => {
     // Bu tipleri INTEGER'a veya float'a çeviren bir migration, hatayı
     // aylar sonra "kuruş farkı" olarak gösterirdi.
     const rows = await admin.db.execute<{
@@ -198,8 +228,26 @@ describe('şemanın taşıdığı diğer garantiler', () => {
       'sale_price',
     ])
 
+    // Tedarikçi fiyatı ayrı ölçekte (T200, B3) ve tablo adıyla sayılıyor:
+    // `price` adı tek başına bir ürün sütununu da kapsayabilirdi.
+    const SUPPLIER_PRICE_COLUMNS = new Set([
+      'supplier_items.price',
+      'supplier_price_changes.old_price',
+      'supplier_price_changes.new_price',
+    ])
+    // Yüzde bilerek hassasiyetsiz: sabit ölçek uç değişimlerde taşar ve
+    // bütün yenilemeyi düşürürdü (schema.ts `change_pct`).
+    const UNBOUNDED_COLUMNS = new Set(['supplier_price_changes.change_pct'])
+
     for (const c of rows) {
-      const expected = MONEY_COLUMNS.has(c.column_name) ? { p: 12, s: 2 } : { p: 14, s: 3 }
+      const key = `${c.table_name}.${c.column_name}`
+      const expected = UNBOUNDED_COLUMNS.has(key)
+        ? { p: null, s: null }
+        : SUPPLIER_PRICE_COLUMNS.has(key)
+          ? { p: 14, s: 4 }
+          : MONEY_COLUMNS.has(c.column_name)
+            ? { p: 12, s: 2 }
+            : { p: 14, s: 3 }
       expect(
         { p: c.numeric_precision, s: c.numeric_scale },
         `${c.table_name}.${c.column_name}`,
@@ -231,6 +279,117 @@ describe('şemanın taşıdığı diğer garantiler', () => {
     const r = [...rows][0]
     expect(r?.a).toBe(r?.b)
     expect(r?.c).toBe(r?.d)
+  })
+})
+
+/**
+ * T200 — FİYAT GEÇMİŞİNİN KURALLARI VERİTABANINDA (ADR-006).
+ *
+ * Karşılaştırılabilirlik ve yüzde üretilen sütunlar: uygulama hesaplamıyor,
+ * yalnız okuyor. Satırlar burada SAHİP rolüyle doğrudan yazılıyor; kural
+ * satırı kimin yazdığından bağımsız tutmalı.
+ */
+describe('fiyat geçmişi kuralları (T200, ADR-006)', () => {
+  const tenantId = detUuid('schema-sync:supplier-tenant')
+  const supplierId = detUuid('schema-sync:supplier')
+  const itemId = detUuid('schema-sync:supplier-item')
+
+  interface Side {
+    price: string
+    currency?: string
+    taxMode?: string
+    priceType?: string
+    qty?: string | null
+  }
+
+  /** Bir değişim satırı yazar ve üretilen sütunları okur. */
+  async function change(oldSide: Side, newSide: Side) {
+    const rows = await admin.db.execute<{ is_comparable: boolean; change_pct: string | null }>(sql`
+      INSERT INTO supplier_price_changes (
+        tenant_id, supplier_item_id,
+        old_price, old_currency, old_tax_mode, old_price_type, old_price_qty,
+        new_price, new_currency, new_tax_mode, new_price_type, new_price_qty)
+      VALUES (
+        ${tenantId}, ${itemId},
+        ${oldSide.price}, ${oldSide.currency ?? 'TRY'}, ${oldSide.taxMode ?? 'EXCLUDED'},
+        ${oldSide.priceType ?? 'NET'}, ${oldSide.qty === undefined ? '1' : oldSide.qty},
+        ${newSide.price}, ${newSide.currency ?? 'TRY'}, ${newSide.taxMode ?? 'EXCLUDED'},
+        ${newSide.priceType ?? 'NET'}, ${newSide.qty === undefined ? '1' : newSide.qty})
+      RETURNING is_comparable, change_pct::text AS change_pct
+    `)
+    return [...rows][0]!
+  }
+
+  async function rejected(oldSide: Side, newSide: Side): Promise<string | undefined> {
+    const err = await change(oldSide, newSide).then(
+      () => undefined,
+      (e: unknown) => e,
+    )
+    return pgErrorCode(err)
+  }
+
+  beforeAll(async () => {
+    await admin.db.execute(sql`INSERT INTO tenants (id, name) VALUES (${tenantId}, 'Şema Tedarikçi')`)
+    await admin.db.execute(sql`
+      INSERT INTO suppliers (id, tenant_id, name, default_currency, default_tax_mode, default_price_type)
+      VALUES (${supplierId}, ${tenantId}, 'Şema Toptan', 'TRY', 'EXCLUDED', 'NET')
+    `)
+    await admin.db.execute(sql`
+      INSERT INTO supplier_items (id, tenant_id, supplier_id, supplier_code, name, price,
+                                  currency, tax_mode, price_type, fetched_at)
+      VALUES (${itemId}, ${tenantId}, ${supplierId}, 'K-1', 'Kalem', 10, 'TRY', 'EXCLUDED', 'NET', now())
+    `)
+  })
+
+  it('koşullar aynı ve miktar biliniyorsa yüzde üretilir: 100 → 110 = %10,0', async () => {
+    const r = await change({ price: '100' }, { price: '110' })
+    expect(r.is_comparable).toBe(true)
+    expect(r.change_pct).toBe('10.0')
+  })
+
+  it('azalış eksi yüzde: 3 → 2 = %-33,3', async () => {
+    const r = await change({ price: '3' }, { price: '2' })
+    expect(r.change_pct).toBe('-33.3')
+  })
+
+  it('para birimi değişirse karşılaştırılamaz, yüzde yok', async () => {
+    const r = await change({ price: '100' }, { price: '3', currency: 'USD' })
+    expect(r.is_comparable).toBe(false)
+    expect(r.change_pct).toBeNull()
+  })
+
+  it('KDV durumu ya da fiyat türü değişirse yüzde yok', async () => {
+    expect((await change({ price: '100' }, { price: '120', taxMode: 'INCLUDED' })).change_pct).toBeNull()
+    expect((await change({ price: '100' }, { price: '90', priceType: 'LIST' })).change_pct).toBeNull()
+  })
+
+  it('miktar iki tarafta da belirsizse yüzde yok (T200, B2)', async () => {
+    const r = await change({ price: '100', qty: null }, { price: '110', qty: null })
+    expect(r.is_comparable).toBe(false)
+    expect(r.change_pct).toBeNull()
+  })
+
+  it('miktar belirsizden 1 ürün birimine geçerse yüzde yok', async () => {
+    const r = await change({ price: '100', qty: null }, { price: '110', qty: '1' })
+    expect(r.is_comparable).toBe(false)
+    expect(r.change_pct).toBeNull()
+  })
+
+  it('uç değişim yüzde sütununu taşırmaz: 0,0001 → 9999', async () => {
+    const r = await change({ price: '0.0001' }, { price: '9999' })
+    expect(r.change_pct).toBe('9998999900.0')
+  })
+
+  it('değişmeyen fiyat satırı reddedilir (PRD-14)', async () => {
+    expect(await rejected({ price: '10' }, { price: '10' })).toBe('23514')
+  })
+
+  it('10.5 ile 10.50 aynı fiyat: sayısal eşitlik, metin değil', async () => {
+    expect(await rejected({ price: '10.5' }, { price: '10.5000' })).toBe('23514')
+  })
+
+  it('iki taraf da belirsiz miktarla eşitse yine reddedilir', async () => {
+    expect(await rejected({ price: '10', qty: null }, { price: '10', qty: null })).toBe('23514')
   })
 })
 

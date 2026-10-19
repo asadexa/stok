@@ -47,7 +47,7 @@ Katman kuralları `PROJECT_BRAIN` §5, ilkeler §12. Kayıtlarda yalnız özelli
 | F-10 | Telefonla barkod okutma köprüsü (pilot) | Uygulandı (pilot, varsayılan kapalı) |
 | F-11 | Yerel yedek ve güvenli veritabanı sıfırlama | Uygulandı |
 | F-14 | Windows tek tıkla başlatma (`BASLAT.bat`) | Uygulandı |
-| F-12 | B2B tedarikçi verisi V1 | **Planlandı** |
+| F-12 | B2B tedarikçi verisi V1 | **Geliştiriliyor** (1a çekirdek bitti, 1b ekranlar) |
 | F-13 | İnternetten erişilebilir test ortamı | **Planlandı** |
 
 ---
@@ -186,23 +186,38 @@ Katman kuralları `PROJECT_BRAIN` §5, ilkeler §12. Kayıtlarda yalnız özelli
 
 ## Planlanan özellikler
 
-### F-12 — B2B tedarikçi verisi V1 (Planlandı)
+### F-12 — B2B tedarikçi verisi V1 (Geliştiriliyor: 1a çekirdek bitti, 1b ekranlar)
 - **İhtiyaç:** tedarikçilerin ürün, fiyat ve stok bilgisini elle yeniden yazmadan görmek;
   aynı ürün için tedarikçileri güncel fiyat ve stokla karşılaştırmak.
-- **Onaylı ürün kararları:** `PRD-14`. Özetle: bir ürün birden çok tedarikçiye bağlanabilir;
-  yenileme "Verileri Getir" düğmesiyle; çekilen fiyat ve stok onaysız kaydedilir; fiyat
-  değiştiyse önceki ve yeni fiyat saklanır, artış/azalış gösterilir; tedarikçi verisi ürün
-  kartının fiyatlarını ve fiziksel stoğu değiştirmez, hareket üretmez; V1'de sipariş ve
-  otomatik periyodik senkron yok.
-- **Akış (taslak, teknik ayrıntı onaylanmadı):** kaynak (dosya ya da örnek API) → sağlayıcıdan
-  bağımsız tedarikçi kalemi (tedarikçi ürün kodu, barkod, ad, marka, fiyat, para birimi, vergi
-  durumu, fiyat türü, stok, çekilme zamanı) → işletme ürünüyle eşleşme (barkod, stok kodu) →
-  son fiyat ve stok kaydı; fiyat değiştiyse geçmiş satırı → karşılaştırma ekranı.
-- **Katman (öneri):** ayrıştırma, eşleşme ve karşılaştırma `packages/core`'da, I/O'suz test
-  edilebilir biçimde (`import.ts` deseni); şema ve migration `packages/db`'de; "Verileri Getir"
-  ve ekran `apps/web`'de Server Action. Yeni servis ya da kütüphane yok; gerekirse ayrı onayla.
-- **Yeniden kullanım adayı:** F-02'nin ayrıştırma ve satır bazlı doğrulaması, barkod ve stok
-  kodu eşleşmesi. Tedarikçi stoğu "Açılış Stoğu"na asla eşlenmez (o sütun devir hareketi yazar).
+- **Onaylı ürün kararları:** `PRD-14`, `PRD-15`. Özetle: bir ürün birden çok tedarikçiye
+  bağlanabilir; yenileme "Verileri Getir" (Önizle → Kaydet) ile; fiyat ve stok değişimleri tek
+  tek onaylanmaz; tedarikçi verisi ürün kartının fiyatlarını ve fiziksel stoğu değiştirmez,
+  hareket üretmez; V1'de sipariş ve otomatik periyodik senkron yok.
+- **Akış:** dosya (.xlsx/.csv ya da JSON sözleşmesi = "örnek API verisi") → `parseSupplierFile`
+  (dosya düzeyi kontrol, ham hücreler) → `normalizeSupplierRows` (tedarikçinin varsayılan
+  koşulları, satır doğrulaması) → `previewSupplierRefresh` (yenilemenin aynısı, transaction geri
+  alınır) → `refreshSupplier` (tedarikçi satırı `FOR UPDATE`; barkodla eşleşme; tek SQL'de fark
+  → `supplier_price_changes`, sonra `supplier_items` upsert). Elle eşleştirme `bindSupplierItem` /
+  `ignoreSupplierItem`; karşılaştırma `listProductOffers`.
+- **Kurallar:**
+  - Dosyanın tamamı reddedilir: başlık yok, zorunlu sütun yok (Ürün Adı, Fiyat ve Tedarikçi
+    Kodu ya da Barkod), aynı alana iki sütun, en fazla 5.000 satır aşıldı, veri satırı yok.
+    Geçersiz satır yalnız kendisi atlanır ve listelenir. Metin stok satırı reddetmez.
+  - "Koli İçi Adet" ve "KDV" (oran) sütunları okunmaz; tablo dosyasında tarih okunmaz (`DAT-16`).
+  - Otomatik eşleşme yalnız aktif barkod ve arşivlenmemiş ürünle; elle bağlama ve yok sayma
+    yenilemede korunur. Fiyat miktarı yalnız açık beyandan; koli barkodu miktar üretmez (`PRD-15`).
+  - Dosyada olmayan kalem değişmez ve işaretlenmez; hata olursa hiçbir şey yazılmaz (`DAT-19`).
+  - Geçmişte üç tür: fiyat değişimi (yön ve yüzde), koşul değişimi ve miktar belirsiz (ikisinde
+    yön ve yüzde yok). Kural veritabanında, üretilen sütunla (ADR-006).
+  - Karşılaştırma grubu: para birimi + KDV + fiyat türü + bilinen miktar; "en düşük" yalnız
+    birden çok teklifli grupta. Belirsiz miktar ayrı ve sırasız.
+- **Teknoloji:** F-02'nin dosya okuyucusu (`readSheet`, `normalizeHeader`, `parseTurkishNumber`);
+  ayrı sütun eş ad tablosu. Yeni bağımlılık yok. Tedarikçi fiyatı NUMERIC(14,4), metin olarak döner.
+- **Kararlar:** `PRD-14`, `PRD-15`, `DAT-19`, ADR-006.
+- **Dosyalar:** `packages/shared/src/suppliers.ts`, `schemas.ts`, `roles.ts`
+  (`supplier:read`, `supplier:manage`: yalnız yönetici); `packages/db/src/schema.ts`,
+  `migrations/0012_suppliers.sql`; `packages/core/src/supplier-feed.ts`, `suppliers.ts`. Ekranlar
+  (`apps/web`) Dilim 1b'de.
 - **Kabul kriterleri:**
   - "Verileri Getir" sonrası tedarikçi fiyatı ve stoğu güncel; değişmeyen fiyat geçmiş satırı üretmez.
   - Değişen fiyatta önceki ve yeni değer ile artış/azalış görünür.
@@ -211,11 +226,15 @@ Katman kuralları `PROJECT_BRAIN` §5, ilkeler §12. Kayıtlarda yalnız özelli
   - Kiracı izolasyonu (INV-4) korunur; tedarikçi fiyatı alış fiyatı niteliğinde olduğu için
     varsayılan olarak çalışana gitmez (INV-10; aksi ürün kararı ister).
   - Sağlayıcıdan bağımsız model, dosya kaynağı ve örnek API verisiyle doğrulanır.
-- **Açık sorular:** ilk gerçek sağlayıcı (seçilmedi); eşleşmesi belirsiz kalemin nasıl
-  onaylanacağı; tedarikçi kataloğundan işletmeye yeni ürün açılıp açılmayacağı; para birimi ve
-  vergi verisinin kaynakta nasıl geldiği; fiyat geçmişinin saklama süresi.
-- **İşler ve sıra:** önce T200 PLAN, ardından ilk BUILD dilimi (tedarikçi, ürün eşleşmesi, fiyat
-  değişimi, karşılaştırma). T201 (harici API kaynağı, gizli bilgi) V1'in devamı; gerçek sağlayıcı
+  - 1a kanıtı: `suppliers.test.ts`, `supplier-feed.test.ts`, `schema-sync.test.ts`,
+    `rls.test.ts` (gerçek PostgreSQL, `stok_app`); ekran ve e2e 1b'de.
+- **Sınırlar:** ekran yok (1b). Tedarikçi düzenleme/arşivleme yok. Fiyat geçmişinin saklama
+  süresi kararsız. Noktalı ama virgülsüz sayı ("1.234") ondalık okunur (F-02 ile aynı
+  `parseTurkishNumber`; T205).
+- **Açık sorular:** ilk gerçek sağlayıcı (seçilmedi); tedarikçi kataloğundan işletmeye yeni ürün
+  açılıp açılmayacağı (V1'de yok); fiyat geçmişinin saklama süresi.
+- **İşler ve sıra:** T200 Dilim 1a (çekirdek) bitti; 1b ekranlar ve e2e, sonra Dilim 2 (kod
+  eşitliğinden eşleşme önerisi, genel karşılaştırma listesi). T201 (harici API kaynağı, gizli bilgi) V1'in devamı; gerçek sağlayıcı
   seçilmeden genel entegrasyon iddia edilmez. Sonraki sürüm T202 (B2B sipariş), T203 (otomatik
   periyodik senkron). T53 (bizim sunduğumuz REST) ayrı iştir.
 

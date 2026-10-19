@@ -29,7 +29,7 @@ gerekiyorsa `DECISIONS.md`'de tek satır olur.
   satır da `Superseded` olur.
 - **Elenen yol yazılır.** Bir ADR'nin en değerli kısmı seçilmeyenlerin neyi
   bozacağıdır. Onu yazmayan ADR, kodun kendisinin söylemediği hiçbir şeyi söylemez.
-- **Sıradaki numara: ADR-006.**
+- **Sıradaki numara: ADR-007.**
 
 ## Durum etiketleri
 
@@ -65,6 +65,7 @@ gerekiyorsa `DECISIONS.md`'de tek satır olur.
 | [003](003-mobil-offline-outbox.md) | Mobil çevrimdışı yazma: outbox + idempotency | Kabul edildi (uygulanmadı) | ARC-10 |
 | [004](004-maliyet-yontemi.md) | Maliyet yöntemi: FIFO mu ağırlıklı ortalama mı | **Açık** | DAT-15 |
 | [005](005-api-versiyonlama.md) | API versiyonlama ve zorunlu güncelleme | Kabul edildi (uygulanmadı) | ARC-09 |
+| [006](006-tedarikci-fiyat-gecmisi.md) | Tedarikçi verisi: güncel durum + yalnız değişimde append-only fiyat geçmişi | Kabul edildi | DAT-19 |
 
 ## Notlar
 

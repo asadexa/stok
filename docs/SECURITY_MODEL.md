@@ -28,6 +28,9 @@ güncellenir. Yeni tehdit yeni ID alır; ID yeniden kullanılmaz.
   kiracı içinde ayrıca doğrulanır.
 - **Katman:** DB + `packages/core`.
 - **Test:** `rls.test.ts` ("B ürününü kimliğiyle istemek boş döner"), `apps/web/src/app/api/route-authz.test.ts`.
+  Tedarikçi kalemini ürüne bağlarken ürün kiracı içinde aranıyor (`bindSupplierItem`):
+  `suppliers.test.ts` başka kiracının ürününe bağlamayı NOT_FOUND ile reddediyor; kontrol
+  kaldırılınca bağlama FK'dan geçti (`dogrula`, 2026-10-19).
 - **Açık:** S1'in FK notu.
 
 ### S3 — Hareket kaydının silinmesi ya da değiştirilmesi (kendi hatasını gizleme)
@@ -77,11 +80,16 @@ güncellenir. Yeni tehdit yeni ID alır; ID yeniden kullanılmaz.
   bazında: satış dayanaklı fiyat açık, alış/devir kapalı. Sapma hatasının metni alış
   fiyatını içermez. Log fiyat yazmaz. Excel fiyat sütununu role göre çıkarır.
   Ekran rolü yeniden yorumlamaz, cevabın şeklinden türetir.
-- **Katman:** `packages/core/src/authz.ts`, `movements.ts`, `excel.ts`, `observability.ts`.
-- **Test:** `role-matrix.test.ts`, `prices.test.ts`, `observability.test.ts`,
+- **Tedarikçi fiyatı (T200):** alış fiyatı niteliğinde. `supplier:read` ve `supplier:manage`
+  yalnız yönetici; çalışana alan gizlenmiş bir okuma da yok, her tedarikçi fonksiyonu 403 döner.
+- **Katman:** `packages/core/src/authz.ts`, `movements.ts`, `excel.ts`, `observability.ts`,
+  `suppliers.ts`.
+- **Test:** `role-matrix.test.ts`, `prices.test.ts`, `observability.test.ts`, `suppliers.test.ts`
+  (çalışan on fonksiyonun hepsinde FORBIDDEN; `dogrula` ile kanıtlı),
   `e2e/demo-yolu.spec.ts`, `e2e/faz10-fiyat.spec.ts`.
 - **Açık:** "alan yok = yetki yok, `null` = girilmemiş" sözleşmesi `/api/v1` yazılırken
   açıkça belgelenmeli (T53). Hata yolunda yöneticinin girdiği fiyatlar URL'de taşınıyor (T147).
+  Ham hata loglayan eylemler Drizzle'ın sorgu parametrelerini (fiyat, barkod) loga yazabilir (T204).
 
 ### S8 — Girdi alanlarından enjeksiyon (barkod, not, arama)
 - **Koruma:** parametreli sorgular (Drizzle `sql` şablonu); zod uzunluk sınırları

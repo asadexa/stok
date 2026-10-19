@@ -149,6 +149,15 @@ const MATRIX: MatrixRow[] = [
     staff: false,
     servis: 'createMovement',
   },
+  {
+    // PRD-14 ile eklendi (planın ilk 11 satırında yok). Tedarikçi fiyatı
+    // alış fiyatı niteliğinde (INV-10); servis yolunun reddi suppliers.test.ts'te.
+    islem: 'Tedarikçi verisi gör / yönet (B2B V1)',
+    permissions: ['supplier:read', 'supplier:manage'],
+    admin: true,
+    staff: false,
+    servis: 'suppliers.ts',
+  },
 ]
 
 function expectForbidden(fn: () => void, permission: Permission) {
@@ -164,7 +173,7 @@ function expectForbidden(fn: () => void, permission: Permission) {
   expect((thrown as AppError).details.permission).toBe(permission)
 }
 
-describe('T47 - matrisin 11 satırı, tek boğazdan', () => {
+describe('T47 - matrisin satırları (plandaki 11 + PRD-14), tek boğazdan', () => {
   it.each(MATRIX.map((r, i) => [i + 1, r.islem, r] as const))(
     'satır %s: %s',
     (_n, _islem, row) => {
@@ -190,8 +199,8 @@ describe('T47 - matrisin 11 satırı, tek boğazdan', () => {
     },
   )
 
-  it('matris planın 11 satırını kapsıyor', () => {
-    expect(MATRIX).toHaveLength(11)
+  it('matris planın 11 satırını ve tedarikçi satırını (PRD-14) kapsıyor', () => {
+    expect(MATRIX).toHaveLength(12)
   })
 
   it('her yetki en az bir matris satırında geçiyor', () => {

@@ -11,7 +11,17 @@ import {
   testAdminDb,
   testAppDb,
 } from './testing'
-import { currentStock, productBarcodes, products, stockMovements, tenants, users } from './schema'
+import {
+  currentStock,
+  productBarcodes,
+  products,
+  stockMovements,
+  supplierItems,
+  supplierPriceChanges,
+  suppliers,
+  tenants,
+  users,
+} from './schema'
 
 /**
  * ============================================================================
@@ -285,6 +295,9 @@ describe('T46.4 - uygulama rolü RLS atlayamaz', () => {
       'stock_movements',
       'current_stock',
       'background_jobs',
+      'suppliers',
+      'supplier_items',
+      'supplier_price_changes',
       // Tenant'a bağlı değil ama politikası var: sadece sahip role açık,
       // uygulama rolüne hiçbir satır geçmiyor (T51).
       'auth_attempts',
@@ -442,6 +455,133 @@ describe('T5 - defter değiştirilemez', () => {
       withTenant(
         alpha.tenantId,
         (tx) => tx.insert(tenants).values({ name: 'Kendi Kendine Kayıt' }),
+        app.db,
+      ),
+    )
+    expect(code).toBe('42501')
+  })
+})
+
+/**
+ * T200 — TEDARİKÇİ VERİSİ. Tedarikçi fiyatı alış fiyatı niteliğinde: bir
+ * işletmenin pazarlık ettiği fiyat başka bir işletmede görünürse ticari sır
+ * sızmış olur (INV-4, INV-10). Fiyat geçmişi ayrıca append-only (ADR-006).
+ */
+describe('T200 - tedarikçi verisi kiracıya kapalı, fiyat geçmişi değiştirilemez', () => {
+  /** Her kiracıya bir tedarikçi, bir kalem ve bir fiyat değişimi; sahip rolüyle. */
+  async function seedSupplier(t: TestTenant, label: string) {
+    const supplierId = detUuid(`rls:supplier:${label}`)
+    const itemId = detUuid(`rls:supplier-item:${label}`)
+    await admin.db.insert(suppliers).values({
+      id: supplierId,
+      tenantId: t.tenantId,
+      name: `Tedarikçi ${label}`,
+      defaultCurrency: 'TRY',
+      defaultTaxMode: 'EXCLUDED',
+      defaultPriceType: 'NET',
+    })
+    await admin.db.insert(supplierItems).values({
+      id: itemId,
+      tenantId: t.tenantId,
+      supplierId,
+      supplierCode: `K-${label}`,
+      name: 'Kalem',
+      price: '10.0000',
+      currency: 'TRY',
+      taxMode: 'EXCLUDED',
+      priceType: 'NET',
+      fetchedAt: new Date(),
+    })
+    await admin.db.insert(supplierPriceChanges).values({
+      tenantId: t.tenantId,
+      supplierItemId: itemId,
+      oldPrice: '9.0000',
+      oldCurrency: 'TRY',
+      oldTaxMode: 'EXCLUDED',
+      oldPriceType: 'NET',
+      newPrice: '10.0000',
+      newCurrency: 'TRY',
+      newTaxMode: 'EXCLUDED',
+      newPriceType: 'NET',
+    })
+    return { supplierId, itemId }
+  }
+
+  let betaSupplier: { supplierId: string; itemId: string }
+
+  beforeAll(async () => {
+    await seedSupplier(alpha, 'a')
+    betaSupplier = await seedSupplier(beta, 'b')
+  })
+
+  it('A bağlamında yalnız A tedarikçisi, kalemi ve fiyat geçmişi görünür', async () => {
+    const seen = await withTenant(
+      alpha.tenantId,
+      async (tx) => ({
+        suppliers: await tx.select().from(suppliers),
+        items: await tx.select().from(supplierItems),
+        changes: await tx.select().from(supplierPriceChanges),
+      }),
+      app.db,
+    )
+    expect(seen.suppliers.map((s) => s.name)).toEqual(['Tedarikçi a'])
+    expect(seen.items.map((i) => i.supplierCode)).toEqual(['K-a'])
+    expect(seen.changes).toHaveLength(1)
+    expect(seen.changes.every((c) => c.tenantId === alpha.tenantId)).toBe(true)
+  })
+
+  it('B kalemini kimliğiyle istemek boş döner', async () => {
+    const rows = await withTenant(
+      alpha.tenantId,
+      (tx) => tx.select().from(supplierItems).where(eq(supplierItems.id, betaSupplier.itemId)),
+      app.db,
+    )
+    expect(rows).toEqual([])
+  })
+
+  it('B adına tedarikçi kalemi yazılamaz', async () => {
+    const code = await expectPgError(() =>
+      withTenant(
+        alpha.tenantId,
+        (tx) =>
+          tx.insert(supplierItems).values({
+            tenantId: beta.tenantId,
+            supplierId: betaSupplier.supplierId,
+            supplierCode: 'SIZMA',
+            name: 'Sızma',
+            price: '1.0000',
+            currency: 'TRY',
+            taxMode: 'EXCLUDED',
+            priceType: 'NET',
+            fetchedAt: new Date(),
+          }),
+        app.db,
+      ),
+    )
+    expect(code).toBe('42501')
+  })
+
+  it('uygulama rolü fiyat geçmişini UPDATE edemez', async () => {
+    const code = await expectPgError(() =>
+      withTenant(
+        alpha.tenantId,
+        (tx) =>
+          tx
+            .update(supplierPriceChanges)
+            .set({ newPrice: '1.0000' })
+            .where(eq(supplierPriceChanges.tenantId, alpha.tenantId)),
+        app.db,
+      ),
+    )
+    expect(code).toBe('42501')
+  })
+
+  it('uygulama rolü fiyat geçmişini DELETE edemez', async () => {
+    const code = await expectPgError(() =>
+      withTenant(
+        alpha.tenantId,
+        (tx) =>
+          tx.delete(supplierPriceChanges).where(eq(supplierPriceChanges.tenantId, alpha.tenantId)),
         app.db,
       ),
     )

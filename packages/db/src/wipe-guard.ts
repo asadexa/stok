@@ -168,6 +168,9 @@ export const APP_TABLES: readonly string[] = [
   'product_barcodes',
   'products',
   'stock_movements',
+  'supplier_items',
+  'supplier_price_changes',
+  'suppliers',
   'tenants',
   'users',
 ]
