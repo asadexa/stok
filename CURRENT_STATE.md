@@ -62,9 +62,10 @@ sınırından geçti). Önizleme yanıtı blob'u tarayıcıya taşıyor (uzun: 3
 görünüyor. 4 MiB − 2 KB dosya eyleme ulaştı; tam 4 MiB dosya istemci denetimini geçip Next'in
 gövde sınırına çarptı (500, genel hata ekranı; T208); 4 MiB + 1 B istemcide durdu.
 
-GitHub CI: son koşu #83 (`9d4bc8c`, T200 1a, 2026-10-19) yeşil; üç iş de adım adım geçti (Linux
-test işinde drift ve testler, demo işinde 0012'nin temiz veritabanına kurulumu ve Playwright
-duman testi, Windows'ta temiz checkout'ta lint). Öncesinde #82 (`93b38f6`) yeşil. Önceki
+GitHub CI: son koşu #84 (`667512a`, T200 1b, 2026-10-20) yeşil; üç iş de adım adım geçti (Linux
+test işinde lint, drift, testler ve derleme; demo işinde temiz kurulum ve Playwright duman testi;
+Windows'ta temiz checkout'ta lint, typecheck ve derleme). Öncesinde #83 (`9d4bc8c`, T200 1a,
+2026-10-19) ve #82 (`93b38f6`) yeşil. Önceki
 ayrıntılı kayıt: `development` `8a96c74` (T196) koşu #75 yeşil; üç iş de geçti, demo işindeki "Yedek ve
 durum" adımı artık başarı satırlarını da arıyor (test sayıları herkese açık API'de görünmüyor).
 Öncesinde `1e47741` (WS-1.3a test düzeltmesi) koşu #73 yeşil; üç iş de geçti
@@ -89,7 +90,7 @@ Excel export · kullanıcı yönetimi · ayarlar · kategoriler · raporlar · s
 sağlığı · Ctrl+K · bildirim zili. RLS çok kiracılı veri katmanı, append-only
 defter, kaba kuvvet kilidi, elle tetiklenen `/api/cron`, `/api/v1/health`,
 `pnpm demo` (Windows/macOS/Linux). Tedarikçi fiyat ve stok verisi, yalnız yönetici (F-12;
-1b ekranları commit bekliyor). Pilot, varsayılan kapalı: telefon kamerasıyla
+ilk dilim, kullanıcı kabul testi bekliyor). Pilot, varsayılan kapalı: telefon kamerasıyla
 okutup `/hareket`te açma (`ENABLE_PHONE_SCANNER`, `PRD-12`, `ARC-14`).
 
 ## Kısmi / bozuk
@@ -159,8 +160,9 @@ geçici kapsayıcıda izole inceleme, yalnız tanınan kümede silme. Geliştirm
 
 **Yol haritasının üstü** (ekip kararı, 2026-10-17), bu sırayla:
 1. **T200 B2B V1 PLAN** (`PRD-14`): ✓ kullanıcı onaylı (2026-10-19; `PRD-15`, `DAT-19`, ADR-006).
-2. **T200 ilk BUILD dilimi**: 1a çekirdek `9d4bc8c` (CI #83 yeşil). 1b (ekranlar, eylemler, ayar
-   düzenleme `PRD-16`, e2e) yerelde bitti; REVIEW ve commit bekliyor. Sonra Dilim 2. Ayrıntı F-12.
+2. **T200 ilk BUILD dilimi**: ✓ uçtan uca çalışıyor. 1a çekirdek `9d4bc8c` (CI #83 yeşil); 1b
+   ekranlar, eylemler, ayar düzenleme (`PRD-16`) ve e2e `667512a` (CI #84 yeşil). Kullanıcı kabul
+   testi bekliyor. Dilim 2 yapılmadı; T200 açık. Ayrıntı F-12.
 3. **HTTPS test ortamı** (T144, `OPS-12`): yakın adım, B2B'yi geciktirmez. Barındırma `OPS-01`
    (Open); üretim ayrı iş (T42).
 4. **T201 harici API kaynağı**: V1'in devamı. Gerçek sağlayıcı seçilmeden genel entegrasyon

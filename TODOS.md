@@ -43,12 +43,13 @@ güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
 - [ ] **T200 (P1)** - entegrasyon - **B2B V1: tedarikçi ürün, fiyat ve stok verisini çekme ve karşılaştırma**
   - Neden: tedarikçinin ürün, barkod, fiyat ve stok bilgisi bugün elle yeniden yazılıyor ya da
     hiç görünmüyor; aynı ürün için tedarikçiler karşılaştırılamıyor.
-  - Ürün kararı: `PRD-14` (onaylı, uygulanmadı). Kabul kriterleri `docs/TEKNIK_SARTNAME.md` F-12.
-  - İlerleme (2026-10-20): PLAN onaylı (B1–B3, `PRD-15`, `DAT-19`, ADR-006). Dilim 1a (shared, db
-    migration 0012, core, testler) `9d4bc8c`, CI #83 yeşil. Dilim 1b (ekranlar, eylemler, ayar
-    düzenleme `PRD-16`, e2e) yerelde bitti; REVIEW'un iki engelleyicisi (B1 önizleme/kayıt uzunluk
-    uyumu, B2 uzun adda ürün arama) düzeltildi, commit bekliyor. Kalan: Dilim 2 (kod
-    eşitliğinden öneri, genel karşılaştırma listesi).
+  - Ürün kararı: `PRD-14` (onaylı; ilk dilimde uygulandı, Dilim 2 kalan). Kabul kriterleri
+    `docs/TEKNIK_SARTNAME.md` F-12.
+  - İlerleme (2026-10-20): PLAN onaylı (B1–B3, `PRD-15`, `DAT-19`, ADR-006). İlk uçtan uca dilim
+    tamam: Dilim 1a (shared, db migration 0012, core, testler) `9d4bc8c`, CI #83 yeşil; Dilim 1b
+    (ekranlar, eylemler, ayar düzenleme `PRD-16`, e2e; REVIEW'un B1 ve B2 düzeltmeleri dahil)
+    `667512a`, CI #84 yeşil. Kullanıcı kabul testi bekliyor. Kalan: Dilim 2 (kod eşitliğinden
+    öneri, genel karşılaştırma listesi); T200 bu yüzden açık.
   - Yapılacak (V1): sağlayıcıdan bağımsız tedarikçi kalemi modeli; dosya kaynağı ve örnek API
     verisi; ürün ↔ tedarikçi eşleşmesi (bir ürüne birden çok tedarikçi); "Verileri Getir";
     son fiyat ve stok kaydı, fiyat geçmişi yalnız değişimde; tedarikçiler arası karşılaştırma.
