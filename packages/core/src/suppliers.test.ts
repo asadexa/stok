@@ -15,6 +15,7 @@ import {
   listSuppliers,
   previewSupplierRefresh,
   refreshSupplier,
+  updateSupplier,
 } from './suppliers'
 import { TEST_DB_NAME } from './test/db-name'
 
@@ -259,6 +260,111 @@ describe('yenileme: kayıt, tekrar ve fiyat değişimi', () => {
     expect(latest).toMatchObject({ kind: 'CONDITION', direction: null, changePct: null })
     expect(latest?.oldCurrency).toBe('TRY')
     expect(latest?.newCurrency).toBe('USD')
+  })
+})
+
+describe('önizleme örnek satırları (T200 1b)', () => {
+  it('ilk satırları okunduğu ve yazılacağı hâliyle taşır: fiyat, miktar, eşleşme', async () => {
+    const supplierId = await newSupplier(true)
+    const summary = await previewSupplierRefresh(
+      boss,
+      supplierId,
+      feed(
+        { supplierCode: 'S1', barcode: unitBarcode('P-1'), name: 'Kalem', price: '1.234,5', stockQty: '40' },
+        { supplierCode: 'S2', name: 'Bilinmeyen', price: '7' },
+        { supplierCode: 'S3', name: 'Bozuk', price: '' },
+      ),
+      opts,
+    )
+    expect(summary.sample).toEqual([
+      {
+        rowNumber: 2,
+        supplierCode: 'S1',
+        barcode: unitBarcode('P-1'),
+        name: 'Kalem',
+        price: '1234.5000',
+        currency: 'TRY',
+        taxMode: 'EXCLUDED',
+        priceType: 'NET',
+        priceQty: '1.000',
+        stockQty: '40.000',
+        matchState: 'AUTO',
+        productName: 'Tükenmez Kalem',
+        productSku: 'P-1',
+      },
+      expect.objectContaining({ rowNumber: 3, matchState: 'UNMATCHED', productName: null }),
+    ])
+  })
+
+  it('daha önce elle bağlanmış kalemin ürün adı da gelir', async () => {
+    const supplierId = await newSupplier(false)
+    const file = feed({ supplierCode: 'M', name: 'Elle', price: '3' })
+    await refreshSupplier(boss, supplierId, file, opts)
+    await bindSupplierItem(boss, await itemId(supplierId, 'M'), tenant.products['P-2']!.id, opts)
+
+    const summary = await previewSupplierRefresh(boss, supplierId, file, opts)
+    expect(summary.sample[0]).toMatchObject({ matchState: 'MANUAL', productName: 'Defter', priceQty: null })
+  })
+})
+
+describe('tedarikçi ayarlarını düzenleme (K1)', () => {
+  const settings = {
+    name: 'Düzenlenecek Toptan',
+    defaultCurrency: 'TRY',
+    defaultTaxMode: 'EXCLUDED',
+    defaultPriceType: 'NET',
+  }
+
+  it('yalnız SONRAKİ yenilemeyi etkiler; saklı kalem ve fiyat geçmişi değişmez', async () => {
+    const created = await createSupplier(boss, settings, opts)
+    const file = feed({ supplierCode: 'A', name: 'a', price: '10' })
+    await refreshSupplier(boss, created.id, file, opts)
+    await refreshSupplier(boss, created.id, feed({ supplierCode: 'A', name: 'a', price: '12' }), opts)
+    const before = (await supplierState(created.id)) as { items: unknown[][]; changes: number }
+
+    const updated = await updateSupplier(
+      boss,
+      created.id,
+      { ...settings, defaultCurrency: 'USD', unitPriceDeclared: true },
+      opts,
+    )
+    expect(updated).toMatchObject({ defaultCurrency: 'USD', unitPriceDeclared: true })
+
+    // Geriye dönük hiçbir şey değişmedi: kalem hâlâ TL ve miktarı belirsiz.
+    const after = (await supplierState(created.id)) as { items: unknown[][]; changes: number }
+    expect(after.items).toEqual(before.items)
+    expect(after.changes).toBe(before.changes)
+
+    // Sonraki yenileme yeni varsayılanı kullanır ve bunu koşul değişimi yazar.
+    const next = await refreshSupplier(boss, created.id, feed({ supplierCode: 'A', name: 'a', price: '12' }), opts)
+    expect(next).toMatchObject({ conditionChanged: 1, priceUp: 0, priceQtyUnknown: 0 })
+    const [latest] = await listPriceChanges(boss, created.id, 1, opts)
+    expect(latest).toMatchObject({
+      kind: 'CONDITION',
+      oldCurrency: 'TRY',
+      newCurrency: 'USD',
+      oldPriceQty: null,
+      newPriceQty: '1.000',
+      changePct: null,
+    })
+  })
+
+  it('başka bir tedarikçinin adı alınamaz', async () => {
+    const first = await createSupplier(boss, { ...settings, name: 'Ad Çakışması A' }, opts)
+    await createSupplier(boss, { ...settings, name: 'Ad Çakışması B' }, opts)
+    const err = await errorOf(() =>
+      updateSupplier(boss, first.id, { ...settings, name: 'ad çakışması b' }, opts),
+    )
+    expect(err.code).toBe('SUPPLIER_NAME_EXISTS')
+  })
+
+  it('seçilmeyen koşul Türkçe doğrulama hatası verir', async () => {
+    const supplierId = await newSupplier(false)
+    const err = await errorOf(() =>
+      updateSupplier(boss, supplierId, { ...settings, name: 'X', defaultTaxMode: '' }, opts),
+    )
+    expect(err.code).toBe('VALIDATION_FAILED')
+    expect(err.details.issues).toEqual([{ path: 'defaultTaxMode', message: 'KDV durumunu seçin' }])
   })
 })
 
@@ -521,6 +627,18 @@ describe('kiracı izolasyonu ve yetki', () => {
   it('başka kiracı tedarikçiyi okuyamaz, yenileyemez, kalemini bağlayamaz', async () => {
     expect((await errorOf(() => getSupplier(otherBoss, supplierId, opts))).code).toBe('NOT_FOUND')
     expect(
+      (
+        await errorOf(() =>
+          updateSupplier(
+            otherBoss,
+            supplierId,
+            { name: 'Ele geçirme', defaultCurrency: 'TRY', defaultTaxMode: 'EXCLUDED', defaultPriceType: 'NET' },
+            opts,
+          ),
+        )
+      ).code,
+    ).toBe('NOT_FOUND')
+    expect(
       (await errorOf(() => refreshSupplier(otherBoss, supplierId, feed({ supplierCode: 'A', name: 'a', price: '9' }), opts))).code,
     ).toBe('NOT_FOUND')
     expect(
@@ -550,6 +668,7 @@ describe('kiracı izolasyonu ve yetki', () => {
       ['refreshSupplier', () => refreshSupplier(staff, supplierId, feed({ supplierCode: 'A', name: 'a', price: '1' }), opts)],
       ['bindSupplierItem', () => bindSupplierItem(staff, item, productId, opts)],
       ['ignoreSupplierItem', () => ignoreSupplierItem(staff, item, opts)],
+      ['updateSupplier', () => updateSupplier(staff, supplierId, { name: 'x', defaultCurrency: 'TRY', defaultTaxMode: 'EXCLUDED', defaultPriceType: 'NET' }, opts)],
       ['listSupplierItems', () => listSupplierItems(staff, supplierId, {}, opts)],
       ['listPriceChanges', () => listPriceChanges(staff, supplierId, 10, opts)],
       ['listProductOffers', () => listProductOffers(staff, productId, opts)],

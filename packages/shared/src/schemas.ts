@@ -119,7 +119,7 @@ export const barcodeSchema = z
   .string()
   .trim()
   .min(1, 'Barkod boş olamaz')
-  .max(64)
+  .max(64, 'Barkod en fazla 64 karakter olabilir')
 
 /**
  * Stok hareketi oluşturma isteği. createMovement() tek yazma kapısının girdisi.
@@ -347,10 +347,17 @@ export type UpdateProductInput = z.infer<typeof updateProductSchema>
  * ============================================================================
  */
 
-const currencyEnum = z.enum(CURRENCY_VALUES as [Currency, ...Currency[]])
-const taxModeEnum = z.enum(TAX_MODE_VALUES as [TaxMode, ...TaxMode[]])
+// Mesajlar Türkçe: formda boş bırakılan seçim alanında zod'un İngilizce
+// "Invalid enum value" metni ekrana düşerdi (VALIDATION_FAILED ilk mesajı gösterir).
+const currencyEnum = z.enum(CURRENCY_VALUES as [Currency, ...Currency[]], {
+  errorMap: () => ({ message: 'Para birimini seçin' }),
+})
+const taxModeEnum = z.enum(TAX_MODE_VALUES as [TaxMode, ...TaxMode[]], {
+  errorMap: () => ({ message: 'KDV durumunu seçin' }),
+})
 const supplierPriceTypeEnum = z.enum(
   SUPPLIER_PRICE_TYPE_VALUES as [SupplierPriceType, ...SupplierPriceType[]],
+  { errorMap: () => ({ message: 'Fiyat türünü seçin' }) },
 )
 
 /**
@@ -390,7 +397,11 @@ const supplierStockSchema = z
  * görünürdü.
  */
 export const createSupplierSchema = z.object({
-  name: z.string().trim().min(1, 'Tedarikçi adı boş olamaz').max(120),
+  name: z
+    .string()
+    .trim()
+    .min(1, 'Tedarikçi adı boş olamaz')
+    .max(120, 'Tedarikçi adı en fazla 120 karakter olabilir'),
   defaultCurrency: currencyEnum,
   defaultTaxMode: taxModeEnum,
   defaultPriceType: supplierPriceTypeEnum,
@@ -398,6 +409,15 @@ export const createSupplierSchema = z.object({
 })
 
 export type CreateSupplierInput = z.infer<typeof createSupplierSchema>
+
+/**
+ * Tedarikçi ayarlarını düzenleme: aynı alanlar, TAMAMI gönderilir. Kısmi
+ * güncelleme yok: form her alanı zaten taşıyor ve "gönderilmeyen alan
+ * dokunulmaz mı, temizlenir mi" sorusu burada doğmasın.
+ */
+export const updateSupplierSchema = createSupplierSchema
+
+export type UpdateSupplierInput = z.infer<typeof updateSupplierSchema>
 
 /**
  * Tedarikçi kaynağından gelen TEK kalem, varsayılanlar uygulandıktan sonra.
@@ -409,10 +429,16 @@ export type CreateSupplierInput = z.infer<typeof createSupplierSchema>
  * türetilmez: koli barkodu, fiyatın koliye ait olduğunu kanıtlamaz.
  */
 export const supplierFeedItemSchema = z.object({
-  supplierCode: z.string().trim().min(1, 'Tedarikçi kodu ve barkod boş').max(100),
+  // Uzunluk mesajları Türkçe: önizlemenin satır hatası tablosunda görünüyorlar;
+  // varsayılan bırakılsaydı "String must contain at most 300 character(s)" çıkardı.
+  supplierCode: z
+    .string()
+    .trim()
+    .min(1, 'Tedarikçi kodu ve barkod boş')
+    .max(100, 'Tedarikçi kodu en fazla 100 karakter olabilir'),
   barcode: barcodeSchema.optional(),
-  name: z.string().trim().min(1, 'Ürün adı boş').max(300),
-  brand: z.string().trim().max(100).optional(),
+  name: z.string().trim().min(1, 'Ürün adı boş').max(300, 'Ürün adı en fazla 300 karakter olabilir'),
+  brand: z.string().trim().max(100, 'Marka en fazla 100 karakter olabilir').optional(),
   price: supplierPriceSchema,
   currency: currencyEnum,
   taxMode: taxModeEnum,
@@ -582,6 +608,14 @@ export const exportMovementsSchema = z.object({
 
 export type ExportMovementsInput = z.infer<typeof exportMovementsSchema>
 
+/**
+ * Ürün aramasının (stok tablosu, Ctrl+K, tedarikçi kalemi bağlama) en uzun
+ * metni. Aramayı kendisi dolduran ekran (tedarikçi kaleminin 300 karakterlik
+ * adı) bu sınıra kırpıyor; aşan metin doğrulamada reddedilip sayfayı
+ * düşürüyordu (T200 1b REVIEW, B2).
+ */
+export const SEARCH_MAX_LENGTH = 100
+
 export const exportStockSchema = z.object({
   /**
    * Ekrandaki arama kutusuyla AYNI alan.
@@ -591,7 +625,7 @@ export const exportStockSchema = z.object({
    * Export'un ekranda görüneni vermesi, raporun doğru olmasından ayrı bir
    * şey değil.
    */
-  search: z.string().trim().max(100).optional(),
+  search: z.string().trim().max(SEARCH_MAX_LENGTH).optional(),
   /** Arşivlenmiş ürünler varsayılan olarak HARİÇ: rapor bugünün stoğu. */
   includeArchived: z.boolean().default(false),
   /** Sadece kritik seviyenin altındakiler. Sipariş listesi çıkarmak için. */
@@ -609,7 +643,7 @@ export type ExportStockInput = z.infer<typeof exportStockSchema>
  * okuttuğu şey çoğu zaman koddur, arama kutusu ikisini de bulmalı.
  */
 export const listStockSchema = z.object({
-  search: z.string().trim().max(100).optional(),
+  search: z.string().trim().max(SEARCH_MAX_LENGTH).optional(),
   category: z.string().trim().max(100).optional(),
   productId: z.string().uuid().optional(),
   onlyCritical: z.boolean().default(false),

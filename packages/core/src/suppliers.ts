@@ -7,6 +7,7 @@ import {
   type SupplierPriceType,
   type TaxMode,
   createSupplierSchema,
+  updateSupplierSchema,
 } from '@stok/shared'
 import {
   type Db,
@@ -179,11 +180,7 @@ export async function createSupplier(
         })
         .returning({ id: suppliers.id })
         .catch((err: unknown) => {
-          // Çakışma constraint ADINDAN okunuyor (products.ts'teki gerekçe).
-          if (isUniqueViolation(err, 'suppliers_tenant_name_uq')) {
-            throw new AppError('SUPPLIER_NAME_EXISTS', 'supplier name exists', { name: input.name })
-          }
-          throw err
+          throw translateNameConflict(err, input.name)
         })
       return row!.id
     },
@@ -191,6 +188,59 @@ export async function createSupplier(
   )
 
   return getSupplier(actor, id, options)
+}
+
+/**
+ * Tedarikçinin adını, varsayılan koşullarını ve fiyat miktarı beyanını değiştirir.
+ *
+ * YALNIZ SONRAKİ YENİLEMELERİ ETKİLER. Kalemlerin saklı koşulları ve fiyat
+ * geçmişi geriye dönük değiştirilmez: geçmişteki "TL, KDV hariç" fiyat o gün
+ * öyle bildirilmişti. Yeni varsayılanla gelen bir sonraki dosya kalemin
+ * koşulunu değiştirirse bu, geçmişte "koşul değişimi" olarak görünür.
+ *
+ * Tedarikçi satırı kilitleniyor: süren bir yenileme eski varsayılanlarla
+ * başlayıp yenileriyle bitemesin.
+ */
+export async function updateSupplier(
+  actor: Actor,
+  supplierId: string,
+  raw: unknown,
+  options: SupplierOptions = {},
+): Promise<SupplierRow> {
+  requirePermission(actor, 'supplier:manage')
+  const id = idOrNotFound(supplierId, 'supplier')
+  const input = parseOrThrow(updateSupplierSchema, raw)
+
+  await withTenant(
+    actor.tenantId,
+    async (tx) => {
+      await lockSupplier(tx, actor.tenantId, id)
+      await tx
+        .update(suppliers)
+        .set({
+          name: input.name,
+          defaultCurrency: input.defaultCurrency,
+          defaultTaxMode: input.defaultTaxMode,
+          defaultPriceType: input.defaultPriceType,
+          unitPriceDeclared: input.unitPriceDeclared,
+        })
+        .where(and(eq(suppliers.tenantId, actor.tenantId), eq(suppliers.id, id)))
+        .catch((err: unknown) => {
+          throw translateNameConflict(err, input.name)
+        })
+    },
+    options.db,
+  )
+
+  return getSupplier(actor, id, options)
+}
+
+/** Çakışma constraint ADINDAN okunuyor (products.ts'teki gerekçe). */
+function translateNameConflict(err: unknown, name: string): unknown {
+  if (isUniqueViolation(err, 'suppliers_tenant_name_uq')) {
+    return new AppError('SUPPLIER_NAME_EXISTS', 'supplier name exists', { name })
+  }
+  return err
 }
 
 // ---------------------------------------------------------------------------
@@ -221,7 +271,32 @@ export interface RefreshSummary {
   priceQtyUnknown: number
   errors: FeedRowIssue[]
   warnings: FeedRowIssue[]
+  /**
+   * Dosyanın ilk geçerli satırları, OKUNDUĞU ve YAZILACAĞI hâliyle (T200 1b).
+   * Önizleme yalnız sayı gösterseydi "1.234"ün bin mi bir virgül iki mi
+   * okunduğu (T205) ya da "Miktar" sütununun stok sayıldığı görünmezdi.
+   */
+  sample: RefreshSampleRow[]
 }
+
+export interface RefreshSampleRow {
+  rowNumber: number
+  supplierCode: string
+  barcode: string | null
+  name: string
+  price: string
+  currency: Currency
+  taxMode: TaxMode
+  priceType: SupplierPriceType
+  /** NULL = fiyat miktarı belirsiz. */
+  priceQty: string | null
+  stockQty: string | null
+  matchState: SupplierMatchState
+  productName: string | null
+  productSku: string | null
+}
+
+const SAMPLE_SIZE = 10
 
 interface LockedSupplier {
   defaults: SupplierDefaults
@@ -302,6 +377,7 @@ async function applyRefresh(
     priceQtyUnknown: 0,
     errors,
     warnings,
+    sample: [],
   }
   if (items.length === 0) return summary
 
@@ -314,6 +390,8 @@ async function applyRefresh(
             barcode: productBarcodes.barcode,
             productId: productBarcodes.productId,
             kind: productBarcodes.kind,
+            productName: products.name,
+            productSku: products.sku,
           })
           .from(productBarcodes)
           .innerJoin(products, eq(products.id, productBarcodes.productId))
@@ -332,8 +410,11 @@ async function applyRefresh(
       code: supplierItems.supplierCode,
       productId: supplierItems.productId,
       matchState: supplierItems.matchState,
+      productName: products.name,
+      productSku: products.sku,
     })
     .from(supplierItems)
+    .leftJoin(products, eq(products.id, supplierItems.productId))
     .where(
       and(
         eq(supplierItems.tenantId, tenantId),
@@ -355,12 +436,15 @@ async function applyRefresh(
     // otomatik eşleşme yenilemede korunur; tekrar denenen yalnız UNMATCHED.
     let productId: string | null = null
     let matchState: SupplierMatchState = 'UNMATCHED'
+    let product: { name: string | null; sku: string | null } = { name: null, sku: null }
     if (prev && prev.matchState !== 'UNMATCHED') {
       productId = prev.productId
       matchState = prev.matchState as SupplierMatchState
+      product = { name: prev.productName, sku: prev.productSku }
     } else if (hit) {
       productId = hit.productId
       matchState = 'AUTO'
+      product = { name: hit.productName, sku: hit.productSku }
       summary.autoMatched += 1
     }
     if (matchState === 'UNMATCHED') summary.unmatched += 1
@@ -384,19 +468,40 @@ async function applyRefresh(
     if (prev) summary.updated += 1
     else summary.created += 1
 
+    // Metin olarak gidiyor: şema 4 ondalığı ve üst sınırı zorladı,
+    // `toFixed(4)` bu büyüklükte tam (INV-8).
+    const price = item.price.toFixed(4)
+    const stockQty = item.stockQty === undefined ? null : formatScaled(scaledFromNumber(item.stockQty))
+
+    if (summary.sample.length < SAMPLE_SIZE) {
+      summary.sample.push({
+        rowNumber: item.rowNumber,
+        supplierCode: item.supplierCode,
+        barcode: item.barcode ?? null,
+        name: item.name,
+        price,
+        currency: item.currency,
+        taxMode: item.taxMode,
+        priceType: item.priceType,
+        priceQty,
+        stockQty,
+        matchState,
+        productName: product.name,
+        productSku: product.sku,
+      })
+    }
+
     return {
       supplier_code: item.supplierCode,
       barcode: item.barcode ?? null,
       name: item.name,
       brand: item.brand ?? null,
-      // Metin olarak gidiyor: şema 4 ondalığı ve üst sınırı zorladı,
-      // `toFixed(4)` bu büyüklükte tam (INV-8).
-      price: item.price.toFixed(4),
+      price,
       currency: item.currency,
       tax_mode: item.taxMode,
       price_type: item.priceType,
       price_qty: priceQty,
-      stock_qty: item.stockQty === undefined ? null : formatScaled(scaledFromNumber(item.stockQty)),
+      stock_qty: stockQty,
       source_updated_at: item.sourceUpdatedAt ?? null,
       product_id: productId,
       match_state: matchState,

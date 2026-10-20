@@ -38,6 +38,26 @@ import { issuesOf, validationError } from './validate'
 /** Tek dosyada en fazla kalem. 4 MB yükleme sınırıyla birlikte ölçülecek. */
 export const SUPPLIER_ROW_LIMIT = 5_000
 
+/**
+ * SÜTUN ADLARININ önizlemedeki sınırları: okunmayan sütunlardan en fazla bu
+ * kadarı listelenir (kalanı sayılır), her ad bu uzunlukta "…" ile kısaltılır.
+ *
+ * Yalnız GÖSTERİM metaverisi; dosyadaki değerlere dokunmuyor. Ayrıştırıcı ve
+ * kayıt şeması (`parsedSupplierFileSchema`) aynı sabitleri okuyor. Ayrı
+ * yazılmışlardı: ayrıştırıcı sınırsızdı, şema 200'de kesiyordu ve 210 sütunlu
+ * ya da uzun başlıklı bir dosya önizlemeden geçip kayıtta bütünüyle
+ * reddediliyordu (T200 1b REVIEW, B1).
+ */
+export const SUPPLIER_HEADER_LIMIT = 200
+export const SUPPLIER_IGNORED_COLUMN_LIMIT = 200
+
+/** Sütun adını gösterim sınırına indirir; kısaltıldığı "…" ile görünür. */
+function headerLabel(header: string): string {
+  return header.length > SUPPLIER_HEADER_LIMIT
+    ? `${header.slice(0, SUPPLIER_HEADER_LIMIT - 1)}…`
+    : header
+}
+
 export type FeedField =
   | 'supplierCode'
   | 'barcode'
@@ -174,8 +194,13 @@ export interface ParsedSupplierFile {
   rows: SupplierFileRow[]
   /** Tanınan sütunlar ve dosyadaki adları. Önizleme "şunları okudum" diye gösterir. */
   columns: { field: FeedField; header: string }[]
-  /** Okunmayan sütunlar, dosyadaki yazımıyla. Sessizce yok sayılmıyor. */
+  /**
+   * Okunmayan sütunlar, dosyadaki yazımıyla. Sessizce yok sayılmıyor. En fazla
+   * `SUPPLIER_IGNORED_COLUMN_LIMIT` ad; uzun ad `headerLabel` ile kısaltılmış.
+   */
   ignoredColumns: string[]
+  /** Listeye sığmayan okunmayan sütun sayısı; ekran "…ve N sütun daha" der. */
+  ignoredColumnsOmitted?: number
   /** Fiyat sütununun adından gelen tür ("Liste Fiyatı" → LIST). */
   headerPriceType?: SupplierPriceType
 }
@@ -185,19 +210,30 @@ const feedFieldEnum = z.enum(FEED_FIELDS as [FeedField, ...FeedField[]])
 /**
  * Önizlemeden kayda istemciden geri gelen dosyanın şeması. Gelen veri
  * kullanıcı verisidir; hücreler yine `normalizeSupplierRows`'tan geçer.
+ *
+ * HÜCREDE UZUNLUK SINIRI YOK, bilerek. Değerin uzunluk kuralı tek yerde:
+ * `supplierFeedItemSchema` (kod 100, ad 300, marka 100, barkod 64), ve orada
+ * satır düzeyinde Türkçe hata üretiyor. Burada ikinci bir sınır (1.000'di)
+ * önizlemenin satır hatası saydığı uzun değeri kayıtta BÜTÜN dosyanın reddine
+ * çeviriyordu. Değeri kesmek de çözüm değildi: kod ve ad sessizce değişirdi.
+ * Blob'un toplam boyutunu çağıran sınırlıyor (web: `SUPPLIER_SAVE_BLOB_LIMIT`,
+ * `JSON.parse`'tan önce).
  */
 export const parsedSupplierFileSchema = z.object({
   rows: z
     .array(
       z.object({
         rowNumber: z.number().int().positive(),
-        cells: z.record(feedFieldEnum, z.string().max(1_000)),
+        cells: z.record(feedFieldEnum, z.string()),
         typeErrors: z.array(feedFieldEnum).max(FEED_FIELDS.length).optional(),
       }),
     )
     .max(SUPPLIER_ROW_LIMIT),
-  columns: z.array(z.object({ field: feedFieldEnum, header: z.string().max(200) })).max(50),
-  ignoredColumns: z.array(z.string().max(200)).max(200),
+  columns: z
+    .array(z.object({ field: feedFieldEnum, header: z.string().max(SUPPLIER_HEADER_LIMIT) }))
+    .max(FEED_FIELDS.length),
+  ignoredColumns: z.array(z.string().max(SUPPLIER_HEADER_LIMIT)).max(SUPPLIER_IGNORED_COLUMN_LIMIT),
+  ignoredColumnsOmitted: z.number().int().positive().optional(),
   headerPriceType: z
     .enum(SUPPLIER_PRICE_TYPE_VALUES as [SupplierPriceType, ...SupplierPriceType[]])
     .optional(),
@@ -237,6 +273,7 @@ function parseTableFeed(matrix: string[][], limit: number): ParsedSupplierFile {
   const indexOf: Partial<Record<FeedField, number>> = {}
   const columns: { field: FeedField; header: string }[] = []
   const ignoredColumns: string[] = []
+  let ignoredColumnsOmitted = 0
   let headerPriceType: SupplierPriceType | undefined
 
   headerRow.forEach((raw, index) => {
@@ -244,7 +281,8 @@ function parseTableFeed(matrix: string[][], limit: number): ParsedSupplierFile {
     if (header === '') return
     const alias = HEADER_ALIASES[normalizeHeader(header)]
     if (!alias) {
-      ignoredColumns.push(header)
+      if (ignoredColumns.length < SUPPLIER_IGNORED_COLUMN_LIMIT) ignoredColumns.push(headerLabel(header))
+      else ignoredColumnsOmitted += 1
       return
     }
     const earlier = columns.find((c) => c.field === alias.field)
@@ -255,7 +293,8 @@ function parseTableFeed(matrix: string[][], limit: number): ParsedSupplierFile {
       })
     }
     indexOf[alias.field] = index
-    columns.push({ field: alias.field, header })
+    // Eş ad başlıktaki noktalamayı yok sayıyor: "Fiyat........" de fiyattır.
+    columns.push({ field: alias.field, header: headerLabel(header) })
     if (alias.priceType) headerPriceType = alias.priceType
   })
 
@@ -286,7 +325,13 @@ function parseTableFeed(matrix: string[][], limit: number): ParsedSupplierFile {
   if (rows.length === 0) {
     throw new AppError('SUPPLIER_FEED_NO_VALID_ROWS', 'file has no data rows')
   }
-  return { rows, columns, ignoredColumns, headerPriceType }
+  return {
+    rows,
+    columns,
+    ignoredColumns,
+    ...(ignoredColumnsOmitted > 0 ? { ignoredColumnsOmitted } : {}),
+    headerPriceType,
+  }
 }
 
 const jsonEnvelopeSchema = z.object({
@@ -341,13 +386,15 @@ function parseJsonFeed(buffer: Buffer, limit: number): ParsedSupplierFile {
       : { rowNumber: index + 1, cells }
   })
 
+  const ignoredOmitted = Math.max(0, ignored.size - SUPPLIER_IGNORED_COLUMN_LIMIT)
   return {
     rows,
     columns: FEED_FIELDS.filter((f) => seenFields.has(f)).map((field) => ({
       field,
       header: Object.keys(JSON_KEYS).find((k) => JSON_KEYS[k] === field)!,
     })),
-    ignoredColumns: [...ignored].slice(0, 200),
+    ignoredColumns: [...ignored].slice(0, SUPPLIER_IGNORED_COLUMN_LIMIT).map(headerLabel),
+    ...(ignoredOmitted > 0 ? { ignoredColumnsOmitted: ignoredOmitted } : {}),
   }
 }
 

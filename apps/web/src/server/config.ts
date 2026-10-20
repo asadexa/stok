@@ -52,6 +52,20 @@ export const MAX_UPLOAD_BYTES = 4 * 1024 * 1024
 export const MAX_UPLOAD_LABEL = '4 MB'
 
 /**
+ * T200 — TEDARİKÇİ KAYDININ BLOB SINIRI.
+ *
+ * Önizlemeden sonra çözümlenmiş dosya (JSON) kayıt isteğinde sunucuya geri
+ * gidiyor ve yukarıdaki sınır BÜTÜN isteğe uygulanıyor: blob'un yanında
+ * tedarikçi kimliği, dosya adı ve çok parçalı form kodlaması da var. Küçük
+ * bir xlsx sıkıştırılmış olduğu için büyük bir blob üretebiliyor.
+ *
+ * Blob bu sınırı aşarsa önizleme kayıt düğmesini kapatıp "dosyayı bölün"
+ * diyor. Kapatmasaydı kayıt isteği Next'in sınırına çarpar ve kullanıcı
+ * sebebini göremezdi. Pay (512 KB) ölçümle sınandı: CURRENT_STATE, T200 1b.
+ */
+export const SUPPLIER_SAVE_BLOB_LIMIT = MAX_UPLOAD_BYTES - 512 * 1024
+
+/**
  * ============================================================================
  * T133 — DEPODA AÇIKÇA YAZAN SIRLAR ÜRETİMDE REDDEDİLİR
  *

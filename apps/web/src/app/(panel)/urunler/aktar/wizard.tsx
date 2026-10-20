@@ -2,6 +2,7 @@
 
 import type { ImportPreview, PreviewRow, RowNotice } from '@stok/core'
 import { useActionState } from 'react'
+import { CountTile } from '@/components/count-tile'
 import type { AnalyzeState } from './actions'
 
 /**
@@ -100,9 +101,9 @@ function PreviewPanel({
   return (
     <section aria-label="Önizleme" className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-3">
-        <Count label="Yeni eklenecek" value={create} tone="giris" />
-        <Count label="Güncellenecek" value={update} />
-        <Count label="Atlanacak (hatalı)" value={error} tone={error > 0 ? 'kritik' : undefined} />
+        <CountTile label="Yeni eklenecek" value={create} tone="giris" />
+        <CountTile label="Güncellenecek" value={update} />
+        <CountTile label="Atlanacak (hatalı)" value={error} tone={error > 0 ? 'kritik' : undefined} />
       </div>
 
       {preview.notices.length > 0 ? (
@@ -173,9 +174,9 @@ function ResultPanel({ result }: { result: NonNullable<AnalyzeState['result']> }
   return (
     <section aria-label="Sonuç" className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-3">
-        <Count label="Eklendi" value={result.created} tone="giris" />
-        <Count label="Güncellendi" value={result.updated} />
-        <Count
+        <CountTile label="Eklendi" value={result.created} tone="giris" />
+        <CountTile label="Güncellendi" value={result.updated} />
+        <CountTile
           label="Aktarılamadı"
           value={result.failed}
           tone={result.failed > 0 ? 'kritik' : undefined}
@@ -184,9 +185,9 @@ function ResultPanel({ result }: { result: NonNullable<AnalyzeState['result']> }
 
       {result.openings.written + result.openings.skipped + result.openings.failed > 0 ? (
         <div className="grid gap-3 sm:grid-cols-3">
-          <Count label="Devir yazıldı" value={result.openings.written} tone="giris" />
-          <Count label="Devir atlandı" value={result.openings.skipped} />
-          <Count
+          <CountTile label="Devir yazıldı" value={result.openings.written} tone="giris" />
+          <CountTile label="Devir atlandı" value={result.openings.skipped} />
+          <CountTile
             label="Devir yazılamadı"
             value={result.openings.failed}
             tone={result.openings.failed > 0 ? 'kritik' : undefined}
@@ -283,24 +284,6 @@ function ErrorTable({ rows }: { rows: PreviewRow[] }) {
           ))}
         </tbody>
       </table>
-    </div>
-  )
-}
-
-function Count({
-  label,
-  value,
-  tone,
-}: {
-  label: string
-  value: number
-  tone?: 'giris' | 'kritik'
-}) {
-  const color = tone === 'giris' ? 'text-giris' : tone === 'kritik' ? 'text-kritik' : ''
-  return (
-    <div className="rounded-card border border-line bg-surface shadow-card p-4">
-      <p className="text-sm text-ink-2">{label}</p>
-      <p className={`tabular mt-1 text-3xl font-semibold ${color}`}>{value}</p>
     </div>
   )
 }

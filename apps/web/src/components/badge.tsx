@@ -73,12 +73,25 @@ function ToneIcon({ tone }: { tone: BadgeTone }) {
   )
 }
 
-export function Badge({ tone, children }: { tone: BadgeTone; children: React.ReactNode }) {
+export function Badge({
+  tone,
+  children,
+  icon,
+}: {
+  tone: BadgeTone
+  children: React.ReactNode
+  /**
+   * Tonun varsayılan ikonu yerine. Yönü olan bilgilerde (fiyat ▲/▼) tonun
+   * ikonu yanlış şeyi söylerdi: "uyarı üçgeni" artışın yönünü göstermiyor.
+   * Verilen ikon da `aria-hidden` olmalı; anlam metinde.
+   */
+  icon?: React.ReactNode
+}) {
   return (
     <span
       className={`inline-flex h-[26px] items-center gap-1.5 whitespace-nowrap rounded-[7px] px-2.5 text-[12.5px] font-semibold ${TONE[tone]}`}
     >
-      <ToneIcon tone={tone} />
+      {icon ?? <ToneIcon tone={tone} />}
       {children}
     </span>
   )

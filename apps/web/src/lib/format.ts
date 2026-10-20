@@ -54,6 +54,42 @@ export function formatMoney(value: number): string {
   return moneyFmt.format(value)
 }
 
+const countFmt = new Intl.NumberFormat('tr-TR', { maximumFractionDigits: 0 })
+
+/** Sayım: "5.000 kalem". Ham `{n}` "5000" yazar; aynı ekrandaki sayfalama "5.000" diyor. */
+export function formatCount(value: number): string {
+  return countFmt.format(value)
+}
+
+const supplierPriceFmt = new Intl.NumberFormat('tr-TR', {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 4,
+})
+
+const percentFmt = new Intl.NumberFormat('tr-TR', {
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 1,
+})
+
+/**
+ * Tedarikçi fiyatı: en az 2, en fazla 4 ondalık ("12,50", "0,0375").
+ *
+ * Değer METİN geliyor ("12.5000", NUMERIC(14,4)) ve burada yalnız GÖSTERİM
+ * için sayıya çevriliyor; karar veren hiçbir yol bu sayıyı kullanmıyor
+ * (INV-8). 2 ondalığa yuvarlansaydı 0,0375 ile 0,0400 aynı görünürdü.
+ */
+export function formatSupplierPrice(value: string): string {
+  return supplierPriceFmt.format(Number(value))
+}
+
+/**
+ * Yüzde değişim, işaretsiz ("10.0" → "%10,0"). Yön ayrı gösteriliyor
+ * (▲/▼ + "arttı"/"azaldı"): eksi işareti tek başına gözden kaçar.
+ */
+export function formatPercent(value: string): string {
+  return `%${percentFmt.format(Math.abs(Number(value)))}`
+}
+
 /**
  * `<input type="date">` değerini (YYYY-MM-DD) gün başlangıcına çevirir.
  *

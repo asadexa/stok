@@ -138,6 +138,23 @@ export const NAV: NavItem[] = [
     ),
   },
   {
+    // Tedarikçi fiyatı alış fiyatı niteliğinde (INV-10, T200): yalnız yönetici.
+    // Alt çubukta yok (TD4): dosya yükleme masa başı iş; mobilde tedarikçiye
+    // ürün kartındaki "Tedarikçi fiyatları" bölümünden gidiliyor.
+    href: '/tedarikciler',
+    label: 'Tedarikçiler',
+    adminOnly: true,
+    primary: false,
+    icon: (
+      <Icon>
+        <path d="M3 6h11v10H3z" />
+        <path d="M14 10h4l3 3v3h-7" />
+        <circle cx="7" cy="18" r="1.6" />
+        <circle cx="17" cy="18" r="1.6" />
+      </Icon>
+    ),
+  },
+  {
     // Raporlar YÖNETİCİ İŞİ: Excel indirme yetkisi (export:excel) çalışanda
     // yok. Menüde göstermek, tıklayınca "yetkiniz yok" diyen bir satır
     // koymak olurdu.

@@ -47,7 +47,7 @@ Katman kuralları `PROJECT_BRAIN` §5, ilkeler §12. Kayıtlarda yalnız özelli
 | F-10 | Telefonla barkod okutma köprüsü (pilot) | Uygulandı (pilot, varsayılan kapalı) |
 | F-11 | Yerel yedek ve güvenli veritabanı sıfırlama | Uygulandı |
 | F-14 | Windows tek tıkla başlatma (`BASLAT.bat`) | Uygulandı |
-| F-12 | B2B tedarikçi verisi V1 | **Geliştiriliyor** (1a çekirdek bitti, 1b ekranlar) |
+| F-12 | B2B tedarikçi verisi V1 | **Geliştiriliyor** (1a ve 1b bitti, Dilim 2 sırada) |
 | F-13 | İnternetten erişilebilir test ortamı | **Planlandı** |
 
 ---
@@ -186,7 +186,7 @@ Katman kuralları `PROJECT_BRAIN` §5, ilkeler §12. Kayıtlarda yalnız özelli
 
 ## Planlanan özellikler
 
-### F-12 — B2B tedarikçi verisi V1 (Geliştiriliyor: 1a çekirdek bitti, 1b ekranlar)
+### F-12 — B2B tedarikçi verisi V1 (Geliştiriliyor: 1a ve 1b bitti, Dilim 2 sırada)
 - **İhtiyaç:** tedarikçilerin ürün, fiyat ve stok bilgisini elle yeniden yazmadan görmek;
   aynı ürün için tedarikçileri güncel fiyat ve stokla karşılaştırmak.
 - **Onaylı ürün kararları:** `PRD-14`, `PRD-15`. Özetle: bir ürün birden çok tedarikçiye
@@ -198,11 +198,20 @@ Katman kuralları `PROJECT_BRAIN` §5, ilkeler §12. Kayıtlarda yalnız özelli
   koşulları, satır doğrulaması) → `previewSupplierRefresh` (yenilemenin aynısı, transaction geri
   alınır) → `refreshSupplier` (tedarikçi satırı `FOR UPDATE`; barkodla eşleşme; tek SQL'de fark
   → `supplier_price_changes`, sonra `supplier_items` upsert). Elle eşleştirme `bindSupplierItem` /
-  `ignoreSupplierItem`; karşılaştırma `listProductOffers`.
+  `ignoreSupplierItem`; karşılaştırma `listProductOffers`; ayarlar `updateSupplier`.
+- **Ekranlar (yalnız yönetici):** `/tedarikciler` liste ve ekleme. `/tedarikciler/[id]`: ayarlar,
+  "Verileri Getir" (dosya → önizleme: okunan ve okunmayan sütunlar, sayılar, ilk 10 satır, hatalı
+  satırlar → kaydet), eşleşme bekleyenler (ürün ara → bağla, yok say), son fiyat değişimleri,
+  süzgeçli kalem tablosu. Ürün sayfasında "Tedarikçi fiyatları" bölümü: koşul gruplarına göre
+  teklifler, belirsiz miktarlılar ayrı.
 - **Kurallar:**
   - Dosyanın tamamı reddedilir: başlık yok, zorunlu sütun yok (Ürün Adı, Fiyat ve Tedarikçi
     Kodu ya da Barkod), aynı alana iki sütun, en fazla 5.000 satır aşıldı, veri satırı yok.
     Geçersiz satır yalnız kendisi atlanır ve listelenir. Metin stok satırı reddetmez.
+  - Değerler kesilmez: uzun kod, ad, marka ya da barkod o satırda Türkçe hata olur; önizleme ve
+    kayıt aynı kuralı (`supplierFeedItemSchema`) kullanır. Okunmayan sütunlardan en fazla 200 ad
+    listelenir, 200 karakteri aşan ad "…" ile kısaltılır, kalanın sayısı söylenir
+    (`SUPPLIER_IGNORED_COLUMN_LIMIT`, `SUPPLIER_HEADER_LIMIT`; ayrıştırıcı ve kayıt şeması ortak).
   - "Koli İçi Adet" ve "KDV" (oran) sütunları okunmaz; tablo dosyasında tarih okunmaz (`DAT-16`).
   - Otomatik eşleşme yalnız aktif barkod ve arşivlenmemiş ürünle; elle bağlama ve yok sayma
     yenilemede korunur. Fiyat miktarı yalnız açık beyandan; koli barkodu miktar üretmez (`PRD-15`).
@@ -211,13 +220,23 @@ Katman kuralları `PROJECT_BRAIN` §5, ilkeler §12. Kayıtlarda yalnız özelli
     yön ve yüzde yok). Kural veritabanında, üretilen sütunla (ADR-006).
   - Karşılaştırma grubu: para birimi + KDV + fiyat türü + bilinen miktar; "en düşük" yalnız
     birden çok teklifli grupta. Belirsiz miktar ayrı ve sırasız.
+  - Tedarikçi ayarlarını düzenlemek yalnız sonraki yenilemeleri etkiler; kalemler ve fiyat
+    geçmişi geriye dönük değişmez (`PRD-16`).
+  - Önizlenen dosya kayıtta tarayıcıdan geri gönderiliyor. Çözümlenmiş hâli
+    `SUPPLIER_SAVE_BLOB_LIMIT`'i (3,5 MB) aşarsa kayıt düğmesi kapanır ve "dosyayı bölün" denir;
+    sunucu da aynı sınırı uygular. Ölçüm `CURRENT_STATE`'te.
+  - Tedarikçi eylemlerinde beklenmeyen hata içeriği dökülmeden loglanır (`logUnexpected`,
+    `safeErrorQuery`; T204).
 - **Teknoloji:** F-02'nin dosya okuyucusu (`readSheet`, `normalizeHeader`, `parseTurkishNumber`);
   ayrı sütun eş ad tablosu. Yeni bağımlılık yok. Tedarikçi fiyatı NUMERIC(14,4), metin olarak döner.
 - **Kararlar:** `PRD-14`, `PRD-15`, `DAT-19`, ADR-006.
 - **Dosyalar:** `packages/shared/src/suppliers.ts`, `schemas.ts`, `roles.ts`
   (`supplier:read`, `supplier:manage`: yalnız yönetici); `packages/db/src/schema.ts`,
-  `migrations/0012_suppliers.sql`; `packages/core/src/supplier-feed.ts`, `suppliers.ts`. Ekranlar
-  (`apps/web`) Dilim 1b'de.
+  `migrations/0012_suppliers.sql`; `packages/core/src/supplier-feed.ts`, `suppliers.ts`.
+  `apps/web`: `app/(panel)/tedarikciler/` (`page.tsx`, `supplier-form.tsx`, `[id]/page.tsx`,
+  `[id]/actions.ts`, `[id]/refresh-wizard.tsx`), `app/(panel)/urunler/[id]/supplier-offers.tsx`,
+  `components/supplier-price.tsx`, `components/count-tile.tsx`, `server/safe-log.ts`,
+  `server/config.ts` (`SUPPLIER_SAVE_BLOB_LIMIT`).
 - **Kabul kriterleri:**
   - "Verileri Getir" sonrası tedarikçi fiyatı ve stoğu güncel; değişmeyen fiyat geçmiş satırı üretmez.
   - Değişen fiyatta önceki ve yeni değer ile artış/azalış görünür.
@@ -227,14 +246,22 @@ Katman kuralları `PROJECT_BRAIN` §5, ilkeler §12. Kayıtlarda yalnız özelli
     varsayılan olarak çalışana gitmez (INV-10; aksi ürün kararı ister).
   - Sağlayıcıdan bağımsız model, dosya kaynağı ve örnek API verisiyle doğrulanır.
   - 1a kanıtı: `suppliers.test.ts`, `supplier-feed.test.ts`, `schema-sync.test.ts`,
-    `rls.test.ts` (gerçek PostgreSQL, `stok_app`); ekran ve e2e 1b'de.
-- **Sınırlar:** ekran yok (1b). Tedarikçi düzenleme/arşivleme yok. Fiyat geçmişinin saklama
-  süresi kararsız. Noktalı ama virgülsüz sayı ("1.234") ondalık okunur (F-02 ile aynı
-  `parseTurkishNumber`; T205).
+    `rls.test.ts` (gerçek PostgreSQL, `stok_app`).
+  - REVIEW B1/B2 kanıtı: `supplier-feed.test.ts` (CSV, XLSX, JSON: önizleme ile kayıt aynı
+    sınıflandırır), `actions.test.ts` (uzun değerli dosya kaydediliyor), e2e "uzun adlı kalemde
+    ürün arama" (150 ve 300 karakterlik adda hata ekranı yok).
+  - 1b kanıtı: `tedarikciler/[id]/actions.test.ts` (önizleme yazmaz, kayıt, bozuk ya da büyük
+    blob, çalışan reddi), `safe-log.test.ts`, `e2e/b2b-tedarikci.spec.ts` (yönetici akışı;
+    çalışanın menüsünde, adresinde ve ürün sayfasının HTML'inde tedarikçi fiyatı yok; 390 px'te
+    yatay kayma yok).
+- **Sınırlar:** tedarikçi arşivleme ve silme yok. Fiyat geçmişinin saklama süresi kararsız.
+  Noktalı ama virgülsüz sayı ("1.234") ondalık okunur (F-02 ile aynı `parseTurkishNumber`;
+  T205). Önizleme yanıtı ve kayıt isteği blob kadar veri taşıyor (5.000 uzun satırda ~3,6 MB).
+  Tam 4 MB'lık dosya genel hata ekranına düşüyor (T208).
 - **Açık sorular:** ilk gerçek sağlayıcı (seçilmedi); tedarikçi kataloğundan işletmeye yeni ürün
   açılıp açılmayacağı (V1'de yok); fiyat geçmişinin saklama süresi.
-- **İşler ve sıra:** T200 Dilim 1a (çekirdek) bitti; 1b ekranlar ve e2e, sonra Dilim 2 (kod
-  eşitliğinden eşleşme önerisi, genel karşılaştırma listesi). T201 (harici API kaynağı, gizli bilgi) V1'in devamı; gerçek sağlayıcı
+- **İşler ve sıra:** T200 Dilim 1a (çekirdek, `9d4bc8c`) ve 1b (ekranlar, eylemler, e2e) bitti;
+  sonra Dilim 2 (kod eşitliğinden eşleşme önerisi, genel karşılaştırma listesi). T201 (harici API kaynağı, gizli bilgi) V1'in devamı; gerçek sağlayıcı
   seçilmeden genel entegrasyon iddia edilmez. Sonraki sürüm T202 (B2B sipariş), T203 (otomatik
   periyodik senkron). T53 (bizim sunduğumuz REST) ayrı iştir.
 

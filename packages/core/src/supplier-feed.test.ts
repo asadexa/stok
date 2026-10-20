@@ -3,6 +3,8 @@ import ExcelJS from 'exceljs'
 import { describe, expect, it } from 'vitest'
 import {
   type ParsedSupplierFile,
+  SUPPLIER_HEADER_LIMIT,
+  SUPPLIER_IGNORED_COLUMN_LIMIT,
   type SupplierDefaults,
   normalizeSupplierRows,
   parseSupplierFile,
@@ -304,5 +306,78 @@ describe('önizlemeden kayda geri gelen dosya', () => {
       parseSupplierFileBlob({ rows: [{ rowNumber: 2, cells: { productId: 'x' } }], columns: [], ignoredColumns: [] }),
     ).toThrow(AppError)
     expect(() => parseSupplierFileBlob({ rows: 'x' })).toThrow(AppError)
+  })
+})
+
+/**
+ * T200 1b REVIEW, B1: önizlemenin kabul ettiği dosya kayıtta YALNIZ uzunluk
+ * kuralı farkı yüzünden reddedilmemeli. Ayrıştırıcı sınırsızdı, kayıt şeması
+ * hücrede 1.000, sütun adında 200, okunmayan sütunda 200 adetle sınırlıydı:
+ * 1.200 karakterlik ad, 240 karakterlik başlık ya da 210 okunmayan sütun
+ * önizlemede "1 geçerli satır" gösterip kayıtta bütün dosyayı düşürüyordu.
+ *
+ * Tablo (CSV, XLSX) ve JSON ayrı ayrıştırıcılardan çıkıyor; üçü de sınanıyor.
+ * "Kayıt" burada kayıt eyleminin yaptığı şey: blob JSON'a çevrilip
+ * `parseSupplierFileBlob`'dan geçiyor, sonra aynı normalizasyon.
+ */
+describe('önizleme ile kayıt aynı dosyayı aynı sınıflandırır (uzun değer, çok sütun)', () => {
+  const longName = 'Uzun açıklamalı ürün '.repeat(60).slice(0, 1_200)
+  const longCode = `K${'0'.repeat(100)}`
+  // Uzun başlık listenin başında: listeye girip kısaltıldığı görülsün.
+  const extra = [`Not ${'x'.repeat(236)}`, ...Array.from({ length: 209 }, (_, i) => `Ek ${i + 1}`)]
+  const values = [
+    { code: 'GEC-1', barcode: '', name: 'Geçerli kalem', brand: 'Marka', price: '12,50' },
+    { code: 'UZN-AD', barcode: '', name: longName, brand: '', price: '3' },
+    { code: longCode, barcode: '', name: 'Uzun kodlu', brand: '', price: '4' },
+    { code: 'UZN-BRK', barcode: '8'.repeat(65), name: 'Uzun barkodlu', brand: '', price: '5' },
+    { code: 'UZN-MRK', barcode: '', name: 'Uzun markalı', brand: 'M'.repeat(101), price: '6' },
+  ]
+  // Eş ad noktalamayı yok sayıyor: 255 karakterlik başlık da fiyat sütunu.
+  const header = ['Tedarikçi Kodu', 'Barkod', 'Ürün Adı', 'Marka', `Fiyat${'.'.repeat(250)}`, ...extra]
+  const matrix = [header, ...values.map((v) => [v.code, v.barcode, v.name, v.brand, v.price, ...extra.map(() => 'x')])]
+
+  async function fileOf(format: 'csv' | 'xlsx' | 'json'): Promise<Buffer> {
+    if (format === 'csv') return csv(matrix.map((r) => r.join(';')).join('\n'))
+    if (format === 'xlsx') {
+      const wb = new ExcelJS.Workbook()
+      const sheet = wb.addWorksheet('Liste')
+      for (const row of matrix) sheet.addRow(row)
+      return Buffer.from(await wb.xlsx.writeBuffer())
+    }
+    const items = values.map((v) => ({
+      supplierCode: v.code,
+      ...(v.barcode ? { barcode: v.barcode } : {}),
+      name: v.name,
+      ...(v.brand ? { brand: v.brand } : {}),
+      price: Number(v.price.replace(',', '.')),
+      ...Object.fromEntries(extra.map((key) => [key, 'x'])),
+    }))
+    return Buffer.from(JSON.stringify({ items }), 'utf8')
+  }
+
+  it.each(['csv', 'xlsx', 'json'] as const)('%s', async (format) => {
+    const file = await parseSupplierFile(await fileOf(format), `liste.${format}`)
+    const preview = normalizeSupplierRows(file, defaults)
+    const saved = normalizeSupplierRows(parseSupplierFileBlob(JSON.parse(JSON.stringify(file))), defaults)
+
+    expect(saved, 'kayıt önizlemeden farklı sınıflandırdı').toEqual(preview)
+    expect(preview.items.map((i) => i.supplierCode)).toEqual(['GEC-1'])
+
+    const errors = new Map(preview.errors.map((e) => [e.supplierCode, e]))
+    expect(errors.get('UZN-AD')?.messages).toEqual(['Ürün Adı: Ürün adı en fazla 300 karakter olabilir'])
+    expect(errors.get(longCode)?.messages).toEqual([
+      'Tedarikçi Kodu: Tedarikçi kodu en fazla 100 karakter olabilir',
+    ])
+    expect(errors.get('UZN-BRK')?.messages).toEqual(['Barkod: Barkod en fazla 64 karakter olabilir'])
+    expect(errors.get('UZN-MRK')?.messages).toEqual(['Marka: Marka en fazla 100 karakter olabilir'])
+    // Değer kesilmedi: hata satırı dosyadaki adın tamamını taşıyor.
+    expect(errors.get('UZN-AD')?.name).toBe(longName)
+
+    // Okunmayan sütun metaverisi sınırlı ve kullanıcıya sayısı söyleniyor.
+    expect(file.ignoredColumns).toHaveLength(SUPPLIER_IGNORED_COLUMN_LIMIT)
+    expect(file.ignoredColumnsOmitted).toBe(extra.length - SUPPLIER_IGNORED_COLUMN_LIMIT)
+    expect(file.ignoredColumns[0]).toHaveLength(SUPPLIER_HEADER_LIMIT)
+    expect(file.ignoredColumns[0]?.endsWith('…')).toBe(true)
+    for (const c of file.columns) expect(c.header.length).toBeLessThanOrEqual(SUPPLIER_HEADER_LIMIT)
   })
 })

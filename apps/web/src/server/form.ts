@@ -1,5 +1,6 @@
 import 'server-only'
 import { AppError, ERROR_CODES, type ErrorCode, errorText } from '@stok/shared'
+import { logUnexpected } from './safe-log'
 
 /**
  * ============================================================================
@@ -37,6 +38,8 @@ const HIDDEN_DETAIL_KEYS = new Set([
   'tenantId',
   'barcodeId',
   'jobId',
+  'supplierId',
+  'supplierItemId',
   'permission',
   'issues',
 ])
@@ -182,6 +185,21 @@ export function errorQuery(err: unknown): string {
     search.set('hata', 'SERVER_ERROR')
   }
   return search.toString()
+}
+
+/**
+ * `errorQuery`'nin beklenmeyen hatayı İÇERİĞİNİ DÖKMEDEN loglayan biçimi (T204).
+ *
+ * `errorQuery` beklenmeyen hatayı ham yazıyor: Drizzle mesajındaki sorgu
+ * parametreleri ve PostgreSQL'in "Failing row contains (…)" ayrıntısı loga
+ * gidiyor. Tedarikçi kaleminde o satır fiyat ve barkod taşıyor (INV-10).
+ * Tedarikçi eylemleri bunu kullanıyor; öteki sayfaların ham yolu T204'te.
+ */
+export function safeErrorQuery(scope: string, err: unknown): string {
+  rethrowControlFlow(err)
+  if (err instanceof AppError) return errorQuery(err)
+  logUnexpected(scope, err)
+  return new URLSearchParams({ hata: 'SERVER_ERROR' }).toString()
 }
 
 /** Sorgu parametrelerinden gösterilecek Türkçe metni üretir. */

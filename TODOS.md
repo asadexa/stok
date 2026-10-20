@@ -7,7 +7,7 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
 **Kurallar**
 
 - ID `T<n>`. Arşivdeki görevler numaralarını korur. Yeni görev en büyük
-  numaradan devam eder — **sıradaki boş numara: T208**. Numara yeniden
+  numaradan devam eder — **sıradaki boş numara: T211**. Numara yeniden
   kullanılmaz.
 - Biçim: `- [ ] **T<n> (P0–P3)** - <alan> - **Başlık**`. Altında kısa
   **Neden / Kanıt / Bağlı / Doğrula / Kaynak** satırları.
@@ -44,9 +44,11 @@ güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
   - Neden: tedarikçinin ürün, barkod, fiyat ve stok bilgisi bugün elle yeniden yazılıyor ya da
     hiç görünmüyor; aynı ürün için tedarikçiler karşılaştırılamıyor.
   - Ürün kararı: `PRD-14` (onaylı, uygulanmadı). Kabul kriterleri `docs/TEKNIK_SARTNAME.md` F-12.
-  - İlerleme (2026-10-19): PLAN onaylı (B1–B3, `PRD-15`, `DAT-19`, ADR-006). Dilim 1a (shared, db
-    migration 0012, core, testler) bitti, commit bekliyor. Kalan: 1b (ekranlar, eylemler, e2e),
-    sonra Dilim 2 (kod eşitliğinden öneri, genel karşılaştırma listesi).
+  - İlerleme (2026-10-20): PLAN onaylı (B1–B3, `PRD-15`, `DAT-19`, ADR-006). Dilim 1a (shared, db
+    migration 0012, core, testler) `9d4bc8c`, CI #83 yeşil. Dilim 1b (ekranlar, eylemler, ayar
+    düzenleme `PRD-16`, e2e) yerelde bitti; REVIEW'un iki engelleyicisi (B1 önizleme/kayıt uzunluk
+    uyumu, B2 uzun adda ürün arama) düzeltildi, commit bekliyor. Kalan: Dilim 2 (kod
+    eşitliğinden öneri, genel karşılaştırma listesi).
   - Yapılacak (V1): sağlayıcıdan bağımsız tedarikçi kalemi modeli; dosya kaynağı ve örnek API
     verisi; ürün ↔ tedarikçi eşleşmesi (bir ürüne birden çok tedarikçi); "Verileri Getir";
     son fiyat ve stok kaydı, fiyat geçmişi yalnız değişimde; tedarikçiler arası karşılaştırma.
@@ -233,10 +235,15 @@ güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
   - Kanıt: T200 1a'da `dogrula` sırasında fark filtresi kaldırılınca `suppliers.test.ts` hata
     çıktısında `params: [{"supplier_code":"A","barcode":"sup-P-1-U",…,"price":"9.0000",…}]`
     görüldü (2026-10-19). Ham hata loglayan yerler: `apps/web/src/app/(panel)/urunler/aktar/actions.ts:45`,
-    `hareket/phone-scan-actions.ts:35`, `server/export.ts:26`, `server/form.ts:181`, `server/http.ts:35`.
+    `hareket/phone-scan-actions.ts:35`, `server/export.ts:26`, `server/form.ts` (`errorQuery`), `server/http.ts:35`.
     Hangisinin fiyat taşıyan sorguya ulaştığı tek tek doğrulanmadı.
   - Yapılacak: beklenmeyen hatada yalnız SQLSTATE/constraint ve hata sınıfı loglanır
-    (`pgErrorCode`, `pgConstraint`). T200 1b'nin tedarikçi eylemleri bu kuralla yazılacak.
+    (`pgErrorCode`, `pgConstraint`).
+  - İlerleme (T200 1b, 2026-10-20): tedarikçi eylemleri bu kuralla yazıldı
+    (`server/safe-log.ts` `logUnexpected`, `server/form.ts` `safeErrorQuery`; `safe-log.test.ts`,
+    `dogrula` ile kırmızısı görüldü). PostgreSQL'in "Failing row contains (…)" ayrıntısı da satır
+    değerlerini taşıyor; testte o da var. Kalan ham yerler yukarıdakiler; `errorQuery` öteki
+    sayfaların formlarında hâlâ ham yazıyor.
   - Bağlı: S7, INV-10, T200.
   - Doğrula: kayıtta DB hatası üreten bir test, log yazıcısında fiyat ve barkod geçmediğini sınar.
   - Kaynak: T200 Dilim 1a, `dogrula`, 2026-10-19.
@@ -429,6 +436,49 @@ güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
 
 ## P3
 
+- [ ] **T209 (P3)** - web - **Başarısız kayıttan sonra hata, yeni önizlemede de görünüyor (tedarikçi sihirbazı)**
+  - Neden: `tedarikciler/[id]/refresh-wizard.tsx` hata metnini `sizeError ?? saved.error ??
+    state.error` ile seçiyor ve kayıt eyleminin durumu yeni önizlemede sıfırlanmıyor. Kayıt bir
+    kez hata verirse (oturum düşmesi, eşzamanlı değişiklik), kullanıcı yeni dosyayı başarıyla
+    önizlese de eski kayıt hatası önizlemenin üstünde kalıyor; dosyanın hâlâ hatalı olduğunu
+    sanabilir. Veri etkisi yok.
+  - Kanıt: kod okuması (T200 1b REVIEW, D1); tarayıcıda yeniden üretilmedi.
+  - Öneri: kayıt durumunu önizlemeye bağlamak (ör. kayıt formu, önizlemenin kimliğiyle
+    anahtarlanmış bir alt bileşende).
+  - Doğrula: e2e: kaydı hatayla bitir → yeni dosyayı önizle → eski hata görünmüyor.
+  - Kaynak: T200 Dilim 1b REVIEW, 2026-10-20.
+- [ ] **T210 (P3)** - web - **T200 1b ekranlarında ertelenen küçük kullanılabilirlik ve test boşlukları**
+  - Neden ve kanıt (REVIEW: kod okuması ve tarayıcı turu, 2026-10-20):
+    - Kalem tablosunun sayfalayıcısında çapa yok: sayfa değişince ekran en üste dönüyor, tablo
+      ise sayfanın en altında.
+    - "Bağlantıyı kaldır" sonrası bildirim "Kalem yok sayıldı" diyor. Davranış doğru (kalem
+      IGNORED olur, otomatik eşleşmeye dönmez); metin düğmenin adıyla örtüşmüyor.
+    - Ürün sayfasındaki "beyan edilirse … karşılaştırılır" cümlesi `PRD-16` gereği "sonraki
+      Verileri Getir'den sonra" demeli; boş durum metni elle bağlanan kalemleri anmıyor.
+    - Mobil tedarikçi listesinde "Eşleşme bekleyen" sütunu yatay kaydırmanın arkasında.
+    - Test boşlukları: ayar düzenleme (K1) ile "Yok say" / "Bağlantıyı kaldır" e2e'de sürülmüyor
+      (core testleri var); eylemdeki "dosya okunmadan önce" yetki kapısı core kapısından ayrı
+      kanıtlanmadı; çalışanın masaüstü ürün sayfası yerleşimi görsel olarak denenmedi.
+  - Doğrula: her madde için tarayıcı turu ya da e2e.
+  - Kaynak: T200 Dilim 1b REVIEW, 2026-10-20.
+- [ ] **T208 (P3)** - web - **Tam 4 MB'lık dosya istemci denetimini geçip Next'in gövde sınırına çarpıyor**
+  - Neden: `next.config.ts` `bodySizeLimit`'i dosya sınırıyla aynı (`MAX_UPLOAD_BYTES`, 4 MiB) ve
+    Next bu sınırı BÜTÜN isteğe uyguluyor. Çok parçalı form ek yükü (~0,9 KB) yüzünden 4 MiB'a
+    1 KB'tan yakın bir dosya istemcideki `size > maxUploadBytes` denetimini geçiyor, Next ise isteği
+    eyleme ulaşmadan reddediyor. Kullanıcı "Dosya çok büyük" yerine panelin genel hata ekranını
+    görüyor ("Bu ekran yüklenemedi … yalnızca okuma yapıyor"); sunucudaki Türkçe boyut mesajına
+    hiç ulaşılmıyor. Veri kaybı ya da sızıntı yok; pencere ~1 KB.
+  - Kanıt: 2026-10-20 tarayıcı ölçümü, tedarikçi sihirbazı: 4.192.256 B dosya → istek 4.193.191 B,
+    önizleme geldi; 4.194.304 B → istek 4.195.242 B, sunucu logu `Body exceeded 4194304 limit`,
+    yanıt 500, hata sınırı göründü; 4.194.305 B → istemci denetimi durdurdu, istek gitmedi.
+    Ürün içe aktarma (`urunler/aktar`) aynı sabiti ve aynı denetimi kullanıyor; orada tarayıcıda
+    denenmedi.
+  - Öneri: `bodySizeLimit = MAX_UPLOAD_BYTES + zarf payı` (ör. 64 KB; Vercel'in 4,5 MB sınırının
+    altında kalır). Böylece 4 MB'a kadar her dosya eyleme ulaşır, üstünü Türkçe kontrol karşılar.
+  - Bağlı: T118 (sınırın tek kaynağı, arşiv), T200.
+  - Doğrula: iki sayfada tam 4 MiB ve 4 MiB + 1 B dosyayla tarayıcı testi; genel hata ekranı
+    görülmemeli.
+  - Kaynak: T200 Dilim 1b ölçümü, 2026-10-20.
 - [ ] **T206 (P3)** - altyapı - **Repo kökünde izlenmeyen `~/` klasörü yerel `pnpm lint`'i düşürüyor**
   - Neden: kökte `~/.claude/skills/gstack` kopyası duruyor (git'te izlenmiyor, `.gitignore`'da yok).
     Biome onu da tarıyor: yerelde `pnpm lint` 1.072 dosyaya bakıp 97 hatayla düşüyor; CI temiz

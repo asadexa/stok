@@ -82,14 +82,21 @@ güncellenir. Yeni tehdit yeni ID alır; ID yeniden kullanılmaz.
   Ekran rolü yeniden yorumlamaz, cevabın şeklinden türetir.
 - **Tedarikçi fiyatı (T200):** alış fiyatı niteliğinde. `supplier:read` ve `supplier:manage`
   yalnız yönetici; çalışana alan gizlenmiş bir okuma da yok, her tedarikçi fonksiyonu 403 döner.
+  Ekranda menü bağlantısı ve `/tedarikciler` sayfaları yalnız yöneticiye; çalışan panele döner.
+  Ürün sayfası tedarikçi fiyatını yalnız `supplier:read` varsa sorgular, yoksa sayfanın HTML ve
+  RSC verisine hiç girmez. Ekran kapısı akışı düzenler; asıl koruma core'da. Tedarikçi
+  eylemlerinin beklenmeyen hata logu fiyat ve barkod taşımaz (`logUnexpected`, `safeErrorQuery`).
 - **Katman:** `packages/core/src/authz.ts`, `movements.ts`, `excel.ts`, `observability.ts`,
-  `suppliers.ts`.
+  `suppliers.ts`; `apps/web/src/server/safe-log.ts`, `server/form.ts`.
 - **Test:** `role-matrix.test.ts`, `prices.test.ts`, `observability.test.ts`, `suppliers.test.ts`
   (çalışan on fonksiyonun hepsinde FORBIDDEN; `dogrula` ile kanıtlı),
-  `e2e/demo-yolu.spec.ts`, `e2e/faz10-fiyat.spec.ts`.
+  `tedarikciler/[id]/actions.test.ts` (çalışan önizleyemez), `safe-log.test.ts` (`dogrula` ile
+  kanıtlı), `e2e/demo-yolu.spec.ts`, `e2e/faz10-fiyat.spec.ts`, `e2e/b2b-tedarikci.spec.ts`
+  (çalışanın sayfa içeriğinde tedarikçi fiyatı ve adı yok).
 - **Açık:** "alan yok = yetki yok, `null` = girilmemiş" sözleşmesi `/api/v1` yazılırken
   açıkça belgelenmeli (T53). Hata yolunda yöneticinin girdiği fiyatlar URL'de taşınıyor (T147).
-  Ham hata loglayan eylemler Drizzle'ın sorgu parametrelerini (fiyat, barkod) loga yazabilir (T204).
+  Öteki sayfaların ham hata loglayan eylemleri Drizzle'ın sorgu parametrelerini (fiyat, barkod)
+  loga yazabilir (T204).
 
 ### S8 — Girdi alanlarından enjeksiyon (barkod, not, arama)
 - **Koruma:** parametreli sorgular (Drizzle `sql` şablonu); zod uzunluk sınırları

@@ -7,11 +7,13 @@ import {
   formatQty,
 } from '@stok/shared'
 import {
+  actorCan,
   addBarcode,
   archiveBarcode,
   archiveProduct,
   getProductDetail,
   listLocations,
+  listProductOffers,
   restoreProduct,
   updateProduct,
 } from '@stok/core'
@@ -30,6 +32,7 @@ import {
   type FormParams,
 } from '@/server/form'
 import { currentActor } from '@/server/session'
+import { SupplierOffers } from './supplier-offers'
 
 /**
  * ============================================================================
@@ -79,6 +82,11 @@ export default async function ProductPage({
   const canEdit = actor.role === 'ADMIN'
   const locations = canEdit ? await listLocations(actor, { db }) : []
   const activeBarcodes = product.barcodes.filter((b) => b.archivedAt === null)
+  // Tedarikçi fiyatı alış fiyatı niteliğinde (INV-10, T200): çalışan için
+  // sorgu HİÇ çalışmıyor. Çalışsaydı core 403 fırlatır ve sayfa çökerdi.
+  const offers = actorCan(actor, 'supplier:read')
+    ? await listProductOffers(actor, product.productId, { db })
+    : null
 
   // -------------------------------------------------------------------------
   // Sunucu eylemleri. Yetki kontrolü servislerde; buradaki `canEdit` sadece
@@ -222,6 +230,12 @@ export default async function ProductPage({
         />
       </section>
 
+      {/* Masaüstünde iki sütun: solda var olan formlar (max-w-2xl), sağda
+          yöneticiye tedarikçi fiyatları (T200 1b). Mobilde tek sütun; sıra
+          formlar → barkodlar → tedarikçi fiyatları → arşiv. Sağ sütun yoksa
+          (çalışan) yerleşim eskisiyle aynı. */}
+      <div className="lg:grid lg:grid-cols-[minmax(0,42rem)_minmax(18rem,1fr)] lg:items-start lg:gap-x-6">
+      <div>
       {canEdit ? (
         <form
           action={saveDetails}
@@ -366,6 +380,9 @@ export default async function ProductPage({
           </form>
         ) : null}
       </section>
+      </div>
+
+      {offers ? <SupplierOffers offers={offers} unit={product.unit as Unit} /> : null}
 
       {canEdit ? (
         <form action={toggleArchive} className="max-w-2xl">
@@ -380,6 +397,7 @@ export default async function ProductPage({
           </p>
         </form>
       ) : null}
+      </div>
     </>
   )
 }

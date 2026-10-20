@@ -4,7 +4,7 @@ Yalnız BUGÜNÜN gerçeği. Her merge'te ya da durum değiştiğinde güncellen
 satırlar silinir (tarihçe git'te). Ayrıntı yazılmaz: işler → `TODOS.md`,
 kararlar → `DECISIONS.md`, model → `PROJECT_BRAIN.md`.
 
-**Tarih:** 2026-10-19 · **Çalışma branch'i:** `development` · **Stabil referans:** `master`
+**Tarih:** 2026-10-20 · **Çalışma branch'i:** `development` · **Stabil referans:** `master`
 (`master` = `dac05ff`, devralma öncesi son kod; geliştirme `development`'ta yapılır)
 
 ## Deploy
@@ -42,14 +42,30 @@ koruması çalışıyor, "Bağlantıyı kes" telefon oturumunu kapatıyor. Andro
 denenmedi. Yerelde ayrıca Edge + sahte kamera aygıtı + sentetik EAN-13 ile
 uçtan uca geçti (kamera yolu CI'da yok: T169).
 
-T196 düzeltmesi (2026-10-16, yerel): lint 209 dosya 0 tanı, typecheck (4 paket), test **1096/1096**
-(shared 69, db 309, core 550, web 168; Docker'lı `db-reset`, `db-reset-target` ve `backup`
-testleri geçici compose projeleriyle), drift "No schema changes", `next build` PASS.
-Playwright WS-1.1'den beri koşulmadı (arayüz değişmedi; e2e demo veritabanına yazıyor, T150);
-son e2e sonucu yukarıdaki 24/24.
+T200 1b kapıları (2026-10-20, yerel; saat T122 penceresinde olduğu için `TZ=UTC`): lint (proje
+klasörleri; kökteki `~/` yüzünden, T206) 228 dosya 0 tanı, typecheck (4 paket), test **1211/1212**
+(shared 82, db 325, core 622/623, web 182; tek kırmızı T207: `invariant.test.ts` 30 sn sınırını
+aşıyor, tek başına 31,8 sn'de geçiyor), drift "No schema changes", `next build` PASS, Playwright
+**28/28** (24 + 4 tedarikçi). REVIEW B1 (önizleme/kayıt uzunluk uyumu) ve B2 (uzun adda ürün
+arama) düzeltmeleri dahil. Yerel geliştirme veritabanına 0012 uygulandı (öncesi/sonrası stok
+parmak izi aynı). E2E ve ölçüm demo kiracısına tedarikçi yazdı (T150); ölçümün 2 tedarikçisinde
+5.000'er eşleşmemiş kalem var.
 
-GitHub CI: son koşu #82 (`93b38f6`, 2026-10-18) yeşil (GitHub API'den okundu, iş ayrıntısı
-görülmedi). Önceki ayrıntılı kayıt: `development` `8a96c74` (T196) koşu #75 yeşil; üç iş de geçti, demo işindeki "Yedek ve
+Tedarikçi dosyası, 5.000 satır (T200 1b, 2026-10-20). Tipik satır (kod 10, ad 60 karakter): xlsx
+208 KB, kayıtta geri gönderilen blob 1,11 MB. Uzun satır (kod 100, ad 300, marka 100; doğrulama
+sınırları): xlsx 213 KB, blob 3,63 MB. Core (`stok_test_core`, tipik/uzun): önizleme 0,83/0,91 sn,
+ilk kayıt 0,76/0,87 sn, değişmeyen kayıt 0,59/0,78 sn, 5.000 fiyatı değişen kayıt 1,05/1,20 sn.
+Tarayıcı (yerel `next start`, tıklamadan sonuca): önizleme 1,5/2,0–2,3 sn, kayıt 1,6/2,1–2,3 sn.
+Gerçek istek: önizleme = dosya + ~0,5–0,9 KB; kayıt = blob + ~0,5 KB (uzun: 3.626.825 B, 4 MiB
+sınırından geçti). Önizleme yanıtı blob'u tarayıcıya taşıyor (uzun: 3,63 MB). Blob'u
+`SUPPLIER_SAVE_BLOB_LIMIT`'i (3.670.016 B) aşan dosyada (3,71 MB) kayıt düğmesi kapalı, uyarı
+görünüyor. 4 MiB − 2 KB dosya eyleme ulaştı; tam 4 MiB dosya istemci denetimini geçip Next'in
+gövde sınırına çarptı (500, genel hata ekranı; T208); 4 MiB + 1 B istemcide durdu.
+
+GitHub CI: son koşu #83 (`9d4bc8c`, T200 1a, 2026-10-19) yeşil; üç iş de adım adım geçti (Linux
+test işinde drift ve testler, demo işinde 0012'nin temiz veritabanına kurulumu ve Playwright
+duman testi, Windows'ta temiz checkout'ta lint). Öncesinde #82 (`93b38f6`) yeşil. Önceki
+ayrıntılı kayıt: `development` `8a96c74` (T196) koşu #75 yeşil; üç iş de geçti, demo işindeki "Yedek ve
 durum" adımı artık başarı satırlarını da arıyor (test sayıları herkese açık API'de görünmüyor).
 Öncesinde `1e47741` (WS-1.3a test düzeltmesi) koşu #73 yeşil; üç iş de geçti
 (typecheck + test, Windows lint + typecheck + derleme, demo yolu). Test işinin günlüğünde
@@ -72,7 +88,8 @@ fiyat defteri · hareket logu · ürün/barkod yönetimi · Excel/CSV ürün akt
 Excel export · kullanıcı yönetimi · ayarlar · kategoriler · raporlar · sistem
 sağlığı · Ctrl+K · bildirim zili. RLS çok kiracılı veri katmanı, append-only
 defter, kaba kuvvet kilidi, elle tetiklenen `/api/cron`, `/api/v1/health`,
-`pnpm demo` (Windows/macOS/Linux). Pilot, varsayılan kapalı: telefon kamerasıyla
+`pnpm demo` (Windows/macOS/Linux). Tedarikçi fiyat ve stok verisi, yalnız yönetici (F-12;
+1b ekranları commit bekliyor). Pilot, varsayılan kapalı: telefon kamerasıyla
 okutup `/hareket`te açma (`ENABLE_PHONE_SCANNER`, `PRD-12`, `ARC-14`).
 
 ## Kısmi / bozuk
@@ -142,8 +159,8 @@ geçici kapsayıcıda izole inceleme, yalnız tanınan kümede silme. Geliştirm
 
 **Yol haritasının üstü** (ekip kararı, 2026-10-17), bu sırayla:
 1. **T200 B2B V1 PLAN** (`PRD-14`): ✓ kullanıcı onaylı (2026-10-19; `PRD-15`, `DAT-19`, ADR-006).
-2. **T200 ilk BUILD dilimi**: 1a çekirdek (shared, db migration 0012, core, testler) yerelde bitti,
-   commit bekliyor; arayüz yok. 1b ekranlar ve e2e sırada. Ayrıntı F-12.
+2. **T200 ilk BUILD dilimi**: 1a çekirdek `9d4bc8c` (CI #83 yeşil). 1b (ekranlar, eylemler, ayar
+   düzenleme `PRD-16`, e2e) yerelde bitti; REVIEW ve commit bekliyor. Sonra Dilim 2. Ayrıntı F-12.
 3. **HTTPS test ortamı** (T144, `OPS-12`): yakın adım, B2B'yi geciktirmez. Barındırma `OPS-01`
    (Open); üretim ayrı iş (T42).
 4. **T201 harici API kaynağı**: V1'in devamı. Gerçek sağlayıcı seçilmeden genel entegrasyon
