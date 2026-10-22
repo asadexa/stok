@@ -47,7 +47,7 @@ Katman kuralları `PROJECT_BRAIN` §5, ilkeler §12. Kayıtlarda yalnız özelli
 | F-10 | Telefonla barkod okutma köprüsü (pilot) | Uygulandı (pilot, varsayılan kapalı) |
 | F-11 | Yerel yedek ve güvenli veritabanı sıfırlama | Uygulandı |
 | F-14 | Windows tek tıkla başlatma (`BASLAT.bat`) | Uygulandı |
-| F-12 | B2B tedarikçi verisi V1 | **Geliştiriliyor** (1a ve 1b bitti, Dilim 2 sırada) |
+| F-12 | B2B tedarikçi verisi V1 | **Geliştiriliyor** (Dilim 1 bitti, UAT kabul 2026-10-22; Dilim 2 T201'den sonra) |
 | F-13 | İnternetten erişilebilir test ortamı | **Planlandı** |
 
 ---
@@ -186,7 +186,7 @@ Katman kuralları `PROJECT_BRAIN` §5, ilkeler §12. Kayıtlarda yalnız özelli
 
 ## Planlanan özellikler
 
-### F-12 — B2B tedarikçi verisi V1 (Geliştiriliyor: 1a ve 1b bitti, Dilim 2 sırada)
+### F-12 — B2B tedarikçi verisi V1 (Geliştiriliyor: Dilim 1 bitti ve kabul edildi, Dilim 2 bekliyor)
 - **İhtiyaç:** tedarikçilerin ürün, fiyat ve stok bilgisini elle yeniden yazmadan görmek;
   aynı ürün için tedarikçileri güncel fiyat ve stokla karşılaştırmak.
 - **Onaylı ürün kararları:** `PRD-14`, `PRD-15`. Özetle: bir ürün birden çok tedarikçiye
@@ -220,6 +220,9 @@ Katman kuralları `PROJECT_BRAIN` §5, ilkeler §12. Kayıtlarda yalnız özelli
     yön ve yüzde yok). Kural veritabanında, üretilen sütunla (ADR-006).
   - Karşılaştırma grubu: para birimi + KDV + fiyat türü + bilinen miktar; "en düşük" yalnız
     birden çok teklifli grupta. Belirsiz miktar ayrı ve sırasız.
+  - Göstergelerin zaman sınırı yok: "En düşük fiyat" teklif grubun en ucuzu olduğu sürece görünür;
+    artış/azalış rozeti kalemin son değişimini gösterir ve sonraki değişimde güncellenir (kullanıcı
+    onayı, UAT 2026-10-22). Ürün sayfasında son değişimin tarihi yok (T215).
   - Tedarikçi ayarlarını düzenlemek yalnız sonraki yenilemeleri etkiler; kalemler ve fiyat
     geçmişi geriye dönük değişmez (`PRD-16`).
   - Önizlenen dosya kayıtta tarayıcıdan geri gönderiliyor. Çözümlenmiş hâli
@@ -254,15 +257,23 @@ Katman kuralları `PROJECT_BRAIN` §5, ilkeler §12. Kayıtlarda yalnız özelli
     blob, çalışan reddi), `safe-log.test.ts`, `e2e/b2b-tedarikci.spec.ts` (yönetici akışı;
     çalışanın menüsünde, adresinde ve ürün sayfasının HTML'inde tedarikçi fiyatı yok; 390 px'te
     yatay kayma yok).
+  - Kullanıcı kabul testi (Dilim 1, 2026-10-20…22, yerel demo kiracısı, kullanıcı elle + salt okunur
+    DB doğrulaması): 10/10 senaryo geçti, kanıtlanmış yeni teknik hata yok; Dilim 1 kabul edildi.
+    Yukarıdaki kriterler elle sınandı; kiracı izolasyonunda başka kiracının tedarikçi adresi 404, boş
+    liste veri katmanında (`stok_app` + RLS) doğrulandı. UAT'de elle denenmeyenler: JSON kaynağı,
+    `PRD-16` koşul değişimi, 390 px mobil; kanıtları yukarıdaki otomatik testler. Özet `CURRENT_STATE`.
 - **Sınırlar:** tedarikçi arşivleme ve silme yok. Fiyat geçmişinin saklama süresi kararsız.
   Noktalı ama virgülsüz sayı ("1.234") ondalık okunur (F-02 ile aynı `parseTurkishNumber`;
   T205). Önizleme yanıtı ve kayıt isteği blob kadar veri taşıyor (5.000 uzun satırda ~3,6 MB).
   Tam 4 MB'lık dosya genel hata ekranına düşüyor (T208).
 - **Açık sorular:** ilk gerçek sağlayıcı (seçilmedi); tedarikçi kataloğundan işletmeye yeni ürün
   açılıp açılmayacağı (V1'de yok); fiyat geçmişinin saklama süresi.
-- **İşler ve sıra:** T200 Dilim 1a (çekirdek, `9d4bc8c`) ve 1b (ekranlar, eylemler, e2e) bitti;
-  sonra Dilim 2 (kod eşitliğinden eşleşme önerisi, genel karşılaştırma listesi). T201 (harici API kaynağı, gizli bilgi) V1'in devamı; gerçek sağlayıcı
-  seçilmeden genel entegrasyon iddia edilmez. Sonraki sürüm T202 (B2B sipariş), T203 (otomatik
+- **İşler ve sıra:** T200 Dilim 1a (çekirdek, `9d4bc8c`) ve 1b (ekranlar, eylemler, e2e,
+  `667512a`) bitti, UAT'de kabul edildi (2026-10-22). Sıra (kullanıcı kararı 2026-10-22): T171,
+  sonra T201 (gerçek tedarikçi API'si, gizli bilgi; gerçek sağlayıcı seçilmeden genel entegrasyon
+  iddia edilmez), sonra Dilim 2 (kod eşitliğinden kullanıcı onaylı eşleşme önerisi, genel
+  karşılaştırma listesi, tedarikçi dosyası şablonu indirmenin kapsam değerlendirmesi). UX
+  iyileştirmeleri: T210, T212–T215. Sonraki sürüm T202 (B2B sipariş), T203 (otomatik
   periyodik senkron). T53 (bizim sunduğumuz REST) ayrı iştir.
 
 ### F-13 — İnternetten erişilebilir test ortamı (Planlandı)

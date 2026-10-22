@@ -7,7 +7,7 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
 **Kurallar**
 
 - ID `T<n>`. Arşivdeki görevler numaralarını korur. Yeni görev en büyük
-  numaradan devam eder — **sıradaki boş numara: T211**. Numara yeniden
+  numaradan devam eder — **sıradaki boş numara: T216**. Numara yeniden
   kullanılmaz.
 - Biçim: `- [ ] **T<n> (P0–P3)** - <alan> - **Başlık**`. Altında kısa
   **Neden / Kanıt / Bağlı / Doğrula / Kaynak** satırları.
@@ -35,26 +35,63 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
 
 ## P1
 
-Yol haritasının üstü (ekip kararı 2026-10-17), bu sırayla: (1) T200 PLAN: Plan Mode,
-CEO/Product ve Engineering Review; (2) T200'ün ilk BUILD dilimi; (3) HTTPS test ortamı (T144;
-üretim T42 ayrı), B2B'yi geciktirmeden yakın adım; (4) T201, V1'in devamı. Diğer P1 işler ve
+Yol haritasının üstü (kullanıcı kararı 2026-10-22; 2026-10-17 sırasının yerine), bu sırayla:
+(1) T171, toplu ürün aktarımını 20.000 satıra ölçeklendirme (önce PLAN; mimari kararlaştırılmadı);
+(2) T201, gerçek tedarikçi API entegrasyonu; (3) T200 Dilim 2; (4) UX iyileştirmeleri uygun ürün
+dilimlerinde (T212–T215, T210, T211), tek bir yeniden tasarım olarak değil. T200 PLAN ve Dilim 1
+tamam; Dilim 1 kullanıcı kabul testinde kabul edildi (2026-10-22). HTTPS test ortamı (T144; üretim
+T42 ayrı) ayrı operasyon hattında yürüyor; bu ürün sırası onu değiştirmez. Sıra ürün önceliğidir:
+kritik veri bütünlüğü ve güvenlik işlerini ertelemenin gerekçesi değildir. Diğer P1 işler ve
 güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
 
+- [ ] **T171 (P1)** - import - **Büyük içe aktarma tek istekte uzun sürüyor (2.000 satır devirli 47 sn); kullanıcı hedefi 20.000 satır**
+  - Neden: satırlar tek tek, her devir kendi `createMovement` transaction'ında yazılıyor
+    (bilinçli: tek yazma kapısı ve satır bazlı hata). Yerel `next start`'ta sorun değil;
+    Vercel'de sunucu eylemi fonksiyon süre sınırına takılabilir, kullanıcı yarım
+    aktarım görür (tekrar çalıştırma eksik devirleri tamamlıyor, ikinci kez yazmıyor).
+  - Kanıt: WS-B ölçümü 2026-10-10, ayrı test veritabanı: devirsiz ilk koşu 23,5 sn,
+    devirli ilk koşu 47,1 sn, tekrar 32,5 sn; önizleme 125–305 ms.
+  - Kullanıcı talebi (T200 UAT, 2026-10-21): `Stok → Toplu aktarma` 20.000 satıra kadar dosya
+    almalı. Bugün sınır `IMPORT_ROW_LIMIT = 2_000` (`packages/core/src/import.ts:61`; ekran metni
+    `urunler/aktar/page.tsx:56` aynı sabitten). Amaç: büyük işletmelerin dosyalarının güvenilir
+    işlenmesi; 20.000 satır ürün gereksinimi, uygulanacak mimari henüz kararlaştırılmadı.
+  - Sıra: yol haritasının ilk işi (kullanıcı kararı 2026-10-22; önceki P2). Önce PLAN.
+  - YAPILMAYACAK: yalnız `IMPORT_ROW_LIMIT`'i 20.000'e çıkarmak. Doğrusal tahminle (ölçülmedi)
+    devirli 20.000 satır tek istekte ~8 dk sürer; süre sınırına takılan istek yarım aktarım bırakır.
+  - PLAN'da değerlendirilecek: dosya boyutu (`MAX_UPLOAD_BYTES` 4 MiB, Vercel 4,5 MB gövde
+    sınırı; T208, arşiv T118); önizleme süresi ve bellek; işlem süresi; parçalama ya da iş kuyruğu
+    (emsal: dışa aktarmada `planExport` inline/queued + `enqueueJob`, `exports.ts:292-315`,
+    `jobs.ts:115`; T138'deki cron turu sınırı); büyük dosyada satır bazlı hatalar ve raporu (T172);
+    idempotency (`DAT-18`: devir anahtarı UUID v5, tekrar koşu eksik devirleri tamamlar); kiracı
+    izolasyonu (INV-4); stok defteri bütünlüğü (her devir `createMovement` tek kapısından,
+    INV-1/2/3); CSV sayı biçimi riski (T205).
+  - Bağlı: T42, T138 (aynı sınıf: uzun iş tek istekte), T205, T208, T172, `OPS-01`, `DAT-18`.
+  - Doğrula: üretim platformunda 2.000 satırlık devirli dosya; gerekirse iş kuyruğuna
+    alma ya da parçalama (tek kapıdan geçme kuralı korunarak). 20.000 satır hedefi için: süre,
+    bellek ve istek boyutu ölçümü; yarıda kesilen aktarımın tekrarında mükerrer devir yok;
+    defter = projeksiyon (invariant testi).
 - [ ] **T200 (P1)** - entegrasyon - **B2B V1: tedarikçi ürün, fiyat ve stok verisini çekme ve karşılaştırma**
   - Neden: tedarikçinin ürün, barkod, fiyat ve stok bilgisi bugün elle yeniden yazılıyor ya da
     hiç görünmüyor; aynı ürün için tedarikçiler karşılaştırılamıyor.
-  - Ürün kararı: `PRD-14` (onaylı; ilk dilimde uygulandı, Dilim 2 kalan). Kabul kriterleri
+  - Ürün kararı: `PRD-14` (onaylı; Dilim 1'de uygulandı, Dilim 2 kalan). Kabul kriterleri
     `docs/TEKNIK_SARTNAME.md` F-12.
-  - İlerleme (2026-10-20): PLAN onaylı (B1–B3, `PRD-15`, `DAT-19`, ADR-006). İlk uçtan uca dilim
-    tamam: Dilim 1a (shared, db migration 0012, core, testler) `9d4bc8c`, CI #83 yeşil; Dilim 1b
-    (ekranlar, eylemler, ayar düzenleme `PRD-16`, e2e; REVIEW'un B1 ve B2 düzeltmeleri dahil)
-    `667512a`, CI #84 yeşil. Kullanıcı kabul testi bekliyor. Kalan: Dilim 2 (kod eşitliğinden
-    öneri, genel karşılaştırma listesi); T200 bu yüzden açık.
+  - İlerleme (2026-10-22): PLAN onaylı (B1–B3, `PRD-15`, `DAT-19`, ADR-006). Dilim 1 tamam ve
+    kullanıcı kabul testinde **kabul edildi** (2026-10-22): Dilim 1a (shared, db migration 0012,
+    core, testler) `9d4bc8c`, CI #83 yeşil; Dilim 1b (ekranlar, eylemler, ayar düzenleme `PRD-16`,
+    e2e; REVIEW'un B1 ve B2 düzeltmeleri dahil) `667512a`, CI #84 yeşil. UAT özeti `CURRENT_STATE`.
+    T200 açık: Dilim 2 kalan.
+  - Kalan (Dilim 2): genel tedarikçi fiyat karşılaştırma ekranı; kod eşitliğinden kullanıcı onaylı
+    eşleşme önerisi (otomatik eşleşme yalnız barkodla kalır, `PRD-15`); tedarikçi dosyası için örnek
+    CSV/XLSX şablon indirmenin kapsam değerlendirmesi (UAT isteği 2026-10-21; emsal ürün aktarmada
+    "Örnek şablonu indir", `urunler/aktar/page.tsx:58`).
+  - UAT bulguları (2026-10-20…22): yeni görev T212–T215; T210 genişletildi; mevcut işlere bağlananlar
+    T171 (20.000 satır), T201 (API bağlantısı), T211 (barkodla stok araması). "En düşük fiyat" ve
+    artış/azalış göstergelerinin zaman sınırı yok; bu davranış korunur (F-12), iş açılmadı.
   - Yapılacak (V1): sağlayıcıdan bağımsız tedarikçi kalemi modeli; dosya kaynağı ve örnek API
     verisi; ürün ↔ tedarikçi eşleşmesi (bir ürüne birden çok tedarikçi); "Verileri Getir";
     son fiyat ve stok kaydı, fiyat geçmişi yalnız değişimde; tedarikçiler arası karşılaştırma.
-  - Sıra: önce PLAN (Plan Mode, CEO/Product ve Engineering Review, kullanıcı onayı). İlk çalışan
-    BUILD dilimi: tedarikçi, ürün eşleşmesi, fiyat değişimi ve karşılaştırma.
+  - Sıra: PLAN ve Dilim 1 tamam. Dilim 2, T171 ve T201'den sonra (kullanıcı kararı 2026-10-22);
+    Dilim 2 iptal edilmedi, önceliği değişti.
   - Sınırlar: tedarikçi verisi ürün kartının alış/satış fiyatını ve `current_stock`'u
     değiştirmez, hareket üretmez (INV-3). Tedarikçi stoğu "Açılış Stoğu"na (`openingQty`)
     asla eşlenmez: o sütun devir hareketi yazar (`DAT-18`). Farklı para birimi, vergi ya da
@@ -94,15 +131,23 @@ güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
   - Neden: V1 örnek API verisiyle doğrulanacak, gerçek API sağlayıcı seçilince bağlanacak. Her
     sağlayıcı için ayrı ve denetimsiz çekme kodu yazılırsa gizli bilgi, hata ve mükerrer
     kayıt sorunları her seferinde yeniden açılır.
-  - Sıra: B2B V1'in devamı, T200'ün ilk dilimi sonrası. Gerçek sağlayıcı belirlenmeden
-    "her sağlayıcıyla çalışır" iddiası yok: sözleşme örnek veriyle sınanır, gerçek uyum
-    sağlayıcı seçilince kanıtlanır.
+  - Sıra: T171'den sonraki ana iş, T200 Dilim 2'nin önünde (kullanıcı kararı 2026-10-22). İlk
+    hedef: erişimi sağlanabilen gerçek bir tedarikçiyle uçtan uca çalışan entegrasyon. Gerçek
+    sağlayıcı belirlenmeden "her sağlayıcıyla çalışır" iddiası yok: sözleşme örnek veriyle
+    sınanır, gerçek uyum sağlayıcı seçilince kanıtlanır.
+  - Kapsam beklentisi (kullanıcı, 2026-10-22): güvenli bağlantı; kimlik doğrulama ve gizli
+    anahtarın korunması; tedarikçi ürün kodu ve barkodla eşleştirme (`PRD-15` kuralları); fiyat ve
+    tedarikçi stoğu; elle yenileme ("Verileri Getir") ve anlaşılır hata; mevcut veri modeli ve fiyat
+    geçmişi kuralları (`DAT-19`, ADR-006); ileride birden çok tedarikçiye açık, sağlayıcıdan bağımsız
+    yapı. Sağlayıcı, kimlik doğrulama yöntemi ve teknik yaklaşım PLAN'da kanıtla seçilir.
   - Yapılacak: sağlayıcı bağdaştırıcısının sözleşmesi (çıktısı T200'ün tedarikçi kalemi);
     kimlik doğrulama; gizli bilginin kiracı bazında korunması (log, URL ve hata metnine
     gitmez: `PROJECT_BRAIN` §12.7); hata yönetimi (sessiz başarısızlık yok, §12.5); tekrarlı
     ve idempotent çekme (sayfalama, oran sınırı, yeniden deneme).
-  - Sınırlar: hiçbir zaman stok hareketi üretmez. Ayrı API sunucusu ya da dış servis
-    varsayılmaz (§14: monolit). Yeni kütüphane ya da gizli bilgi deposu seçimi onay ister.
+  - Sınırlar: hiçbir zaman stok hareketi üretmez; fiziksel stoğu (`current_stock`) ve ürün kartının
+    alış/satış fiyatını otomatik değiştirmez (`PRD-14`). Kiracı izolasyonu (INV-4) ve satın alma
+    fiyatı yetkisi (INV-10) korunur. Ayrı API sunucusu ya da dış servis varsayılmaz (§14: monolit).
+    Yeni kütüphane ya da gizli bilgi deposu seçimi onay ister.
   - Açık sorular: kimlik doğrulama biçimleri; gizli bilginin nerede ve nasıl saklanacağı
     (şifreleme, anahtar yönetimi, döndürme); barındırmanın dış ağ çağrısına etkisi (`OPS-01`);
     kişisel veri gelirse KVKK (T164); yeni tehditler için `SECURITY_MODEL`'e S satırı.
@@ -296,17 +341,6 @@ güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
     (`seed.ts` `schemaShadowed`) burada da uygulanır.
   - Kaynak: T187 uygulaması, 2026-10-13.
 
-- [ ] **T171 (P2)** - import - **Büyük içe aktarma tek istekte uzun sürüyor (2.000 satır devirli 47 sn)**
-  - Neden: satırlar tek tek, her devir kendi `createMovement` transaction'ında yazılıyor
-    (bilinçli: tek yazma kapısı ve satır bazlı hata). Yerel `next start`'ta sorun değil;
-    Vercel'de sunucu eylemi fonksiyon süre sınırına takılabilir, kullanıcı yarım
-    aktarım görür (tekrar çalıştırma eksik devirleri tamamlıyor, ikinci kez yazmıyor).
-  - Kanıt: WS-B ölçümü 2026-10-10, ayrı test veritabanı: devirsiz ilk koşu 23,5 sn,
-    devirli ilk koşu 47,1 sn, tekrar 32,5 sn; önizleme 125–305 ms.
-  - Bağlı: T42, T138 (aynı sınıf: uzun iş tek istekte), `OPS-01`.
-  - Doğrula: üretim platformunda 2.000 satırlık devirli dosya; gerekirse iş kuyruğuna
-    alma ya da parçalama (tek kapıdan geçme kuralı korunarak).
-
 - [ ] **T132 (P2)** - defter - **`current_stock` uygulama rolünce yazılabilir**
   - Neden: `stok_app`'ten yalnız DELETE geri alınmış; INSERT/UPDATE serbest (trigger
     çağıranın yetkisiyle çalışıyor). Tek yazma kapısı (`DAT-02`) bir konvansiyon;
@@ -434,6 +468,35 @@ güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
   - Doğrula: ölçüm (`netstat`, başka cihazdan `:3000`), sonra karar (`-H 127.0.0.1` ya da
     bilinçli yerel ağ erişimi + HTTPS).
   - Kaynak: WS-1 Engineering Review A-3, 2026-10-13.
+- [ ] **T211 (P2)** - core - **Stok listesi araması ürün barkodunu kapsamıyor; yalnız ad ve SKU**
+  - Neden: `/stok`'ta barkodu (ör. `86910000150`) yazıp Filtrele'ye basan kullanıcı "ürün
+    bulunamadı" görüyor; aynı ürün SKU ile (`YIL-0016`) bulunuyor. Etiketten ya da okuyucuyla
+    barkod girerek stok arayan kişi ürünün kayıtlı olmadığını sanar, mükerrer ürün açabilir.
+  - Kanıt: T200 UAT Senaryo 2, kullanıcı gözlemi (2026-10-20, yerel `next dev`, Yılmaz demo
+    kiracısı). Kod: `packages/core/src/stock.ts:76-83` (`whereClause`: yalnız `name_norm` ve `sku`
+    üzerinde `LIKE`; `product_barcodes` yok; yorum okutulanın "çoğu zaman kod" olduğunu varsayıyor).
+    Ctrl+K paleti (`searchAll`, `stock.ts:268-288`) barkodu ayrı yoldan tam eşleşmeyle buluyor;
+    `/stok` o yolu kullanmıyor.
+  - Yapılacak: `listStock` aramasına ürünün aktif barkodları. Barkodda tam mı parça eşleşme mi:
+    BUILD planında (palet tam eşleşme kullanıyor, gerekçe `stock.ts:264-266`).
+  - Kabul: ad, SKU ve aktif barkodla arama; arşivlenmiş barkod eşleşmez, arşivli ürün yalnız
+    "arşiv" süzgeciyle gelir; başka kiracının barkodu eşleşmez (INV-4, `tenant_id` + RLS); birden
+    çok barkodu eşleşen ürün TEK satır (JOIN değil EXISTS), toplam ve sayfalama doğru; aynı arama ve
+    süzgeç koşullarında stok listesinin eşleşen ürün kümesi ile Excel dışa aktarmasının ürün kümesi
+    tutarlı, sayfalama ve yetki kuralları korunur; regresyon testleri gerçek PostgreSQL'de.
+  - Etki: stok listesi araması `stock.ts` → `whereClause` / `listStock`; `listStock`'u `/stok`,
+    panelin kritik listesi, `getProduct` (`stock.ts:687`; yalnız `productId`, arama yok) ve
+    `searchAll` (Ctrl+K `/api/arama`, tedarikçi bağlama paneli) çağırıyor. Excel dışa aktarma
+    araması `exports.ts:113-125` → `exportStock`: aynı koşulun KOPYASI, `listStock`'u çağırmıyor
+    (stok sayfasındaki Excel düğmesi, raporlar, `/api/rapor/stok`); yalnız `whereClause` değişirse
+    liste ile Excel ayrışır. Palette barkod isabeti ürün listesinde ikinci kez görünebilir; kararı
+    BUILD'de. (Graphify `affected` + grep, 2026-10-21.)
+  - Bağlı: F-07, T200 (UAT'de bulundu). Arşiv: T19 (stok tablosu araması), T85/T86 (birleşik
+    arama, Ctrl+K).
+  - Doğrula: core testi: adla, SKU ile, barkodla arama; arşivlenmiş barkod; iki barkodlu ürün tek
+    satır; başka kiracının barkodu; aynı aramayla `exportStock` aynı ürün kümesini verir
+    (`exports.test.ts`). Tarayıcıda `/stok?ara=86910000150` Mavi Klasör'ü gösterir.
+  - Kaynak: T200 UAT Senaryo 2, 2026-10-20.
 
 ## P3
 
@@ -459,9 +522,64 @@ güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
     - Mobil tedarikçi listesinde "Eşleşme bekleyen" sütunu yatay kaydırmanın arkasında.
     - Test boşlukları: ayar düzenleme (K1) ile "Yok say" / "Bağlantıyı kaldır" e2e'de sürülmüyor
       (core testleri var); eylemdeki "dosya okunmadan önce" yetki kapısı core kapısından ayrı
-      kanıtlanmadı; çalışanın masaüstü ürün sayfası yerleşimi görsel olarak denenmedi.
+      kanıtlanmadı; çalışanın masaüstü ürün sayfası yerleşimi görsel olarak denenmedi. UAT'de elle
+      denendi (2026-10-21/22): "Yok say" (S6.2), çalışanın ürün sayfasında tedarikçi bölümünün
+      olmaması (S10.1); e2e boşluğu duruyor.
+  - UAT ekleri (kullanıcı, 2026-10-21):
+    - UX-4: önizlemedeki "Eşleşme bekleyen: 2" kaydedilirse oluşacak durumu, alttaki "Eşleşme
+      bekleyenler (0)" kayıtlı durumu gösteriyor; iki yer aynı sözcüğü kullanıyor, farkı yazmıyor
+      (`refresh-wizard.tsx:200`, `[id]/page.tsx:297`).
+    - UX-5: sıfır fiyatlı satırın hatası "Fiyat: Fiyat sıfırdan büyük olmalı"; alan etiketi zod
+      mesajının önüne ekleniyor (`supplier-feed.ts:564-566`), mesaj zaten "Fiyat" ile başlıyor
+      (`schemas.ts:374`). Davranış doğru, yalnız metin.
   - Doğrula: her madde için tarayıcı turu ya da e2e.
-  - Kaynak: T200 Dilim 1b REVIEW, 2026-10-20.
+  - Kaynak: T200 Dilim 1b REVIEW, 2026-10-20; UAT ekleri T200 UAT, 2026-10-21.
+- [ ] **T212 (P3)** - web - **Tedarikçi listesinde arama ve süzgeç yok (UX-1)**
+  - Neden: tedarikçi sayısı arttıkça aranan firma zor bulunuyor (demo kiracısında 61 tedarikçi);
+    liste yalnız ada göre sıralı, sayfalamasız ve aramasız.
+  - Kanıt: T200 UAT S1 ve S4.8, kullanıcı geri bildirimi (2026-10-20/21). `tedarikciler/page.tsx`
+    (arama alanı yok); sıralama `suppliers.ts:124` (`name_norm`); tedarikçi başına eşleşme bekleyen
+    sayısı zaten hesaplanıyor (`suppliers.ts:110`, `unmatchedCount`).
+  - Yapılacak: önce adla arama (Türkçe normalizasyon, `name_norm`), ardından "eşleşme bekleyeni
+    olanlar" süzgeci.
+  - Bağlı: F-12, T200.
+  - Doğrula: ad parçasıyla arama doğru tedarikçiyi getirir; süzgeç yalnız eşleşme bekleyeni
+    olanları gösterir; başka kiracının tedarikçisi görünmez.
+  - Kaynak: T200 UAT, 2026-10-21.
+- [ ] **T213 (P3)** - web - **Ürün toplu aktarma ile tedarikçi fiyat listesi yükleme yeterince ayrışmıyor (UX-3)**
+  - Neden: kullanıcı tedarikçi CSV'sini önce `Stok → Toplu aktarma`'ya yükledi. Ekranın hatası
+    ("Dosyada "Stok Kodu" ve "Ürün Adı" sütunları olmalı. Bulunanlar: Tedarikçi Kodu, …") doğru ama
+    kullanıcıyı Tedarikçiler → Verileri Getir'e yönlendirmiyor. Veri etkisi yok: çözümleme reddetti.
+  - Kanıt: T200 UAT S2, 2026-10-21; sunucu günlüğünde yalnız `analyzeAction`, kayıt eylemi yok.
+  - Öneri: iki ekranın başlık ve açıklamasında amaç ayrımı; tedarikçi başlıkları (ör. "Tedarikçi
+    Kodu") tanınınca tedarikçi ekranına yönlendiren ipucu. Seçim PLAN'da.
+  - Bağlı: F-02, F-12.
+  - Doğrula: tarayıcıda tedarikçi dosyası ürün aktarmaya yüklenince yönlendirme görünür.
+  - Kaynak: T200 UAT, 2026-10-21.
+- [ ] **T214 (P3)** - web - **Eşleşme bekleyen tedarikçi kalemleri görsel olarak ayrışmıyor; aynı durum için iki terim (UX-6)**
+  - Neden: eşleşmemiş kalem bugün gri düz metin; durum etiketi "Eşleşmedi", süzgeç ve başlıklar
+    "Eşleşme bekleyen" diyor. Yapılacak iş gözden kaçabilir.
+  - Kanıt: `packages/shared/src/suppliers.ts:55` (`UNMATCHED`: "Eşleşmedi"); `[id]/page.tsx`
+    kalem satırı (`text-ink-2`, vurgu yok). Kullanıcı isteği, T200 UAT S4.8, 2026-10-21.
+  - Öneri: eşleşme bekleyen satıra hafif sarı arka plan (`bg-warn-soft`) ve metinli, simgeli
+    `Badge tone="warn"` etiketi (ör. "Eşleşme bekliyor"); renk tek başına gösterge olmaz (WCAG 1.4.1);
+    tek terim. Belirteçler hazır (`--warn-soft` / `--warn-soft-ink`, 6,69:1; koyu tema tanımlı).
+  - Bağlı: F-12, T210.
+  - Doğrula: satırdaki ikincil metnin `warn-soft` üstünde kontrastı (WCAG 1.4.3) açık ve koyu
+    temada; tarayıcı turu.
+  - Kaynak: T200 UAT, 2026-10-21.
+- [ ] **T215 (P3)** - web - **Ürün sayfasında son fiyat değişiminin tarihi görünmüyor (UX-7)**
+  - Neden: "▲ %7,7 arttı" rozeti son değişimi gösteriyor ama tarihini göstermiyor. Yanındaki
+    "Son alındı" verinin alınma zamanı ve değişmeyen bir yenilemede ileri gidiyor (UAT S8.3); rozet
+    o tarihte değişmiş gibi okunabilir.
+  - Kanıt: `listProductOffers` `lastChange.createdAt` döndürüyor; `supplier-offers.tsx:114-119`
+    yalnız tür, yön ve yüzde iletiyor. Tedarikçi sayfasındaki "Son fiyat değişimleri" tarih
+    gösteriyor ama tedarikçi başına son 50 satırla sınırlı (`[id]/page.tsx:142`).
+  - Korunacak: "En düşük fiyat" ve artış/azalış göstergelerinin zaman sınırı yok (kullanıcı onayı
+    2026-10-22, F-12); bu iş yalnız tarihi ekler.
+  - Bağlı: F-12, T200.
+  - Doğrula: tarayıcıda değişmeyen bir yenilemeden sonra rozetin yanındaki tarih değişimin tarihi kalır.
+  - Kaynak: T200 UAT, 2026-10-22.
 - [ ] **T208 (P3)** - web - **Tam 4 MB'lık dosya istemci denetimini geçip Next'in gövde sınırına çarpıyor**
   - Neden: `next.config.ts` `bodySizeLimit`'i dosya sınırıyla aynı (`MAX_UPLOAD_BYTES`, 4 MiB) ve
     Next bu sınırı BÜTÜN isteğe uyguluyor. Çok parçalı form ek yükü (~0,9 KB) yüzünden 4 MiB'a
@@ -603,9 +721,10 @@ kullanıcılı ama ortak laptop kullanımına özel hedef yok; önce kritik stok
 tükenme tahmini sonra; öncelik günlük stok takibi, 2026 yıl sonu envanteri zorunlu hedef
 değil. Kayıtlarda "Ürün kararı" onaylı kapsamdır; "Teknik not" henüz onaylanmamış tasarım girdisidir.
 
-- En üst öncelik (ekip kararı 2026-10-17): önce T200 (B2B V1, `PRD-14`: PLAN, sonra ilk BUILD
-  dilimi), ardından T144 (HTTPS test ortamı, `OPS-12`), sonra T201 (V1'in devamı); sıra ve
-  kayıtlar P1'de.
+- En üst öncelik (kullanıcı kararı 2026-10-22; 2026-10-17 sırasının yerine): T171 (20.000 satır
+  içe aktarma), sonra T201 (gerçek tedarikçi API'si), sonra T200 Dilim 2; UX iyileştirmeleri uygun
+  dilimlerde. T200 Dilim 1 kabul edildi (2026-10-22). T144 (HTTPS test ortamı, `OPS-12`) ayrı
+  operasyon hattında. Sıra ve kayıtlar P1'de.
 - Öncelikli: T155 (sayım), T175 (telefondan ürün yönetimi), T176 (uygulama içi gün sonu
   raporu), T177 (barkodsuz ürün).
 - Kritik stok takibi mevcut, yeniden geliştirilmeyecek (doğrulandı 2026-10-13): ürün bazlı

@@ -4,7 +4,7 @@ Yalnız BUGÜNÜN gerçeği. Her merge'te ya da durum değiştiğinde güncellen
 satırlar silinir (tarihçe git'te). Ayrıntı yazılmaz: işler → `TODOS.md`,
 kararlar → `DECISIONS.md`, model → `PROJECT_BRAIN.md`.
 
-**Tarih:** 2026-10-20 · **Çalışma branch'i:** `development` · **Stabil referans:** `master`
+**Tarih:** 2026-10-22 · **Çalışma branch'i:** `development` · **Stabil referans:** `master`
 (`master` = `dac05ff`, devralma öncesi son kod; geliştirme `development`'ta yapılır)
 
 ## Deploy
@@ -90,7 +90,7 @@ Excel export · kullanıcı yönetimi · ayarlar · kategoriler · raporlar · s
 sağlığı · Ctrl+K · bildirim zili. RLS çok kiracılı veri katmanı, append-only
 defter, kaba kuvvet kilidi, elle tetiklenen `/api/cron`, `/api/v1/health`,
 `pnpm demo` (Windows/macOS/Linux). Tedarikçi fiyat ve stok verisi, yalnız yönetici (F-12;
-ilk dilim, kullanıcı kabul testi bekliyor). Pilot, varsayılan kapalı: telefon kamerasıyla
+Dilim 1, kullanıcı kabul testinde kabul edildi 2026-10-22; Dilim 2 ve gerçek API T201 açık). Pilot, varsayılan kapalı: telefon kamerasıyla
 okutup `/hareket`te açma (`ENABLE_PHONE_SCANNER`, `PRD-12`, `ARC-14`).
 
 ## Kısmi / bozuk
@@ -139,7 +139,24 @@ işaretli (öne çıkanlar `DAT-15`, `DAT-16`, `SEC-14`, `OPS-01`, `OPS-02`, `UX
 
 ## Son tamamlanan workstream
 
-**WS-1.3a — Doğrulanmış yerel yedek** (2026-10-16, `OPS-10`): `pnpm db:backup` compose `db`'deki
+**T200 Dilim 1 — B2B V1 tedarikçi verisi** (kabul 2026-10-22, F-12, `PRD-14`): 1a `9d4bc8c` (CI #83),
+1b `667512a` (CI #84). Kullanıcı kabul testi 2026-10-20…22, yerel `next dev`, demo kiracısı Yılmaz;
+işlemleri kullanıcı arayüzden yaptı, her adım salt okunur DB parmak iziyle doğrulandı: **10/10 senaryo
+geçti, kanıtlanmış yeni teknik hata yok.** Doğrulananlar: tedarikçi oluşturma ve ayarlar; CSV/XLSX
+okuma, önizleme (yazmıyor) ve kayıt; hatalı satır ve dosya düzeyi redler; barkodla otomatik, elle
+bağlama ve yok sayma (yenilemede korunuyor); değişen fiyatta geçmiş, aynı dosyanın ikinci kaydında 0
+yeni geçmiş satırı; iki tedarikçinin karşılaştırması, KDV koşulu farklı teklifler ayrı grupta; çalışan
+tedarikçi fiyatını görmüyor (INV-10); başka kiracının tedarikçi adresi 404. UAT boyunca ve sonda hareket,
+`current_stock`, ürün kartı ve barkod özetleri başlangıçla aynı. Kanıt ayrımı: 9.1–9.3'ü kullanıcı yaptı
+(ekran görüntüleri kullanıcının kendi incelemesinde; DB ile doğrulandı); Demir'in boş tedarikçi listesi
+ekranda görülmedi, veri katmanında doğrulandı (`stok_app` + Demir kiracı ayarı: 0 tedarikçi, 0 kalem,
+0 geçmiş); JSON kaynağı, ayar değişiminin "koşul değişimi" üretmesi (`PRD-16`) ve 390 px mobil UAT'de
+elle denenmedi, kanıtları otomatik testler (F-12). Demo kiracısında kalıcı UAT kayıtları (V1'de silme
+yok): UAT-A (5 kalem: 3 AUTO, 1 MANUAL, 1 IGNORED), UAT-B (3 kalem, AUTO), 2 fiyat geçmişi satırı,
+kullanıcının açtığı "Burik Teknoloji A.Ş" (0 kalem). Bulgular: T212–T215, T210 genişletildi; bağlananlar
+T171, T201, T211.
+
+Öncesinde **WS-1.3a — Doğrulanmış yerel yedek** (2026-10-16, `OPS-10`): `pnpm db:backup` compose `db`'deki
 `stok`'u `pg_dump` ile akışla `.partial`'a alıyor; içindekiler (`dbname`, beş temel tablonun TABLE ve
 TABLE DATA girdileri) ve baştan sona okuma geçmeden döküm son adını ve `.sha256`'sını almıyor.
 `pg_restore --list` tek başına yetmiyor: kesik ve baytı bozulmuş arşivi geçirdi (M1 ölçümü). Kaynak
@@ -158,17 +175,21 @@ geçici kapsayıcıda izole inceleme, yalnız tanınan kümede silme. Geliştirm
 
 ## Sıradaki workstream
 
-**Yol haritasının üstü** (ekip kararı, 2026-10-17), bu sırayla:
-1. **T200 B2B V1 PLAN** (`PRD-14`): ✓ kullanıcı onaylı (2026-10-19; `PRD-15`, `DAT-19`, ADR-006).
-2. **T200 ilk BUILD dilimi**: ✓ uçtan uca çalışıyor. 1a çekirdek `9d4bc8c` (CI #83 yeşil); 1b
-   ekranlar, eylemler, ayar düzenleme (`PRD-16`) ve e2e `667512a` (CI #84 yeşil). Kullanıcı kabul
-   testi bekliyor. Dilim 2 yapılmadı; T200 açık. Ayrıntı F-12.
-3. **HTTPS test ortamı** (T144, `OPS-12`): yakın adım, B2B'yi geciktirmez. Barındırma `OPS-01`
-   (Open); üretim ayrı iş (T42).
-4. **T201 harici API kaynağı**: V1'in devamı. Gerçek sağlayıcı seçilmeden genel entegrasyon
-   iddia edilmez.
-Özellik kayıtları `docs/TEKNIK_SARTNAME.md` F-12, F-13. Diğer P1 işler ve güvenlik/veri koruma
-gereklilikleri olduğu gibi geçerli.
+**Yol haritasının üstü** (kullanıcı kararı, 2026-10-22; 2026-10-17 sırasının yerine), bu sırayla:
+1. **T171 toplu ürün aktarımı → 20.000 satır**: önce PLAN. 20.000 satır ürün gereksinimi; mimari
+   (parçalama, iş kuyruğu vb.) kararlaştırılmadı. Yalnız `IMPORT_ROW_LIMIT`'i artırmak yok.
+2. **T201 gerçek tedarikçi API'si**: ilk hedef, erişimi sağlanabilen bir sağlayıcıyla uçtan uca.
+   Sağlayıcı, kimlik doğrulama ve yaklaşım PLAN'da kanıtla seçilir; gerçek sağlayıcı seçilmeden genel
+   entegrasyon iddia edilmez.
+3. **T200 Dilim 2**: genel karşılaştırma ekranı, kod eşitliğinden onaylı eşleşme önerisi, şablon
+   indirme değerlendirmesi. İptal değil; önceliği değişti.
+4. **UX iyileştirmeleri** uygun ürün dilimlerinde, tek bir yeniden tasarım olarak değil: T212–T215,
+   T210, T211.
+Tamamlanan: T200 PLAN (2026-10-19; `PRD-15`, `DAT-19`, ADR-006) ve Dilim 1 (kabul 2026-10-22,
+yukarıda). HTTPS test ortamı (T144, `OPS-12`) ayrı operasyon hattında; bu ürün sırası onu değiştirmez.
+Barındırma `OPS-01` (Open); üretim ayrı iş (T42). Sıra ürün önceliğidir: kritik veri bütünlüğü ve
+güvenlik işlerini ertelemenin gerekçesi değildir. Özellik kayıtları `docs/TEKNIK_SARTNAME.md` F-12,
+F-13. Diğer P1 işler ve güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
 
 **WS-1 — Güvenlik ve Veri Koruma** (kullanıcı onaylı R-1 planı, 2026-10-13; kalan dilimler ve
 öncelikleri korunuyor): sıra
