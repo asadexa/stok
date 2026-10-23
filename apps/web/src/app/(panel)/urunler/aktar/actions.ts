@@ -1,110 +1,97 @@
 'use server'
 
-import { AppError, errorText } from '@stok/shared'
 import {
-  type CommitResult,
-  type ImportPreview,
-  type ParsedFile,
-  commitImport,
-  parseFileBlob,
-  parseProductFile,
-  previewImport,
+  type Actor,
+  type ImportRunPreview,
+  type ImportRunProgress,
+  type ImportRunReportRow,
+  appendImportRows,
+  beginImportRun,
+  cancelImportRun,
+  finalizeImportPreview,
+  importRunReport,
+  processImportChunk,
+  startImportRun,
 } from '@stok/core'
-import { appDb } from '@stok/db'
-import { MAX_UPLOAD_BYTES, MAX_UPLOAD_LABEL } from '@/server/config'
+import { type Db, appDb } from '@stok/db'
+import { AppError, errorText, isRetryable } from '@stok/shared'
+import { logUnexpected } from '@/server/safe-log'
 import { currentActor } from '@/server/session'
 
 /**
  * ============================================================================
- * T23 — İÇE AKTARMA SUNUCU EYLEMLERİ
+ * T23 / T171 — TOPLU AKTARIM SUNUCU EYLEMLERİ
  *
- * İki eylem, ikisi de veri DÖNDÜRÜYOR (yönlendirmiyor): önizleme tablosu
- * bir adres çubuğuna sığmaz ve dosyayı iki kez seçtirmek kabul edilemez.
- * Bu yüzden bu tek ekran `useActionState` ile çalışıyor, yani JavaScript
- * gerektiriyor.
+ * DOSYA SUNUCUYA GELMİYOR (T171, T1-A). Tarayıcı dosyayı kendi içinde
+ * çözümlüyor ve yalnız hücre metinlerini küçük parçalar halinde gönderiyor:
+ * 100 MB'lık bir Excel dosyası (çoğu görsel) ne istek gövdesi sınırına ne de
+ * sunucu belleğine sığar. Sunucu her parçayı şemayla sınırlıyor; önizleme ve
+ * yazma kararlarını istemciye hiç sormadan kendisi veriyor.
  *
- * BU BİLİNÇLİ BİR İSTİSNA. Uygulamanın geri kalanı JavaScript kapalıyken
- * de çalışıyor çünkü depodaki eski Android tarayıcılarda barkod okutup
- * arama yapılıyor. Toplu içe aktarma ise kurulum günü, masa başında, gerçek
- * bir bilgisayarda yapılan tek seferlik bir iş — o ekranda JavaScript
- * beklemek makul.
+ * Akış: başlat → satır ekle (parça parça) → önizle → onayla → parça işle
+ * (tekrar tekrar) → iptal ya da tamam → rapor. Aktarımın durumu
+ * veritabanındaki kayıtta (`import_runs`); bu eylemler yalnız ince bir kapı.
+ *
+ * BU EKRAN JAVASCRIPT GEREKTİRİYOR. Bilinçli istisna: uygulamanın geri kalanı
+ * JavaScript kapalıyken de çalışıyor çünkü depodaki eski Android tarayıcılarda
+ * barkod okutuluyor. Toplu aktarma ise kurulum günü, masa başında, gerçek bir
+ * bilgisayarda yapılan bir iş.
  * ============================================================================
  */
 
-export interface AnalyzeState {
-  /** Çözümlenmiş ham dosya. Onay adımında sunucuya geri gönderiliyor. */
-  file?: ParsedFile
-  preview?: ImportPreview
-  result?: CommitResult
-  error?: string
-  fileName?: string
-}
-
-function fail(err: unknown): AnalyzeState {
-  if (err instanceof AppError) return { error: errorText(err.code, err.details) }
-  console.error('[import action]', err)
-  return { error: errorText('SERVER_ERROR', {}) }
-}
-
-/** 1. adım: dosyayı çözümle ve önizle. Hiçbir şey yazmaz. */
-export async function analyzeAction(
-  _prev: AnalyzeState,
-  form: FormData,
-): Promise<AnalyzeState> {
-  const actor = await currentActor()
-  if (!actor) return { error: errorText('TOKEN_INVALID', {}) }
-
-  const upload = form.get('dosya')
-  if (!(upload instanceof File) || upload.size === 0) {
-    return { error: 'Önce bir dosya seçin.' }
-  }
-
-  /**
-   * BOYUT KONTROLÜ BURADA, ÇÖZÜMLEMEDEN ÖNCE (T118).
-   *
-   * Yapılmasaydı sınırı aşan dosya Vercel'in ham 413'üne takılırdı:
-   * ekranda sebebi söylemeyen bir arıza. Kullanıcıya NE YAPACAĞI
-   * söyleniyor — dosyayı bölmek, bu ekranda işe yarayan tek çözüm.
-   *
-   * Sunucu tarafında: istemciye güvenilmiyor, `upload.size` gövdeden
-   * okunan gerçek boyut.
-   */
-  if (upload.size > MAX_UPLOAD_BYTES) {
-    const mb = (upload.size / (1024 * 1024)).toFixed(1)
-    return {
-      error: `Dosya çok büyük (${mb} MB). En fazla ${MAX_UPLOAD_LABEL} yükleyebilirsiniz — dosyayı daha küçük parçalara bölüp sırayla aktarın.`,
-    }
-  }
-
-  try {
-    const buffer = Buffer.from(await upload.arrayBuffer())
-    const file = await parseProductFile(buffer, upload.name)
-    const preview = await previewImport(actor, file, { db: appDb() })
-    return { file, preview, fileName: upload.name }
-  } catch (err) {
-    return fail(err)
-  }
-}
+export type ActionResult<T> = { ok: true; value: T } | { ok: false; error: string; retryable: boolean }
 
 /**
- * 2. adım: uygula.
- *
- * Önizleme SUNUCUDA yeniden hesaplanıyor. İstemcinin gönderdiği
- * sınıflandırmaya güvenmek, kurcalanmış bir gönderimin hangi ürünün
- * güncelleneceğini seçmesine izin vermek olurdu — ve önizlemeden sonra
- * veritabanında olan değişiklikler gözden kaçardı.
+ * Yetki ve hata sözleşmesi tek yerde. Hata metni kullanıcıya gidiyor;
+ * `retryable` istemcinin kendiliğinden tekrar deneyip denemeyeceğini söylüyor
+ * (ör. aynı aktarım başka bir istekte işleniyor). Beklenmeyen hata günlüğe
+ * içeriksiz yazılıyor: satırlar alış fiyatı taşıyor (T204, INV-10).
  */
-export async function commitAction(_prev: AnalyzeState, form: FormData): Promise<AnalyzeState> {
+async function guarded<T>(scope: string, fn: (actor: Actor, db: Db) => Promise<T>): Promise<ActionResult<T>> {
   const actor = await currentActor()
-  if (!actor) return { error: errorText('TOKEN_INVALID', {}) }
-
+  if (!actor) return { ok: false, error: errorText('TOKEN_INVALID', {}), retryable: false }
   try {
-    const file = parseFileBlob(JSON.parse(String(form.get('dosyaJson') ?? '{}')))
-    const db = appDb()
-    const preview = await previewImport(actor, file, { db })
-    const result = await commitImport(actor, preview, { db })
-    return { result, fileName: String(form.get('dosyaAdi') ?? '') }
+    return { ok: true, value: await fn(actor, appDb()) }
   } catch (err) {
-    return fail(err)
+    if (err instanceof AppError) {
+      return { ok: false, error: errorText(err.code, err.details), retryable: isRetryable(err.code) }
+    }
+    logUnexpected(scope, err)
+    return { ok: false, error: errorText('SERVER_ERROR', {}), retryable: true }
   }
+}
+
+/** Aktarım kaydını açar. Dosyanın kendisi değil, tarayıcının okuduğu özet geliyor. */
+export async function startImportAction(meta: unknown): Promise<ActionResult<{ runId: string }>> {
+  return guarded('import start', (actor, db) => startImportRun(actor, meta, { db }))
+}
+
+export async function appendImportRowsAction(
+  runId: string,
+  rows: unknown,
+): Promise<ActionResult<{ received: number; total: number }>> {
+  return guarded('import append', (actor, db) => appendImportRows(actor, runId, { rows }, { db }))
+}
+
+/** Önizleme: ürün ve stok verisine HİÇBİR ŞEY yazılmıyor. */
+export async function previewImportAction(runId: string): Promise<ActionResult<ImportRunPreview>> {
+  return guarded('import preview', (actor, db) => finalizeImportPreview(actor, runId, { db }))
+}
+
+export async function beginImportAction(runId: string): Promise<ActionResult<ImportRunProgress>> {
+  return guarded('import begin', (actor, db) => beginImportRun(actor, runId, { db }))
+}
+
+/** Birkaç saniyelik satır grubu; istemci aktarım kapanana kadar çağırıyor. */
+export async function processImportChunkAction(runId: string): Promise<ActionResult<ImportRunProgress>> {
+  return guarded('import chunk', (actor, db) => processImportChunk(actor, runId, { db }))
+}
+
+export async function cancelImportAction(runId: string): Promise<ActionResult<ImportRunProgress>> {
+  return guarded('import cancel', (actor, db) => cancelImportRun(actor, runId, { db }))
+}
+
+/** Sonuç ekranındaki ilk sorunlu satırlar; tamamı rapor dosyasında. */
+export async function importReportAction(runId: string): Promise<ActionResult<ImportRunReportRow[]>> {
+  return guarded('import report', (actor, db) => importRunReport(actor, runId, { db, limit: 50 }))
 }

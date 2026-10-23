@@ -1,6 +1,10 @@
 import {
   barcodeKindsCheckConstraint,
   currencyCheckConstraint,
+  importOpeningOutcomeCheckConstraint,
+  importRowActionCheckConstraint,
+  importRowStatusCheckConstraint,
+  importRunStatusCheckConstraint,
   jobKindsCheckConstraint,
   jobStatusesCheckConstraint,
   multiplierCheckConstraint,
@@ -666,6 +670,120 @@ export const supplierPriceChanges = pgTable(
   ],
 )
 
+// ---------------------------------------------------------------------------
+// TOPLU ÜRÜN AKTARIMI KAYDI (T171)
+//
+// GEÇİCİ İŞ KAYDI, DEFTER DEĞİL. Ürün ve stok verisi bu tablolarda durmuyor;
+// gerçek yazım yine `createProduct`/`updateProduct`/`createMovement`'tan geçiyor
+// (INV-3). Buradaki satırlar 30 gün sonra siliniyor (K4). Gerçek tablolardan
+// buraya hiçbir yabancı anahtar YOK: temizlik yapı gereği ürüne, stoğa ya da
+// harekete dokunamaz. `product_id` bilerek yabancı anahtar değil; satır, önizleme
+// anının anlık görüntüsü.
+//
+// Satırlar alış fiyatı içeriyor (INV-10): erişim yalnız `product:create`
+// yetkisiyle (yönetici) ve kiracı kapsamında (FORCE RLS, migration 0013).
+// ---------------------------------------------------------------------------
+
+export const importRuns = pgTable(
+  'import_runs',
+  {
+    id: pk(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => users.id),
+    fileName: text('file_name').notNull(),
+    /** Tarayıcının bildirdiği dosya boyutu; yalnız gösterim için, dosya sunucuya gelmiyor. */
+    fileBytes: integer('file_bytes').notNull(),
+    status: text('status').notNull().default('UPLOADING'),
+    /** Tarayıcının beyan ettiği veri satırı sayısı; önizleme bu kadar satır gelmeden başlamaz. */
+    totalRows: integer('total_rows').notNull(),
+    /** Dosyada tanınan alanlar (`ImportField`). */
+    columns: jsonb('columns').$type<string[]>().notNull(),
+    /** Dosya düzeyi uyarılar (okunmayan "Miktar" sütunu gibi). */
+    notices: jsonb('notices').$type<string[]>().notNull().default([]),
+    /**
+     * Parça işleyicinin KİRASI (T171, T5). Uzun süre tutulan satır kilidi yerine
+     * zaman damgası: iptal isteği hiçbir kilidi beklemiyor, düşen bir işleyicinin
+     * kirası kendiliğinden bitiyor ve aynı aktarımı iki işleyici aynı anda işlemiyor.
+     */
+    leaseUntil: timestamp('lease_until', { withTimezone: true }),
+    /**
+     * Kirayı tutan işleyicinin kimliği. Kira süresi dolup başkası devraldıysa
+     * eski işleyici kendi kimliğiyle yenileyemiyor ve duruyor; kimlik olmasaydı
+     * takılıp geri gelen işleyici yeni sahibin kirasını yenileyip ikisi birlikte
+     * çalışırdı.
+     */
+    leaseToken: uuid('lease_token'),
+    /** İptal isteği. İşleyici her satırdan ÖNCE bakıyor; başlamış satır tamamlanıyor. */
+    cancelRequestedAt: timestamp('cancel_requested_at', { withTimezone: true }),
+    createdAt: createdAt(),
+    previewedAt: timestamp('previewed_at', { withTimezone: true }),
+    startedAt: timestamp('started_at', { withTimezone: true }),
+    finishedAt: timestamp('finished_at', { withTimezone: true }),
+  },
+  (t) => [
+    index('import_runs_tenant_created_idx').on(t.tenantId, t.createdAt),
+    check('import_runs_status_ck', sql.raw(importRunStatusCheckConstraint('status'))),
+    check('import_runs_total_rows_ck', sql`total_rows >= 0`),
+  ],
+)
+
+export const importRunRows = pgTable(
+  'import_run_rows',
+  {
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
+    runId: uuid('run_id')
+      .notNull()
+      .references(() => importRuns.id, { onDelete: 'cascade' }),
+    /** Dosyadaki satır numarası (başlık 1). Kullanıcı hatayı Excel'de bununla arıyor. */
+    rowNumber: integer('row_number').notNull(),
+    /** Tarayıcıdan gelen ham hücreler (şemayla sınırlı). Önizleme bunlardan hesaplanıyor. */
+    cells: jsonb('cells').$type<Record<string, string>>().notNull(),
+    // Önizlemenin kararı (PREVIEWED'dan itibaren dolu).
+    action: text('action'),
+    sku: text('sku'),
+    name: text('name'),
+    issues: jsonb('issues').$type<{ column: string; message: string }[]>(),
+    warnings: jsonb('warnings').$type<string[]>(),
+    data: jsonb('data').$type<Record<string, unknown>>(),
+    productId: uuid('product_id'),
+    /** Güncellenecek ürünün önizleme anındaki sürümü (`xmin`); yazımda karşılaştırılıyor (K3). */
+    productVersion: text('product_version'),
+    opening: jsonb('opening').$type<Record<string, unknown>>(),
+    // İşlemenin sonucu.
+    status: text('status').notNull().default('PENDING'),
+    openingOutcome: text('opening_outcome'),
+    /** Kullanıcıya gösterilen tek cümle: hata, çakışma ya da devir notu. */
+    message: text('message'),
+    claimedAt: timestamp('claimed_at', { withTimezone: true }),
+    /**
+     * Satırı alan işleyicinin kira kimliği. Sonuç yalnız bu kimlikle yazılıyor:
+     * kesinti doğrulaması satırı başka bir işleyiciye verdiyse eski işleyicinin
+     * geç gelen sonucu yenisinin üzerine yazılmıyor.
+     */
+    claimToken: uuid('claim_token'),
+    processedAt: timestamp('processed_at', { withTimezone: true }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.runId, t.rowNumber] }),
+    index('import_run_rows_status_idx').on(t.runId, t.status, t.rowNumber),
+    check('import_run_rows_status_ck', sql.raw(importRowStatusCheckConstraint('status'))),
+    check(
+      'import_run_rows_action_ck',
+      sql.raw(`(action IS NULL OR ${importRowActionCheckConstraint('action')})`),
+    ),
+    check(
+      'import_run_rows_opening_outcome_ck',
+      sql.raw(importOpeningOutcomeCheckConstraint('opening_outcome')),
+    ),
+  ],
+)
+
 export const schema = {
   tenants,
   users,
@@ -678,4 +796,6 @@ export const schema = {
   suppliers,
   supplierItems,
   supplierPriceChanges,
+  importRuns,
+  importRunRows,
 }

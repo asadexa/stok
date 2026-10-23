@@ -324,6 +324,47 @@ güncellenir. Yeni tehdit yeni ID alır; ID yeniden kullanılmaz.
     `localhost`/`::1` aynı portta başka bir loopback adresindeki ikinci bir PostgreSQL'e
     gidebilir (T198, doğrulanmadı).
 
+### S21 — Toplu aktarım dosyası ve aktarım kayıtları (T171)
+- **Tehdit:**
+  - Kötü niyetli ya da bozuk Excel dosyası: küçük görünüp açılınca GB'larca büyüyen
+    sıkıştırma bombası, dev görseller, ilişkili parçalar; tarayıcıyı ya da sunucuyu düşürür.
+  - Tarayıcıda okunan satırlar istemci verisidir: kurcalanmış istek bilinmeyen alan,
+    sınırsız hücre ya da beyandan fazla satır yazdırabilir; istemcinin sınıflandırmasına
+    ("yeni/güncelleme, hangi ürün") güvenmek yanlış ürünü güncelletir.
+  - Aktarım kayıtları ham hücreleri, yani alış fiyatlarını saklıyor (INV-10): başka
+    kiracıya ya da çalışana görünmesi, uzun süre birikmesi.
+  - Beklenmeyen hata günlüğe sorgu parametrelerini (fiyat, barkod) döker (T204).
+- **Koruma:**
+  - Dosya sunucuya gelmiyor. XLSX'ten yalnız hücre parçaları (çalışma kitabı, paylaşılan
+    metinler, stiller, sayfalar) açılıyor; görsel ve diğer parçalar hiç açılmıyor, açılan
+    toplam 64 MiB'ı aşarsa dosya reddediliyor (`XLSX_PARTS_BYTE_LIMIT`). Dosya en fazla
+    100 MB, 20.000 satır, hücre 1.000 karakter.
+  - Sunucu her eklemeyi şemayla sınırlıyor (`rawRowSchema`: yalnız tanınan alanlar, sınırlı
+    metin; çağrı başına en fazla 5.000 satır, toplam beyandan fazla değil, aynı satır iki kez
+    değil). Önizleme ve satır kararları sunucuda hesaplanıyor; istemcinin gönderdiği yalnız
+    hücre metni.
+  - `import_runs`, `import_run_rows`: FORCE RLS + `tenant_isolation` (migration 0013); her
+    işlev `product:create` + `barcode:create` istiyor (yalnız yönetici). Rapor kayıttan
+    okunuyor (`GET /api/rapor/aktarim?kayit=`); başka kiracının kaydı NOT_FOUND.
+  - Kayıtlar 30 gün, yarıda kalmış yüklemeler 24 saat sonra siliniyor (cron bakımı ve yeni
+    aktarım başı). Gerçek tablolara yabancı anahtar yok: silme gerçek veriye ulaşamıyor.
+  - Beklenmeyen hata yalnız sınıf, SQLSTATE ve constraint adıyla loglanıyor (`messageOf`,
+    `logUnexpected`).
+- **Katman:** `packages/core/src/sheet.ts`, `product-file.ts`, `import.ts`, `import-runs.ts`;
+  `packages/db/migrations/0013_import_runs.sql`; `apps/web/src/app/(panel)/urunler/aktar/`,
+  `apps/web/src/app/api/rapor/aktarim/route.ts`.
+- **Test:** `import.test.ts` (değerler-yalnız okuma, 70 MB görsel açılmıyor, sıkıştırma bombası,
+  zip olmayan dosya, 100 MB sınırı, hücre kesme); `import-runs.test.ts` (şema reddi, beyandan
+  fazla ve mükerrer satır, çalışan reddi, başka kiracı NOT_FOUND, temizlik yalnız süresi dolan
+  kayıtları siliyor ve ürün/barkod/hareket sayıları değişmiyor); `rls.test.ts` FORCE taraması;
+  `route-authz.test.ts` (rapor: oturumsuz, çalışan, başka kiracı). Korumalar `dogrula` ile
+  kaldırılınca kırmızı görüldü (T171).
+- **Açık:**
+  - Kayıtlar 30 gün boyunca kiracının yöneticilerine açık; aktarımı başlatan kullanıcıyla
+    sınırlı değil (rapor bağlantısı paylaşılabilir, yalnız aynı işletmenin yöneticisi açar).
+  - Tarayıcıda 100 MB'lık dosya belleğe okunuyor; çok düşük bellekli cihazda işçi düşerse
+    kullanıcı "dosya bu tarayıcıda okunamadı" görür (veri yazılmaz).
+
 ---
 
 ## Katmandan bağımsız açıklar

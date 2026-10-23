@@ -8,7 +8,13 @@ import {
   supplierFeedItemSchema,
 } from '@stok/shared'
 import { z } from 'zod'
-import { normalizeHeader, parseTurkishNumber, readSheet } from './import'
+import {
+  ambiguousNumberMessage,
+  isAmbiguousTurkishNumber,
+  normalizeHeader,
+  parseTurkishNumber,
+  readSheet,
+} from './sheet'
 import { issuesOf, validationError } from './validate'
 
 /**
@@ -509,7 +515,11 @@ export function normalizeSupplierRows(
 
     const price = parseTurkishNumber(c.price ?? '')
     if (price === undefined) messages.push('Fiyat boş')
-    else if (Number.isNaN(price)) messages.push('Fiyat sayı değil')
+    else if (Number.isNaN(price)) {
+      // K1: "1.234" bin kat farklı iki anlama geliyor; sessizce birini seçmek
+      // tedarikçi fiyatını yanlış kaydeder, satır reddediliyor.
+      messages.push(isAmbiguousTurkishNumber(c.price ?? '') ? `Fiyat: ${ambiguousNumberMessage(c.price ?? '')}` : 'Fiyat sayı değil')
+    }
 
     let currency: Currency = defaults.currency
     if (c.currency) {
@@ -533,13 +543,24 @@ export function normalizeSupplierRows(
     }
 
     const priceQty = c.priceQty ? parseTurkishNumber(c.priceQty) : undefined
-    if (priceQty !== undefined && Number.isNaN(priceQty)) messages.push('Fiyat miktarı sayı değil')
+    if (priceQty !== undefined && Number.isNaN(priceQty)) {
+      messages.push(
+        isAmbiguousTurkishNumber(c.priceQty ?? '')
+          ? `Fiyat Miktarı: ${ambiguousNumberMessage(c.priceQty ?? '')}`
+          : 'Fiyat miktarı sayı değil',
+      )
+    }
 
     // Stok "Var", ">50" gibi metin gelebiliyor. Fiyat asıl bilgi; stoğu
-    // okunamadı diye satırı reddetmek fiyatı da kaybettirirdi.
+    // okunamadı diye satırı reddetmek fiyatı da kaybettirirdi. Belirsiz
+    // yazım (K1) da aynı yoldan: yorumlanmıyor, boş bırakılıyor ve SÖYLENİYOR.
     let stockQty = c.stockQty ? parseTurkishNumber(c.stockQty) : undefined
     if (stockQty !== undefined && Number.isNaN(stockQty)) {
-      notes.push(`Stok sayı değil (${c.stockQty}); boş bırakıldı`)
+      notes.push(
+        isAmbiguousTurkishNumber(c.stockQty ?? '')
+          ? `Stok belirsiz (${c.stockQty}): binlik ayırıcı mı ondalık mı anlaşılmıyor; boş bırakıldı`
+          : `Stok sayı değil (${c.stockQty}); boş bırakıldı`,
+      )
       stockQty = undefined
     }
 

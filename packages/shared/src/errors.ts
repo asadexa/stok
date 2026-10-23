@@ -225,7 +225,46 @@ export const ERROR_CODES = {
   IMPORT_TOO_LARGE: {
     http: 413,
     retryable: false,
-    tr: (d) => `Dosyada ${d.limit} satırdan fazla var. Dosyayı bölerek yükleyin.`,
+    tr: (d) =>
+      `Dosyada ${Number(d.limit).toLocaleString('tr-TR')} satırdan fazla var. Dosyayı bölerek yükleyin.`,
+  },
+  IMPORT_FILE_TOO_LARGE: {
+    http: 413,
+    retryable: false,
+    tr: (d) => `Dosya çok büyük. En fazla ${d.limitMb} MB yükleyebilirsiniz.`,
+  },
+  IMPORT_XLSX_TOO_LARGE: {
+    http: 413,
+    retryable: false,
+    // Sıkıştırılmış dosya küçük görünüp açılınca çok büyüyebilir (T171).
+    // Görseller sayılmıyor; sınırı hücre verisi aşıyor.
+    tr: (d) =>
+      `Dosyadaki tablo açıldığında ${d.limitMb} MB'ı aşıyor. Gereksiz sayfaları ya da sütunları silip tekrar deneyin veya dosyayı bölün.`,
+  },
+  IMPORT_UNREADABLE: {
+    http: 400,
+    retryable: false,
+    tr: () => 'Dosya okunamadı. Excel (.xlsx) ya da CSV (.csv) dosyası seçin.',
+  },
+  IMPORT_RUN_STATE: {
+    http: 409,
+    retryable: false,
+    // Aktarım bu adıma uygun değil: önizleme tamamlanmadan onay, eksik satırla
+    // önizleme, iptal edilmiş aktarıma satır ekleme gibi.
+    tr: () => 'Aktarım bu adıma uygun durumda değil. Dosyayı yeniden yükleyip tekrar deneyin.',
+  },
+  IMPORT_RUN_BUSY: {
+    http: 409,
+    retryable: true,
+    // Aynı aktarım başka bir sekmede ya da ikinci bir istekle işleniyor (T171, T5).
+    tr: () => 'Bu aktarım şu anda işleniyor. Birkaç saniye sonra tekrar deneyin.',
+  },
+  PRODUCT_CHANGED: {
+    http: 409,
+    retryable: false,
+    // T171, K3: aktarım önizlemesinden sonra başka biri ürünü değiştirdi.
+    // Dosyadaki değer onu sessizce ezmiyor.
+    tr: () => 'Ürün önizlemeden sonra başka bir kullanıcı tarafından değiştirildi; dosyadaki değer yazılmadı',
   },
 
   // --- Tedarikçi verisi (T200, PRD-14) ---

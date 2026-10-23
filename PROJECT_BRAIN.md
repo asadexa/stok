@@ -47,7 +47,8 @@ ve sunucuda zorlanır; arayüzde düğmeyi gizlemek yetki kontrolü değildir.
 - **Fire / kullanım / tedarikçiye iade**: çıkış sebepleri; fire ve kullanımda fiyat yok.
 - **Devir (açılış)**: elde zaten olan malın sisteme ilk girişi; fiyat zorunlu,
   fiyatın ekonomik tarihi ayrı tutulur.
-- **İlk kurulum**: ürün kataloğunu Excel/CSV'den toplu aktarmak (önizle → onayla);
+- **İlk kurulum**: ürün kataloğunu Excel/CSV'den toplu aktarmak (önizle → onayla → ilerleme ve
+  iptalle parça parça aktar; en fazla 20.000 satır, `ARC-15`);
   "Açılış Stoğu" sütunu devri yine tek yazma kapısından, ürünün ilk hareketi olarak yazar (`DAT-18`).
 - **Gözetim**: panel (uyarılar, bugün, son hareketler), kritik stok, hareket logu
   (kim / ne zaman / neden), sistem sağlığı.
@@ -213,8 +214,12 @@ Tehditler, korumalar ve bilinen açıklar: `docs/SECURITY_MODEL.md` (S1–S17).
 - Ayrı bir işçi süreci yok. `POST|GET /api/cron` (`CRON_SECRET`) her kiracı için sırayla:
   1. Günün işlerini dedupe anahtarıyla planla: gün sonu raporu, kritik stok,
      sağlık alarmı (saatlik).
-  2. Kuyruğu işle; elle istenen büyük export'lar da burada işlenir.
-  3. Bakım: eski sayaçları buda, invariant'ı denetle.
+  2. Kuyruğu işle. Elle istenen büyük export'lar da bu kuyruğa giriyor, ama işleyicileri
+     cron'a bağlı değil: bugün işlenmiyor (T216).
+  3. Bakım: eski sayaçları ve süresi dolmuş toplu aktarım kayıtlarını (30 gün) buda,
+     invariant'ı denetle.
+- Toplu ürün aktarımı bu kuyruğu kullanmıyor: kalıcı aktarım kaydını (`import_runs`) kullanıcının
+  sekmesi kısa parçalarla ilerletiyor (`ARC-15`, ADR-007).
 - Uç, invariant kırıksa ya da bir iş kalıcı başarısızsa 500 döner. Alarm ilkesi: `OPS-09`.
 - Sistem sağlığı üç sessiz arızayı izler: defter/projeksiyon ayrışması, kuyrukta
   çürüyen iş, hareketsizlik.

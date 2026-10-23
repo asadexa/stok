@@ -2,6 +2,7 @@ import {
   ADET_MULTIPLIER_MESSAGE,
   AppError,
   type BarcodeKind,
+  type ImportOpeningOutcome,
   type Unit,
   BARCODE_KINDS,
   UNITS,
@@ -15,17 +16,57 @@ import {
   unitDecimals,
   updateProductSchema,
 } from '@stok/shared'
-import { type Db, productBarcodes, products, stockMovements, withTenant } from '@stok/db'
+import {
+  type Db,
+  pgConstraint,
+  pgErrorCode,
+  productBarcodes,
+  products,
+  stockMovements,
+  withTenant,
+} from '@stok/db'
 import { and, eq, inArray, isNull } from 'drizzle-orm'
-import ExcelJS from 'exceljs'
-import JSZip from 'jszip'
 import { type Actor, requirePermission } from './authz'
-import type { SheetColumn } from './excel'
 import { createMovement } from './movements'
-import { addBarcode, createProduct, listBarcodes, updateProduct } from './products'
+import {
+  COLUMN_LABELS,
+  IMPORT_CELL_LIMIT,
+  IMPORT_FIELDS,
+  type ImportField,
+  type ParsedFile,
+  type ParsedRow,
+  type RawRow,
+} from './product-file'
+import { PRODUCT_VERSION, addBarcode, insertProduct, listBarcodes, patchProduct } from './products'
+import { ambiguousNumberMessage, isAmbiguousTurkishNumber, normalizeHeader, parseTurkishNumber } from './sheet'
 import { uuidV5 } from './uuid-v5'
-import { issuesOf, validationError } from './validate'
+import { issuesOf } from './validate'
 import { z } from 'zod'
+
+// Dosya okuma tarayıcıda da çalışan modüllerde (T171). Mevcut çağıranlar ve
+// testler adları buradan almaya devam ediyor.
+export {
+  COLUMN_LABELS,
+  IMPORT_CELL_LIMIT,
+  IMPORT_FIELDS,
+  IMPORT_FILE_BYTES_LIMIT,
+  IMPORT_ROW_LIMIT,
+  type ImportField,
+  type ParsedFile,
+  type ParsedRow,
+  type RawRow,
+  parseProductFile,
+} from './product-file'
+export {
+  XLSX_PARTS_BYTE_LIMIT,
+  ambiguousNumberMessage,
+  cellText,
+  isAmbiguousTurkishNumber,
+  normalizeHeader,
+  parseCsv,
+  parseTurkishNumber,
+  readSheet,
+} from './sheet'
 
 /**
  * ============================================================================
@@ -39,7 +80,10 @@ import { z } from 'zod'
  *
  *   1. çözümle   parseProductFile()  → satırlar, hiçbir yazma yok
  *   2. önizle    previewImport()     → her satır için karar + Türkçe sebep
- *   3. uygula    commitImport()      → sadece geçerli satırlar
+ *   3. uygula    applyRow()          → sadece geçerli satırlar, satır satır
+ *
+ * Ekran bu adımları aktarım kaydı üzerinden yürütüyor (`import-runs.ts`,
+ * T171): dosya tarayıcıda çözümleniyor, önizleme ve uygulama sunucuda.
  *
  * ÖNİZLEME ZORUNLU VE TEK BAŞINA DEĞERLİ. Kullanıcının elindeki dosya
  * çoğu zaman muhasebeden gelen, sütunları kayık, birimleri karışık bir
@@ -56,9 +100,6 @@ import { z } from 'zod'
  * içeren bir düzeltme dosyası bütün fiyatları silerdi.
  * ============================================================================
  */
-
-/** Tek istekte kabul edilen en fazla satır. */
-export const IMPORT_ROW_LIMIT = 2_000
 
 export type RowAction = 'create' | 'update' | 'error'
 
@@ -79,6 +120,11 @@ export interface PreviewRow {
   data?: ParsedRow
   /** Güncellenecek ürünün kimliği. `action === 'update'` ise dolu. */
   productId?: string
+  /**
+   * Güncellenecek ürünün ÖNİZLEME ANINDAKİ sürümü (T171, K3). Yazımda karşılaştırılıyor:
+   * arada biri ürünü değiştirdiyse dosyadaki değer onu sessizce ezmiyor.
+   */
+  productVersion?: string
   /**
    * Yazılacak açılış stoğu (T128). Fiyat ve barkod önizlemede çözülüyor;
    * karar yine de yazma anında `createMovement`'ta veriliyor.
@@ -104,54 +150,25 @@ export interface ImportPreview {
   notices: string[]
 }
 
-export interface ParsedRow {
-  sku: string
-  name: string
-  unit?: Unit
-  category?: string | null
-  brand?: string | null
-  imageUrl?: string | null
-  purchasePrice?: number | null
-  salePrice?: number | null
-  minStock?: number
-  barcode?: string
-  barcodeKind?: BarcodeKind
-  qtyMultiplier?: number
-  /** Açılış stoğu, ürünün biriminde (T128). Boş ya da 0: devir yok. */
-  openingQty?: number
-}
-
 /**
- * Çözümlenmiş dosyanın şeması.
+ * İstemciden gelen ham satırın şeması (T171).
  *
- * Neden gerekli: önizleme ile onay arasında dosya İSTEMCİDE duruyor
- * (gizli alanda) ve onayda geri geliyor. Yani onay adımındaki veri
- * kullanıcıdan gelen veridir ve doğrulanmadan kullanılamaz.
- *
- * ÖNEMLİ: onay adımı istemcinin gönderdiği SINIFLANDIRMAYA (yeni mi
- * güncelleme mi, hangi ürün) hiç güvenmiyor — sadece ham hücreleri alıp
- * `previewImport`'u SUNUCUDA yeniden çalıştırıyor. Böylece hem kurcalanmış
- * bir gönderim işe yaramıyor hem de önizlemeden sonra veritabanında olan
- * değişiklikler (başkası aynı stok kodunu yaratmış) hesaba katılıyor.
+ * Neden gerekli: dosya tarayıcıda ayrıştırılıyor, yani buraya gelen hücreler
+ * kullanıcıdan gelen veridir. Yalnız tanınan alanlar ve sınırlı uzunlukta
+ * metin kabul ediliyor: bilinmeyen anahtar ya da sınırsız hücre, geçici kayda
+ * ve belleğe istemcinin seçtiği kadar veri yazdırırdı. İçeriğin DOĞRULUĞU
+ * burada değil, `previewImport`'ta satır satır sınanıyor.
  */
-export const parsedFileSchema = z.object({
-  rows: z
-    .array(
-      z.object({
-        rowNumber: z.number().int().nonnegative(),
-        cells: z.record(z.string(), z.string()),
-      }),
+export const rawRowSchema = z.object({
+  rowNumber: z.number().int().min(2).max(10_000_000),
+  cells: z
+    .object(
+      Object.fromEntries(
+        IMPORT_FIELDS.map((f) => [f, z.string().max(IMPORT_CELL_LIMIT + 1).optional()]),
+      ) as Record<ImportField, z.ZodOptional<z.ZodString>>,
     )
-    .max(IMPORT_ROW_LIMIT),
-  columns: z.array(z.string()),
-  ignoredQtyColumns: z.array(z.string().max(200)).max(50).optional(),
+    .strict(),
 })
-
-export function parseFileBlob(raw: unknown): ParsedFile {
-  const parsed = parsedFileSchema.safeParse(raw)
-  if (!parsed.success) throw validationError(issuesOf(parsed.error))
-  return parsed.data as ParsedFile
-}
 
 export interface ImportOptions {
   db?: Db
@@ -159,341 +176,16 @@ export interface ImportOptions {
 }
 
 // ---------------------------------------------------------------------------
-// SÜTUN EŞLEME
-// ---------------------------------------------------------------------------
-
-/**
- * Başlık eşlemesi. Anahtarlar `tr_norm` mantığıyla sadeleştirilmiş hâlleri:
- * "Stok Kodu", "STOK KODU", "stok kodu" ve "Stok  Kodu" hepsi eşleşiyor.
- *
- * Neden esnek: dosya muhasebeden geliyor ve başlığın büyük harfli mi,
- * boşluklu mu olduğunu kullanıcı bilmiyor. Katı eşleşme, kullanıcıyı
- * "sütun bulunamadı" hatasıyla baş başa bırakır ve o hatanın sebebi
- * ekranda görünmez.
- *
- * `exportFileName`'in ürettiği stok raporunun başlıkları da burada:
- * kullanıcı raporu indirip düzeltip geri yükleyebilmeli.
- */
-const COLUMN_ALIASES: Record<keyof ParsedRow, string[]> = {
-  sku: ['stok kodu', 'stokkodu', 'kod', 'sku', 'urun kodu'],
-  name: ['urun adi', 'ad', 'urun', 'isim', 'name'],
-  unit: ['birim', 'unit'],
-  category: ['kategori', 'category'],
-  brand: ['marka', 'brand'],
-  imageUrl: ['gorsel', 'gorsel url', 'gorsel adresi', 'resim', 'resim url', 'foto', 'fotograf', 'image', 'image url'],
-  purchasePrice: ['alis fiyati', 'alis', 'alis fiyat'],
-  salePrice: ['satis fiyati', 'satis', 'satis fiyat'],
-  minStock: ['kritik seviye', 'kritik stok', 'min stok', 'minimum stok', 'kritik esik'],
-  barcode: ['barkod', 'barcode'],
-  barcodeKind: ['barkod turu', 'barkod tipi', 'tur'],
-  qtyMultiplier: ['koli ici adet', 'carpan', 'koli adedi', 'koli ici'],
-  // YALNIZ AÇIK ADLAR (T128). "Miktar", "Stok", "Adet" bilerek yok: stok
-  // raporunun mevcut stok sütununun adı "Miktar" ve raporu düzenleyip geri
-  // yükleyen kullanıcının o sütunu devir sayılsaydı, elde zaten kayıtlı olan
-  // stok ikinci kez girerdi.
-  openingQty: ['acilis stogu', 'acilis stok', 'acilis miktari', 'devir', 'devir miktari', 'devir stogu'],
-}
-
-/**
- * Açılış stoğu SANILABİLECEK ama okunmayan başlıklar. Sessizce yok sayılmıyor:
- * önizleme "bu sütun okunmadı, adı Açılış Stoğu olmalı" diyor. Demeseydi
- * kullanıcı stoklarının aktarıldığını sanırdı.
- */
-const AMBIGUOUS_QTY_HEADERS = [
-  'miktar',
-  'stok',
-  'adet',
-  'mevcut stok',
-  'stok miktari',
-  'eldeki stok',
-  'qty',
-  'quantity',
-]
-
-/**
- * Başlığı karşılaştırılabilir hâle getirir: Türkçe harfler sadeleşiyor,
- * noktalama ve fazla boşluk düşüyor. `packages/db` içindeki `tr_norm` ile
- * aynı harf eşlemesi — ikisi ayrı düşerse "Ürün Adı" başlığı bir yerde
- * eşleşip diğerinde eşleşmezdi.
- */
-export function normalizeHeader(raw: string): string {
-  const map: Record<string, string> = {
-    İ: 'i', I: 'i', ı: 'i', Ş: 's', ş: 's', Ğ: 'g', ğ: 'g',
-    Ü: 'u', ü: 'u', Ö: 'o', ö: 'o', Ç: 'c', ç: 'c',
-  }
-  return raw
-    .split('')
-    .map((ch) => map[ch] ?? ch)
-    .join('')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim()
-}
-
-/** Başlık satırından sütun indekslerini çıkarır. */
-function mapColumns(headers: string[]): Partial<Record<keyof ParsedRow, number>> {
-  const found: Partial<Record<keyof ParsedRow, number>> = {}
-  headers.forEach((header, index) => {
-    const norm = normalizeHeader(header)
-    for (const [field, aliases] of Object.entries(COLUMN_ALIASES) as [
-      keyof ParsedRow,
-      string[],
-    ][]) {
-      if (found[field] === undefined && aliases.includes(norm)) found[field] = index
-    }
-  })
-  return found
-}
-
-// ---------------------------------------------------------------------------
-// DOSYA ÇÖZÜMLEME
-// ---------------------------------------------------------------------------
-
-export interface RawRow {
-  rowNumber: number
-  cells: Record<keyof ParsedRow, string>
-}
-
-export interface ParsedFile {
-  rows: RawRow[]
-  /** Dosyada bulunan sütunlar. Ekranda "şunları gördüm" diye gösteriliyor. */
-  columns: (keyof ParsedRow)[]
-  /** Açılış stoğu sanılabilecek ama okunmayan başlıklar (dosyadaki yazımıyla). */
-  ignoredQtyColumns?: string[]
-}
-
-/**
- * `.xlsx` veya `.csv` dosyasını ham satırlara çevirir.
- *
- * CSV'yi de kabul ediyoruz çünkü kullanıcının elindeki dosya çoğu zaman
- * eski bir programdan CSV olarak çıkıyor. ÜRETİRKEN CSV kullanmıyoruz
- * (G2: kodlama tuzağı), ama OKURKEN reddetmek kullanıcıyı dönüştürmeye
- * zorlamak olurdu — ve okurken kodlama sorunu yok: baytları biz
- * yorumluyoruz, Excel değil.
- */
-export async function parseProductFile(
-  buffer: Buffer,
-  fileName: string,
-  options: ImportOptions = {},
-): Promise<ParsedFile> {
-  const limit = options.rowLimit ?? IMPORT_ROW_LIMIT
-
-  const matrix = await readSheet(buffer, fileName)
-  const headerRow = matrix[0]
-  if (!headerRow || headerRow.every((c) => c.trim() === '')) {
-    throw new AppError('IMPORT_NO_HEADER', 'file has no header row')
-  }
-
-  const columns = mapColumns(headerRow)
-  if (columns.sku === undefined || columns.name === undefined) {
-    // Bu ikisi olmadan hiçbir satır anlamlandırılamaz; satır bazlı hata
-    // vermek 800 kere aynı şeyi yazmak olurdu.
-    throw new AppError('IMPORT_MISSING_COLUMN', 'sku and name columns are required', {
-      found: headerRow.join(', '),
-    })
-  }
-
-  const rows: RawRow[] = []
-  for (let i = 1; i < matrix.length; i += 1) {
-    const raw = matrix[i]!
-    // Tamamen boş satır atlanıyor: Excel dosyalarının sonunda yüzlerce
-    // boş satır olması çok yaygın ve bunları hata olarak raporlamak
-    // raporu okunamaz hâle getirirdi.
-    if (raw.every((c) => c.trim() === '')) continue
-
-    if (rows.length >= limit) {
-      throw new AppError('IMPORT_TOO_LARGE', `file has more than ${limit} rows`, { limit })
-    }
-
-    const cells = {} as Record<keyof ParsedRow, string>
-    for (const [field, index] of Object.entries(columns) as [keyof ParsedRow, number][]) {
-      cells[field] = (raw[index] ?? '').trim()
-    }
-    // Satır numarası DOSYADAKİ numara (1 tabanlı, başlık dahil): kullanıcı
-    // hatayı Excel'de bu numarayla bulacak.
-    rows.push({ rowNumber: i + 1, cells })
-  }
-
-  const ignoredQtyColumns = headerRow
-    .map((h) => h.trim())
-    .filter((h) => AMBIGUOUS_QTY_HEADERS.includes(normalizeHeader(h)))
-
-  return { rows, columns: Object.keys(columns) as (keyof ParsedRow)[], ignoredQtyColumns }
-}
-
-/**
- * `.csv` ya da `.xlsx` dosyasını hücre metinleri matrisine çevirir; başlık
- * yorumlamaz. Tedarikçi dosyası (T200) da bu okuyucuyu kullanıyor: ikinci bir
- * okuyucu, BOM, `;` ayırıcı ve önekli SpreadsheetML derslerini yeniden
- * öğrenmek zorunda kalırdı.
- */
-export async function readSheet(buffer: Buffer, fileName: string): Promise<string[][]> {
-  return fileName.toLowerCase().endsWith('.csv') ? parseCsv(buffer) : parseXlsx(buffer)
-}
-
-async function parseXlsx(buffer: Buffer): Promise<string[][]> {
-  const workbook = new ExcelJS.Workbook()
-  const readable = await unprefixSpreadsheetMl(buffer)
-  await workbook.xlsx.load(readable as unknown as Parameters<typeof workbook.xlsx.load>[0])
-  const sheet = workbook.worksheets[0]
-  if (!sheet) throw new AppError('IMPORT_NO_HEADER', 'workbook has no sheet')
-
-  const matrix: string[][] = []
-  sheet.eachRow({ includeEmpty: true }, (row) => {
-    const cells: string[] = []
-    row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-      cells[colNumber - 1] = cellText(cell.value)
-    })
-    matrix.push(cells.map((c) => c ?? ''))
-  })
-  return matrix
-}
-
-const SPREADSHEETML_NS = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'
-/** XML bildiriminden sonraki ilk öğe, önekliyse: `<x:workbook xmlns:x="…">`. JS'te `\s` BOM'u da kapsıyor. */
-const PREFIXED_ROOT = /^\s*(?:<\?[\s\S]*?\?>\s*)?<([A-Za-z_]\w*):[A-Za-z_][\w.-]*[^>]*>/
-
-/**
- * ExcelJS etiketleri öneksiz arıyor (`<workbook>`, `<row>`, `<c>`) ve ad
- * alanı çözmüyor; .NET Open XML SDK ise SpreadsheetML'i önekli yazıyor
- * (`<x:workbook>`). Bu biçimdeki dosyalarda (ChatGPT'nin ürettiği xlsx ve SDK
- * kullanan programların dışa aktarımları) ExcelJS kitabı bulamayıp TypeError
- * atıyor, kullanıcı "beklenmeyen hata" görüyordu. Kök öğesi SpreadsheetML'e
- * bağlı bir önekle başlayan parçalardan o önek atılıyor.
- *
- * Kökü öneksiz parçalara dokunulmuyor: ExcelJS'in zaten okuduğu dosyalarda
- * davranış değişmesin, çizim gibi öneki ExcelJS'in de beklediği parçalar
- * (`xdr:wsDr`) bozulmasın. Değişen parça yoksa dosya yeniden paketlenmiyor.
- */
-async function unprefixSpreadsheetMl(buffer: Buffer): Promise<Buffer> {
-  const zip = await JSZip.loadAsync(buffer)
-  let changed = false
-  for (const entry of Object.values(zip.files)) {
-    if (entry.dir || !entry.name.endsWith('.xml')) continue
-    const xml = await entry.async('string')
-    const root = PREFIXED_ROOT.exec(xml)
-    if (!root?.[0].includes(`xmlns:${root[1]}="${SPREADSHEETML_NS}"`)) continue
-    zip.file(entry.name, xml.replace(new RegExp(`<(/?)${root[1]}:`, 'g'), '<$1'))
-    changed = true
-  }
-  return changed ? zip.generateAsync({ type: 'nodebuffer' }) : buffer
-}
-
-/** Hücre değerini metne çevirir. Formül sonucu ve zengin metin dahil. */
-function cellText(value: ExcelJS.CellValue): string {
-  if (value === null || value === undefined) return ''
-  if (value instanceof Date) return value.toISOString()
-  if (typeof value === 'object') {
-    if ('text' in value && typeof value.text === 'string') return value.text
-    if ('richText' in value && Array.isArray(value.richText)) {
-      return value.richText.map((part) => part.text).join('')
-    }
-    // Formül hücresinde YAZILAN formül değil HESAPLANAN değer alınıyor:
-    // kullanıcı ekranda 12,50 görüyorsa dosyada da o girmeli.
-    if ('result' in value) return cellText(value.result as ExcelJS.CellValue)
-    if ('hyperlink' in value && 'text' in value) return String(value.text)
-    return ''
-  }
-  return String(value)
-}
-
-/**
- * Küçük bir CSV çözümleyici. Tırnak içi ayırıcı ve çift tırnak kaçışı
- * destekleniyor; bunlar ürün adında gerçekten görülüyor ("15" cetvel").
- *
- * AYIRICI OTOMATİK: Türkçe Excel `;` ile kaydediyor çünkü ondalık ayırıcı
- * virgül. Sabit `,` varsayımı, Türkiye'de üretilmiş dosyaların çoğunu tek
- * sütun olarak okurdu.
- *
- * BOM ATILIYOR: Excel'in yazdığı UTF-8 BOM ilk başlığın başına yapışır ve
- * "Stok Kodu" sütunu eşleşmez.
- */
-export function parseCsv(buffer: Buffer): string[][] {
-  let text = buffer.toString('utf8')
-  if (text.charCodeAt(0) === 0xfeff) text = text.slice(1)
-
-  const firstLine = text.split(/\r?\n/, 1)[0] ?? ''
-  const delimiter = countOutsideQuotes(firstLine, ';') > countOutsideQuotes(firstLine, ',') ? ';' : ','
-
-  const rows: string[][] = []
-  let row: string[] = []
-  let field = ''
-  let inQuotes = false
-
-  for (let i = 0; i < text.length; i += 1) {
-    const ch = text[i]!
-    if (inQuotes) {
-      if (ch === '"') {
-        if (text[i + 1] === '"') {
-          field += '"'
-          i += 1
-        } else inQuotes = false
-      } else field += ch
-      continue
-    }
-    if (ch === '"') inQuotes = true
-    else if (ch === delimiter) {
-      row.push(field)
-      field = ''
-    } else if (ch === '\n') {
-      row.push(field)
-      rows.push(row)
-      row = []
-      field = ''
-    } else if (ch !== '\r') field += ch
-  }
-  if (field !== '' || row.length > 0) {
-    row.push(field)
-    rows.push(row)
-  }
-  return rows
-}
-
-function countOutsideQuotes(line: string, ch: string): number {
-  let count = 0
-  let inQuotes = false
-  for (const c of line) {
-    if (c === '"') inQuotes = !inQuotes
-    else if (c === ch && !inQuotes) count += 1
-  }
-  return count
-}
-
-// ---------------------------------------------------------------------------
 // ÖNİZLEME
 // ---------------------------------------------------------------------------
 
-/** Sütun başlığını kullanıcıya gösterilecek hâle çevirir. */
-const COLUMN_LABELS: Record<keyof ParsedRow, string> = {
-  sku: 'Stok Kodu',
-  name: 'Ürün Adı',
-  unit: 'Birim',
-  category: 'Kategori',
-  brand: 'Marka',
-  imageUrl: 'Görsel URL',
-  purchasePrice: 'Alış Fiyatı',
-  salePrice: 'Satış Fiyatı',
-  minStock: 'Kritik Seviye',
-  barcode: 'Barkod',
-  barcodeKind: 'Barkod Türü',
-  qtyMultiplier: 'Koli İçi Adet',
-  openingQty: 'Açılış Stoğu',
-}
-
 /**
- * Türkçe sayı: "1.234,56" → 1234.56.
- *
- * Nokta binlik, virgül ondalık. Bunu yapmazsak muhasebeden gelen her
- * fiyat ya reddedilir ya da bin kat yanlış okunur — ikisi de kötü ama
- * ikincisi çok daha kötü, çünkü sessiz.
+ * Okunamayan sayı hücresinin mesajı. Belirsiz Türkçe yazım ("1.234") ayrı
+ * söyleniyor (K1): "okunamadı" demek kullanıcıyı hücrede bir yazım hatası
+ * aramaya gönderirdi; asıl sorun yazımın iki anlama gelmesi.
  */
-export function parseTurkishNumber(raw: string): number | undefined {
-  const text = raw.trim()
-  if (text === '') return undefined
-  const hasComma = text.includes(',')
-  const cleaned = hasComma ? text.replace(/\./g, '').replace(',', '.') : text
-  const value = Number(cleaned)
-  return Number.isFinite(value) ? value : Number.NaN
+function numberIssue(cell: string, fallback: string): string {
+  return isAmbiguousTurkishNumber(cell) ? ambiguousNumberMessage(cell) : fallback
 }
 
 function parseUnit(raw: string): Unit | undefined | null {
@@ -547,11 +239,16 @@ export async function previewImport(
       update: rows.filter((r) => r.action === 'update').length,
       error: rows.filter((r) => r.action === 'error').length,
     },
-    notices: (file.ignoredQtyColumns ?? []).map(
-      (header) =>
-        `"${header}" sütunu açılış stoğu olarak okunmadı. Açılış stoğu girmek için sütunun adı "Açılış Stoğu" olmalı.`,
-    ),
+    notices: importNotices(file.ignoredQtyColumns ?? []),
   }
+}
+
+/** Dosya düzeyi uyarılar. Aktarım kaydı da (T171) aynı cümleleri saklıyor. */
+export function importNotices(ignoredQtyColumns: string[]): string[] {
+  return ignoredQtyColumns.map(
+    (header) =>
+      `"${header}" sütunu açılış stoğu olarak okunmadı. Açılış stoğu girmek için sütunun adı "Açılış Stoğu" olmalı.`,
+  )
 }
 
 function evaluateRow(
@@ -612,7 +309,7 @@ function evaluateRow(
       continue
     }
     if (Number.isNaN(parsed)) {
-      push(field, 'Sayı olarak okunamadı')
+      push(field, numberIssue(raw.cells[field] ?? '', 'Sayı olarak okunamadı'))
       continue
     }
     data[field] = parsed
@@ -626,14 +323,17 @@ function evaluateRow(
   else if (kind !== undefined) data.barcodeKind = kind
 
   const multiplier = parseTurkishNumber(raw.cells.qtyMultiplier ?? '')
-  if (Number.isNaN(multiplier)) push('qtyMultiplier', 'Sayı olarak okunamadı')
-  else if (multiplier !== undefined) data.qtyMultiplier = multiplier
+  if (Number.isNaN(multiplier)) {
+    push('qtyMultiplier', numberIssue(raw.cells.qtyMultiplier ?? '', 'Sayı olarak okunamadı'))
+  } else if (multiplier !== undefined) data.qtyMultiplier = multiplier
 
   if (file.columns.includes('openingQty')) {
     const opening = parseTurkishNumber(raw.cells.openingQty ?? '')
     // Boş ya da 0: devir yok. Hata değil; dosyaların çoğunda boş hücre olur.
     if (opening !== undefined && opening !== 0) {
-      if (Number.isNaN(opening)) push('openingQty', 'Açılış stoğu sayı olarak okunamadı')
+      if (Number.isNaN(opening)) {
+        push('openingQty', numberIssue(raw.cells.openingQty ?? '', 'Açılış stoğu sayı olarak okunamadı'))
+      }
       else if (opening < 0) push('openingQty', 'Açılış stoğu sıfırdan büyük olmalı')
       else {
         const checked = qtySchema.safeParse(opening)
@@ -727,7 +427,7 @@ function evaluateRow(
     name,
     issues: [],
     data,
-    ...(productId ? { productId } : {}),
+    ...(productId ? { productId, productVersion: existingProduct!.version } : {}),
     ...(opening ? { opening } : {}),
     ...(warnings.length > 0 ? { warnings } : {}),
   }
@@ -790,6 +490,8 @@ interface ExistingProduct {
   unitBarcode: string | null
   /** Önizleme için danışma bilgisi; yazma anındaki karar kilit altında. */
   hasMovements: boolean
+  /** Satırın PostgreSQL sürümü (`xmin`), önizleme anında (T171, K3; `PRODUCT_VERSION`). */
+  version: string
 }
 
 /**
@@ -816,6 +518,7 @@ async function findExistingProducts(
           sku: products.sku,
           unit: products.unit,
           purchasePrice: products.purchasePrice,
+          version: PRODUCT_VERSION,
         })
         .from(products)
         .where(and(eq(products.tenantId, actor.tenantId), inArray(products.sku, skus)))
@@ -860,6 +563,7 @@ async function findExistingProducts(
         purchasePrice: r.purchasePrice === null ? null : Number(r.purchasePrice),
         unitBarcode: firstUnitBarcode.get(r.id) ?? null,
         hasMovements: hasMovements.has(r.id),
+        version: r.version,
       },
     ]),
   )
@@ -911,7 +615,7 @@ const OPENING_NOTE = 'Toplu içe aktarma: açılış stoğu'
  * TEK BÜYÜK TRANSACTION DEĞİL, SATIR SATIR. 800 satırlık bir aktarımda
  * 799'u yazıp sonuncuda geri almak, kullanıcıyı hiçbir ilerleme kaydetmeden
  * baştan başlatır — üstelik hata çoğu zaman tek bir bozuk satırdan geliyor.
- * Ürün ve barkodları kendi içinde atomik (`createProduct` tek transaction),
+ * Ürün ve barkodları kendi içinde atomik (`insertProduct` tek transaction),
  * yani yarım ürün oluşmuyor; atomik olmayan tek şey "dosyanın tamamı".
  *
  * ÖNİZLEMEDE GÖRÜLMEYEN HATA YİNE DE OLABİLİR: başka bir admin aradaki
@@ -938,37 +642,100 @@ export async function commitImport(
 
   for (const row of preview.rows) {
     if (row.action === 'error' || !row.data) continue
-    let productId: string
-    try {
-      if (row.action === 'create') {
-        const created = await createProduct(actor, createPayload(row.data), options)
-        productId = created.productId
-        result.created += 1
-      } else {
-        await updateProduct(actor, row.productId!, updatePatch(row.data), options)
-        // Barkod verilmişse ve üründe yoksa ekleniyor. Var olanı
-        // güncellemek YOK: bir barkodun hangi ürüne ait olduğunu
-        // değiştirmek toplu dosyayla yapılacak bir iş değil.
-        if (row.data.barcode) await attachIfMissing(actor, row, options)
-        productId = row.productId!
-        result.updated += 1
-      }
-    } catch (err) {
+    const outcome = await applyRow(actor, row, options)
+    if (outcome.status !== 'DONE') {
       result.failed += 1
       result.errors.push({
         ...row,
         action: 'error',
-        issues: [{ column: '', message: messageOf(err) }],
+        issues: [{ column: '', message: outcome.message ?? 'Beklenmeyen bir hata oluştu' }],
       })
-      // Ürün işi başarısızsa devir DENENMİYOR: barkod başka bir ürüne aitse
-      // devir o ürüne yazılırdı.
       continue
     }
+    if (row.action === 'create') result.created += 1
+    else result.updated += 1
 
-    if (row.opening) await writeOpening(actor, row, row.opening, productId, result, options)
+    if (outcome.opening) {
+      result.openings[OPENING_COUNTER[outcome.opening.outcome]] += 1
+      if (outcome.opening.message) {
+        result.notices.push({
+          rowNumber: row.rowNumber,
+          sku: row.sku,
+          name: row.name,
+          message: outcome.opening.message,
+        })
+      }
+    }
   }
 
   return result
+}
+
+const OPENING_COUNTER = { WRITTEN: 'written', SKIPPED: 'skipped', FAILED: 'failed' } as const
+
+/** Tek satırın uygulanmasının sonucu. Toplu aktarım kaydı (T171) bunu satıra yazıyor. */
+export interface RowOutcome {
+  /** `DONE`: ürün yazıldı. `CONFLICT`: önizlemeden sonra başkası değiştirdi (K3). */
+  status: 'DONE' | 'FAILED' | 'CONFLICT'
+  productId?: string
+  /** Ürün yazılamadıysa nedeni. */
+  message?: string
+  /** Açılış stoğu planlıysa sonucu; ürün yazılamadıysa yok (denenmedi). */
+  opening?: { outcome: ImportOpeningOutcome; message?: string }
+}
+
+export interface ApplyRowOptions extends ImportOptions {
+  /**
+   * Güncellemede önizleme anındaki sürümü şart koş (K3). Aktarım kaydı (T171)
+   * veriyor; eski tek istekli `commitImport` vermiyor, çünkü o önizlemeyi
+   * yazımdan hemen önce yeniden hesaplıyordu.
+   */
+  checkVersion?: boolean
+}
+
+/**
+ * Önizlemede geçerli bulunmuş TEK satırı uygular: ürün, gerekirse barkod, sonra
+ * açılış stoğu. Hiçbir hatayı dışarı atmıyor; sonucu söylüyor.
+ *
+ * Ürün işi başarısızsa devir DENENMİYOR: barkod başka bir ürüne aitse devir o
+ * ürüne yazılırdı. Devir yazılamazsa ürün işi geri alınmıyor (satır satır
+ * ilkesi); sonuç notu ne olduğunu söylüyor, tekrar çalıştırma eksik devri
+ * tamamlıyor (DAT-18: idempotency anahtarı ürün başına sabit).
+ */
+export async function applyRow(
+  actor: Actor,
+  row: PreviewRow,
+  options: ApplyRowOptions = {},
+): Promise<RowOutcome> {
+  const data = row.data!
+  let productId: string
+  try {
+    if (row.action === 'create') {
+      productId = await insertProduct(actor, createPayload(data), options)
+    } else {
+      await patchProduct(actor, row.productId!, updatePatch(data), {
+        db: options.db,
+        ...(options.checkVersion && row.productVersion ? { expectedVersion: row.productVersion } : {}),
+      })
+      // Barkod verilmişse ve üründe yoksa ekleniyor. Var olanı
+      // güncellemek YOK: bir barkodun hangi ürüne ait olduğunu
+      // değiştirmek toplu dosyayla yapılacak bir iş değil.
+      if (data.barcode) await attachIfMissing(actor, row, options)
+      productId = row.productId!
+    }
+  } catch (err) {
+    // Çakışma ayrı: dosyada hata yok, başkası önizlemeden sonra davrandı.
+    // "Yeni" satırda aynı stok kodu arada açıldıysa da çakışma; sessizce
+    // güncellemeye dönüşmüyor.
+    const conflict =
+      options.checkVersion &&
+      err instanceof AppError &&
+      (err.code === 'PRODUCT_CHANGED' || (row.action === 'create' && err.code === 'SKU_EXISTS'))
+    return { status: conflict ? 'CONFLICT' : 'FAILED', message: messageOf(err) }
+  }
+
+  if (!row.opening) return { status: 'DONE', productId }
+  return { status: 'DONE', productId, opening: await writeOpening(actor, row, row.opening, productId, options) }
 }
 
 /**
@@ -978,22 +745,15 @@ export async function commitImport(
  * `requireFirstMovement`: ürünün hareketi varsa devir yazılmıyor, ürün
  * bilgisi yine güncellenmiş oluyor. Kontrol önizlemede değil kilit altında:
  * önizleme ile onay arasında satış girilmiş olabilir.
- *
- * Devir yazılamazsa ürün işi geri alınmıyor (satır satır ilkesi); satır notu
- * ne olduğunu söylüyor, tekrar çalıştırma eksik devri tamamlıyor.
  */
 async function writeOpening(
   actor: Actor,
   row: PreviewRow,
   plan: OpeningPlan,
   productId: string,
-  result: CommitResult,
   options: ImportOptions,
-): Promise<void> {
+): Promise<NonNullable<RowOutcome['opening']>> {
   const done = row.action === 'create' ? 'Ürün eklendi' : 'Ürün güncellendi'
-  const note = (message: string) =>
-    result.notices.push({ rowNumber: row.rowNumber, sku: row.sku, name: row.name, message })
-
   try {
     const written = await createMovement(
       actor,
@@ -1009,21 +769,17 @@ async function writeOpening(
       { db: options.db, requireFirstMovement: true },
     )
     if (written.duplicate) {
-      result.openings.skipped += 1
-      note(
-        `${done}, devir daha önce yazılmış (${formatQty(Math.abs(written.delta), plan.unit)}); dosyadaki değer yazılmadı`,
-      )
-    } else {
-      result.openings.written += 1
+      return {
+        outcome: 'SKIPPED',
+        message: `${done}, devir daha önce yazılmış (${formatQty(Math.abs(written.delta), plan.unit)}); dosyadaki değer yazılmadı`,
+      }
     }
+    return { outcome: 'WRITTEN' }
   } catch (err) {
     if (err instanceof AppError && err.code === 'PRODUCT_HAS_MOVEMENTS') {
-      result.openings.skipped += 1
-      note(`${done}, devir atlandı: üründe hareket var`)
-    } else {
-      result.openings.failed += 1
-      note(`${done}, devir yazılamadı: ${messageOf(err)}`)
+      return { outcome: 'SKIPPED', message: `${done}, devir atlandı: üründe hareket var` }
     }
+    return { outcome: 'FAILED', message: `${done}, devir yazılamadı: ${messageOf(err)}` }
   }
 }
 
@@ -1073,56 +829,22 @@ async function attachIfMissing(
 /**
  * Hatayı kullanıcıya gösterilecek Türkçe metne çevirir.
  *
- * `errorText` KULLANILMIYOR çünkü bu metin bir Excel hücresine yazılıyor
- * ve satır bağlamı zaten raporda var; ayrıca `AppError` olmayan bir hata
- * geldiğinde iç ayrıntı sızmasın diye genel bir cümleye düşüyoruz.
+ * `AppError` olmayan bir hata geldiğinde iç ayrıntı sızmasın diye genel bir
+ * cümleye düşüyoruz.
+ *
+ * GÜNLÜĞE HAM HATA YAZILMIYOR (T171 güvence 7, T204): Drizzle'ın hata mesajı
+ * sorgu parametrelerini, PostgreSQL'in "Failing row contains" ayrıntısı satır
+ * değerlerini taşıyor; içe aktarılan alış fiyatları ve barkodlar günlüğe
+ * düşerdi (INV-10). Yalnız hata sınıfı, SQLSTATE ve constraint adı yazılıyor.
  */
 function messageOf(err: unknown): string {
   if (err instanceof AppError) return errorText(err.code, err.details)
-  console.error('[import]', err)
+  console.error('[import] beklenmeyen hata', {
+    type: err instanceof Error ? err.name : typeof err,
+    code: pgErrorCode(err),
+    constraint: pgConstraint(err),
+  })
   return 'Beklenmeyen bir hata oluştu'
-}
-
-// ---------------------------------------------------------------------------
-// HATA RAPORU
-// ---------------------------------------------------------------------------
-
-/**
- * Hatalı satırları Excel olarak döndürür.
- *
- * Neden ekrandaki liste yetmiyor: 800 satırlık bir dosyada 60 hata varsa
- * kullanıcı onları ekrandan tek tek okuyup düzeltemez. Rapor, satır
- * numarası ve sütun adıyla birlikte iniyor; kullanıcı iki dosyayı yan yana
- * açıp düzeltiyor.
- */
-export function importErrorRows(errors: PreviewRow[]): ImportErrorRow[] {
-  return errors.flatMap((row) =>
-    row.issues.map((issue) => ({
-      rowNumber: row.rowNumber,
-      sku: row.sku,
-      name: row.name,
-      column: issue.column,
-      message: issue.message,
-    })),
-  )
-}
-
-export interface ImportErrorRow {
-  rowNumber: number
-  sku: string
-  name: string
-  column: string
-  message: string
-}
-
-export function importErrorColumns(): SheetColumn<ImportErrorRow>[] {
-  return [
-    { header: 'Satır', width: 8, value: (r) => r.rowNumber },
-    { header: 'Stok Kodu', width: 16, value: (r) => r.sku },
-    { header: 'Ürün Adı', width: 32, value: (r) => r.name },
-    { header: 'Sütun', width: 16, value: (r) => r.column },
-    { header: 'Hata', width: 52, value: (r) => r.message },
-  ]
 }
 
 /**

@@ -55,7 +55,7 @@ const HEADER = 'Stok Kodu;Ürün Adı;Birim;Alış Fiyatı;Barkod;Barkod Türü;
 const HEADER_NO_PRICE = 'Stok Kodu;Ürün Adı;Açılış Stoğu'
 
 async function plan(lines: string[]) {
-  const file = await parseProductFile(Buffer.from(lines.join('\n'), 'utf8'), 'devir.csv', opts)
+  const file = await parseProductFile(Buffer.from(lines.join('\n'), 'utf8'), 'devir.csv')
   return previewImport(boss, file, opts)
 }
 
@@ -267,7 +267,7 @@ describe('uygulama', () => {
     const skus = [uniq('ES-'), uniq('ES-'), uniq('ES-')]
     const lines = [HEADER, ...skus.map((s) => `${s};Eş Zaman;Adet;5;${uniq('bc')};Tekli;1;10`)]
     // Ürünler önce yaratılıyor; devir iki eşzamanlı uygulamada yarışıyor.
-    const file = await parseProductFile(Buffer.from(lines.join('\n'), 'utf8'), 'es.csv', opts)
+    const file = await parseProductFile(Buffer.from(lines.join('\n'), 'utf8'), 'es.csv')
     await commitImport(boss, await previewImport(boss, { ...file, columns: file.columns.filter((c) => c !== 'openingQty') }, opts), opts)
 
     const [one, two] = await Promise.all([

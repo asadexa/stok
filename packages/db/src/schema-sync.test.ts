@@ -3,6 +3,10 @@ import {
   BARCODE_KINDS,
   BARCODE_KIND_VALUES,
   CURRENCY_VALUES,
+  IMPORT_OPENING_OUTCOME_VALUES,
+  IMPORT_ROW_ACTION_VALUES,
+  IMPORT_ROW_STATUS_VALUES,
+  IMPORT_RUN_STATUS_VALUES,
   JOB_KIND_VALUES,
   JOB_STATUS_VALUES,
   MOVEMENT_REASON_VALUES,
@@ -131,6 +135,22 @@ describe('DB CHECK constraint kod ile senkron', () => {
       ['supplier_price_changes_new_tax_mode_ck', TAX_MODE_VALUES],
       ['supplier_price_changes_old_price_type_ck', SUPPLIER_PRICE_TYPE_VALUES],
       ['supplier_price_changes_new_price_type_ck', SUPPLIER_PRICE_TYPE_VALUES],
+    ]
+    for (const [name, values] of expected) {
+      const def = await constraintDefinition(name)
+      expect(def, `${name} veritabanında yok`).toBeDefined()
+      expect(valuesIn(def!), name).toEqual([...values].sort())
+    }
+  })
+
+  it('aktarım kaydı durumları kod ile senkron (T171)', async () => {
+    // Yeni bir satır durumu koda eklenip migration üretilmezse aktarım
+    // ortasında 23514 ile patlar: satır işlenir ama sonucu yazılamaz.
+    const expected: [string, readonly string[]][] = [
+      ['import_runs_status_ck', IMPORT_RUN_STATUS_VALUES],
+      ['import_run_rows_status_ck', IMPORT_ROW_STATUS_VALUES],
+      ['import_run_rows_action_ck', IMPORT_ROW_ACTION_VALUES],
+      ['import_run_rows_opening_outcome_ck', IMPORT_OPENING_OUTCOME_VALUES],
     ]
     for (const [name, values] of expected) {
       const def = await constraintDefinition(name)

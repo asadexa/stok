@@ -4,7 +4,7 @@ Yalnız BUGÜNÜN gerçeği. Her merge'te ya da durum değiştiğinde güncellen
 satırlar silinir (tarihçe git'te). Ayrıntı yazılmaz: işler → `TODOS.md`,
 kararlar → `DECISIONS.md`, model → `PROJECT_BRAIN.md`.
 
-**Tarih:** 2026-10-22 · **Çalışma branch'i:** `development` · **Stabil referans:** `master`
+**Tarih:** 2026-10-23 · **Çalışma branch'i:** `development` · **Stabil referans:** `master`
 (`master` = `dac05ff`, devralma öncesi son kod; geliştirme `development`'ta yapılır)
 
 ## Deploy
@@ -32,8 +32,32 @@ filtresiyle "Excel'e aktar 16 satır" → 16 satırlık dosya; her "Tarih" hücr
 `created_at`'in Europe/Istanbul duvar saati (UTC'de 9 Ekim 22:33 olan satır
 `10.10.2026 01:33`), dosya adı `hareket-20261010-1439.xlsx`.
 
-İçe aktarma, 2.000 satır (ayrı test veritabanı): devirli ilk koşu 47,1 sn, tekrar
-32,5 sn (ikinci devir yazılmadı), önizleme 125–305 ms; devirsiz taban 23,5 sn (T171).
+İçe aktarma, 2.000 satır (ayrı test veritabanı, 2026-10-10, eski tek istekli yol): devirli ilk
+koşu 47,1 sn, tekrar 32,5 sn (ikinci devir yazılmadı), önizleme 125–305 ms; devirsiz taban 23,5 sn.
+
+T171 kapıları (2026-10-23, commit öncesi yerel koşu; `TZ=UTC`, saat T122 penceresinde): lint (proje
+klasörleri, T206) 235 dosya 0 tanı, typecheck (4 paket), test **1254/1254** (shared 82, db 326,
+core 659, web 187; T207 bu koşuda geçti), drift "No schema changes", `next build` PASS, Playwright
+**30/30** (izole `stok_test_e2e_t171` veritabanı ve 3100 portu; demo veritabanına yazılmadı).
+
+T171 ölçümü (2026-10-23, izole `stok_test_perf`, core doğrudan, yarı yeni yarı güncelleme). Bu
+makine bugün 2026-10-10'dan ~2,5–3 kat yavaş: tek sorgu 1,9 ms, boş `withTenant` transaction'ı
+9,8 ms; kontrol olarak eski yol (`commitImport`) 2.000 satırda devirsiz 20 ms/satır, devirli
+59,5 ms/satır. Yeni yol, satır başına işlem süresi:
+
+| Satır | Devirsiz | Devirli | Önizleme | Gönderim |
+|---|---|---|---|---|
+| 300 | 12,4 sn (41 ms/satır) | 23,9 sn (80) | 0,1 sn | 0,2 sn |
+| 2.000 | 85,6 sn (43) | 160 sn (80) | 0,3 sn | 0,4 sn |
+| 5.000 | 186 sn (37) | 355 sn (71) | 0,5 sn | 1,0 sn |
+| 10.000 | 357 sn (36) | 701 sn (70) | 1,0–1,2 sn | 1,7 sn |
+| 20.000 | 692 sn (35) | 1.353 sn (68) | 2,1–2,2 sn | 3,4 sn |
+
+Hepsi `DONE`, defter = projeksiyon, mükerrer devir yok; en uzun parça 2,18 sn; ölçüm sürecinin
+en yüksek belleği 417 MiB (20.000 devirli). Tarayıcı (yerel `next start`): 97,6 MiB'lık, 20.000
+satırlı, görselli xlsx okuma 2,0 sn, okuma + gönderim + önizleme 8,2 sn, ana iş parçacığında en uzun
+blok 94 ms; 101 MiB'lık dosya okunmadan reddedildi. Yeni yolun eski yola ek maliyeti satır başına
+alma transaction'ı (devirsizde ~15 ms, devirlide ~10–20 ms).
 
 Gerçek cihaz kabulü (WS-SCAN, iPhone Safari, HTTPS tünel, laptop `next start`):
 gerçek barkod telefon kamerasıyla okunuyor, ürün laptopta `/hareket`te açılıyor,
@@ -102,8 +126,10 @@ okutup `/hareket`te açma (`ENABLE_PHONE_SCANNER`, `PRD-12`, `ARC-14`).
 - **Çok kiracıda aynı e-posta**: web'de giriş çıkmazı (T123).
 - **Sağlık alarmı**: bir kez FAILED olan iş kalıcı, alarm her saat tekrar eder (T126).
 - **Düzeltme / ters hareket**: akış yok (T127).
-- **İçe aktarma**: büyük dosya tek istekte uzun sürüyor (2.000 devirli satır 47 sn; T171);
-  devirde geçmiş tarihli fiyat yok (T172); birim değişimi sonrası eski veri denetlenmiyor (T170).
+- **İçe aktarma**: T171 (20.000 satır, 100 MB, ilerleme, iptal) geliştirme tamamlandı, manuel
+  UAT bekleniyor. 20.000 devirli satır bu makinede ~23 dk; sekme açık kalmalı. T171 çalışmasında
+  yerel demo veritabanına migration uygulanmadı; ekran için 0013 gerekir (`pnpm demo` uygular). Devirde geçmiş tarihli fiyat yok (T172); birim değişimi sonrası eski veri denetlenmiyor (T170).
+- **Kuyruğa alınan büyük dışa aktarma**: cron'da işleyicisi yok, çalışmıyor (T216, kod okumasıyla).
 - **Ürün görseli**: yalnız URL; yükleme yok (T136).
 - **Kritik stok**: yalnız e-posta, push yok.
 - **Konum yönetimi**: arayüz yok.
@@ -176,8 +202,8 @@ geçici kapsayıcıda izole inceleme, yalnız tanınan kümede silme. Geliştirm
 ## Sıradaki workstream
 
 **Yol haritasının üstü** (kullanıcı kararı, 2026-10-22; 2026-10-17 sırasının yerine), bu sırayla:
-1. **T171 toplu ürün aktarımı → 20.000 satır**: önce PLAN. 20.000 satır ürün gereksinimi; mimari
-   (parçalama, iş kuyruğu vb.) kararlaştırılmadı. Yalnız `IMPORT_ROW_LIMIT`'i artırmak yok.
+1. **T171 toplu ürün aktarımı → 20.000 satır**: geliştirme tamamlandı, manuel UAT bekleniyor
+   (`ARC-15`, ADR-007, `DAT-20`, S21, F-02). Kabul testinden önce kapatılmaz.
 2. **T201 gerçek tedarikçi API'si**: ilk hedef, erişimi sağlanabilen bir sağlayıcıyla uçtan uca.
    Sağlayıcı, kimlik doğrulama ve yaklaşım PLAN'da kanıtla seçilir; gerçek sağlayıcı seçilmeden genel
    entegrasyon iddia edilmez.

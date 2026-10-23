@@ -52,6 +52,28 @@ export interface ProductOptions {
   db?: Db
 }
 
+/**
+ * Ürün satırının sürümü: PostgreSQL'in `xmin`'i, metin olarak (T171, K3).
+ *
+ * Satıra yazılan HER UPDATE yeni bir satır sürümü ve yeni `xmin` üretiyor;
+ * okuma üretmiyor. Ürün satırını yalnız `updateProduct` ve arşivleme
+ * güncelliyor, stok hareketleri ürün satırına yazmıyor (stok `current_stock`'ta).
+ * Bu yüzden "önizlemeden beri değişti mi" sorusuna yanlış çakışma üretmeden
+ * cevap veriyor ve şemaya sütun eklemeyi gerektirmiyor. Dakikalar içindeki
+ * eşitlik karşılaştırması için güvenli; sıralama ya da kalıcı kimlik olarak
+ * KULLANILMAZ (yedekten geri yüklemede değişir).
+ */
+export const PRODUCT_VERSION = sql<string>`${products}.xmin::text`
+
+export interface UpdateProductOptions extends ProductOptions {
+  /**
+   * Verilirse güncelleme yalnız ürün bu sürümdeyse yapılır; değilse
+   * `PRODUCT_CHANGED`. Toplu aktarım veriyor: önizleme ile yazım arasında başka
+   * bir kullanıcının değişikliği dosyadaki değerle sessizce ezilmesin.
+   */
+  expectedVersion?: string
+}
+
 export interface BarcodeRow {
   id: string
   barcode: string
@@ -171,6 +193,20 @@ export async function createProduct(
   raw: unknown,
   options: ProductOptions = {},
 ): Promise<ProductDetail> {
+  return getProductDetail(actor, await insertProduct(actor, raw, options), options)
+}
+
+/**
+ * Ürünü ve barkodlarını yazar, kimliğini döndürür; `createProduct`'ın yazma
+ * yarısı. Toplu aktarım (T171) satır başına bunu çağırıyor: yazılanı ayrıca
+ * yeniden okumak her satıra iki transaction ekliyordu (ölçüm: satır başına
+ * ~10 ms, 20.000 satırda ~3 dk) ve aktarım okunan detayı kullanmıyor.
+ */
+export async function insertProduct(
+  actor: Actor,
+  raw: unknown,
+  options: ProductOptions = {},
+): Promise<string> {
   requirePermission(actor, 'product:create')
   // Barkodsuz ürün okutulamaz, yani şema en az bir barkod istiyor. O da
   // ayrı bir yetki: ikisini de arıyoruz, yoksa `product:create` verilmiş
@@ -229,15 +265,26 @@ export async function createProduct(
     options.db,
   )
 
-  return getProductDetail(actor, productId, options)
+  return productId
 }
 
 export async function updateProduct(
   actor: Actor,
   productId: string,
   raw: unknown,
-  options: ProductOptions = {},
+  options: UpdateProductOptions = {},
 ): Promise<ProductDetail> {
+  await patchProduct(actor, productId, raw, options)
+  return getProductDetail(actor, productId, options)
+}
+
+/** `updateProduct`'ın yazma yarısı; yeniden okumuyor (bkz. `insertProduct`). */
+export async function patchProduct(
+  actor: Actor,
+  productId: string,
+  raw: unknown,
+  options: UpdateProductOptions = {},
+): Promise<void> {
   requirePermission(actor, 'product:update')
   const input = parseOrThrow(updateProductSchema, raw)
 
@@ -256,7 +303,7 @@ export async function updateProduct(
   if ('minStock' in input) patch.minStock = qty(input.minStock)
   if ('locationId' in input) patch.locationId = input.locationId
 
-  if (Object.keys(patch).length === 0) return getProductDetail(actor, productId, options)
+  if (Object.keys(patch).length === 0) return
 
   await withTenant(
     actor.tenantId,
@@ -265,23 +312,41 @@ export async function updateProduct(
         await assertLocation(tx, actor.tenantId, patch.locationId)
       }
 
+      const expected = options.expectedVersion
       const updated = await tx
         .update(products)
         .set(patch)
-        .where(and(eq(products.tenantId, actor.tenantId), eq(products.id, productId)))
+        .where(
+          and(
+            eq(products.tenantId, actor.tenantId),
+            eq(products.id, productId),
+            // Karşılaştırma UPDATE'in kendisinde: önce okuyup sonra yazmak,
+            // aradaki değişikliği yine kaçırırdı (TOCTOU).
+            expected === undefined ? undefined : sql`${PRODUCT_VERSION} = ${expected}`,
+          ),
+        )
         .returning({ id: products.id })
         .catch((err: unknown) => {
           throw translateProductConflict(err, { sku: String(patch.sku ?? '') })
         })
 
       if (updated.length === 0) {
+        if (expected !== undefined) {
+          const [still] = await tx
+            .select({ id: products.id })
+            .from(products)
+            .where(and(eq(products.tenantId, actor.tenantId), eq(products.id, productId)))
+          if (still) {
+            throw new AppError('PRODUCT_CHANGED', `product ${productId} changed since preview`, {
+              productId,
+            })
+          }
+        }
         throw new AppError('NOT_FOUND', `product ${productId} not found`, { productId })
       }
     },
     options.db,
   )
-
-  return getProductDetail(actor, productId, options)
 }
 
 /**

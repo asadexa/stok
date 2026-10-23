@@ -13,6 +13,7 @@ import {
 } from './jobs'
 import { systemHealth } from './health'
 import { checkStockInvariant } from './movements'
+import { pruneTenantImportRuns } from './import-runs'
 import { pruneAttempts } from './rate-limit'
 
 /**
@@ -480,6 +481,8 @@ export interface CronResult {
   failed: number
   retried: number
   prunedAuthAttempts: number
+  /** Silinen süresi dolmuş toplu aktarım kaydı (T171, K4). */
+  prunedImportRuns: number
   /** Boş değilse invariant kırılmış — KIRMIZI alarm (T37). */
   invariantBreaches: { productId: string; ledgerSum: string; projection: string }[]
 }
@@ -543,6 +546,10 @@ export async function runCron(
     now.getTime(),
   )
 
+  // Toplu aktarımın geçici kayıtları (T171, K4): 30 günden eskiler ve yarıda
+  // kalmış yüklemeler. Yalnız `import_runs`; gerçek tablolara dokunmuyor.
+  const prunedImportRuns = await pruneTenantImportRuns(actor.tenantId, options)
+
   /**
    * INVARIANT DENETİMİ — T37.
    *
@@ -554,7 +561,7 @@ export async function runCron(
    */
   const invariantBreaches = await checkStockInvariant(actor.tenantId, options)
 
-  return { day, ...sonuc, scheduled, prunedAuthAttempts, invariantBreaches }
+  return { day, ...sonuc, scheduled, prunedAuthAttempts, prunedImportRuns, invariantBreaches }
 }
 
 // ---------------------------------------------------------------------------

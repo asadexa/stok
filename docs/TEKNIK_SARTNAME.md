@@ -36,7 +36,7 @@ Katman kuralları `PROJECT_BRAIN` §5, ilkeler §12. Kayıtlarda yalnız özelli
 | ID | Özellik | Durum |
 |---|---|---|
 | F-01 | Ürün, barkod ve kategori yönetimi | Uygulandı |
-| F-02 | Excel/CSV toplu ürün aktarma | Uygulandı |
+| F-02 | Excel/CSV toplu ürün aktarma | Geliştiriliyor (T171: 20.000 satır, UAT bekliyor) |
 | F-03 | Stok hareketleri ve append-only defter | Uygulandı |
 | F-04 | Fiyat defteri ve kasa açığı | Uygulandı (kısmi) |
 | F-05 | Çok kiracılılık ve RLS | Uygulandı |
@@ -64,21 +64,51 @@ Katman kuralları `PROJECT_BRAIN` §5, ilkeler §12. Kayıtlarda yalnız özelli
 - **Dosyalar:** `packages/core/src/products.ts`, `packages/db/src/schema.ts`, `apps/web/src/app/(panel)/urunler/`.
 - **Sınırlar:** yeni üründe barkod zorunlu (T177); görsel yalnız URL (T136); birim değişimi sonrası eski veri denetlenmiyor (T170).
 
-### F-02 — Excel/CSV toplu ürün aktarma
-- **İhtiyaç:** ilk kurulumda yüzlerce ürünü tek tek girmemek.
-- **Akış:** `parseProductFile` (dosya → satırlar, yazma yok) → `previewImport` (satır başına
-  karar ve Türkçe sebep) → `commitImport` (yalnız geçerli satırlar). Satır bazlı hata; güncellemede
-  dosyada olmayan sütuna dokunulmaz. "Açılış Stoğu" sütunu devri tek yazma kapısından yazar.
+### F-02 — Excel/CSV toplu ürün aktarma (Geliştiriliyor: T171 BUILD bitti, kullanıcı kabul testi bekliyor)
+- **İhtiyaç:** ilk kurulumda yüzlerce, büyük işletmede 20.000'e kadar ürünü tek tek girmemek.
+- **Akış:** yükle → önizle → aktar (ilerleme, iptal) → sonuç ve rapor.
+  - Tarayıcı dosyayı Web Worker'da `parseProductFile` ile okur; dosya sunucuya gitmez.
+  - Hücreler parça parça aktarım kaydına gider (`startImportRun`, `appendImportRows`).
+  - `finalizeImportPreview` bütün dosya üzerinden `previewImport`'u bir kez çalıştırır: satır
+    başına karar, Türkçe sebep, güncellenecek ürünün sürümü. Ürün ve stok verisi yazılmaz.
+  - Onaydan sonra (`beginImportRun`) sekme `processImportChunk`'ı ~2 sn'lik parçalarla çağırır;
+    her satır `applyRow`: ürün ve barkod, sonra açılış stoğu tek yazma kapısından (`createMovement`).
+  - İptal `cancelImportRun`; sonuç ve rapor kayıttan (`importRunReport`,
+    `GET /api/rapor/aktarim?kayit=`): hatalı, yazılamayan, çakışan, belirsiz, işlenmeyen satırlar
+    ve devir notları.
+  - Satır bazlı hata; güncellemede dosyada olmayan sütuna dokunulmaz.
 - **Neden böyle:** dosyalar çoğu zaman sütunları kayık ve birimleri karışık gelir; önizleme
   zorunlu, hatalar satır bazlı (tek bozuk satır yüzlerce doğru satırı düşürmesin). Eksik sütun
   "temizle" değil "dokunma": yalnız ad ve kod içeren düzeltme dosyası fiyatları silmesin.
-- **Teknoloji:** ExcelJS ve kendi CSV ayrıştırıcısı (`core`); sütun eş adları `COLUMN_ALIASES`.
-  ExcelJS önekli SpreadsheetML'i (`<x:workbook>`, .NET Open XML SDK ve ChatGPT çıktısı) okuyamıyor;
-  bu parçaların öneki ExcelJS'ten önce JSZip ile atılıyor.
-- **Kararlar:** `DAT-18` (açılış stoğu), `PRC-05` (devirde fiyat zorunlu).
-- **Dosyalar:** `packages/core/src/import.ts`, `apps/web/src/app/(panel)/urunler/aktar/`.
-- **Kabul:** önizleme yazmaz; bozuk satır diğerlerini düşürmez; tek istekte en fazla 2.000 satır.
-- **Sınırlar:** büyük dosya uzun sürüyor (T171); devirde geçmiş tarihli fiyat yok (T172).
+  20.000 satır ve 100 MB tek isteğin gövde ve süre sınırına sığmaz (ADR-007).
+- **Kurallar:**
+  - En fazla 20.000 veri satırı ve 100 MB; hücre en fazla 1.000 karakter. XLSX'ten yalnız hücre
+    verisi açılır (görseller açılmaz); açılan veri 64 MiB'ı aşarsa dosya reddedilir.
+  - Belirsiz Türkçe sayı ("1.234") satır hatasıdır; Excel'in sayı hücresi belirsiz değildir (`DAT-20`).
+  - Önizlemeden sonra başkası ürünü değiştirdiyse ya da "yeni" satırın stok kodu açıldıysa satır
+    `Çakışma` olur; dosyadaki değer yazılmaz.
+  - İptal: yeni satır başlamaz, işlenenler geri alınmaz. Aynı sekmeden iptal en geç bir parça sonra.
+  - Kesinti: sonucu yazılamamış satır 2 dakika sonra veritabanına bakılarak çözülür; uygulanmadığı
+    kanıtlanırsa yeniden denenir, kanıtlanamazsa `Belirsiz`. Aynı dosyayı yeniden yüklemek güvenli
+    (`DAT-18`).
+  - Aynı aktarımı aynı anda tek işleyici işler; ikinci sekme "işleniyor" yanıtı alır.
+  - Aktarım kayıtları 30 gün, yarıda kalmış yüklemeler 24 saat sonra silinir.
+- **Teknoloji:** ExcelJS ve JSZip (tarayıcıda; değerler-yalnız çalışma kitabı), kendi CSV
+  ayrıştırıcısı, Web Worker; sütun eş adları `COLUMN_ALIASES`. ExcelJS önekli SpreadsheetML'i
+  (`<x:workbook>`, .NET Open XML SDK ve ChatGPT çıktısı) okuyamıyor; bu parçaların öneki ExcelJS'ten
+  önce JSZip ile atılıyor.
+- **Kararlar:** `ARC-15` (ADR-007), `DAT-18` (açılış stoğu), `DAT-20` (belirsiz sayı), `PRC-05`
+  (devirde fiyat zorunlu).
+- **Dosyalar:** `packages/core/src/product-file.ts`, `sheet.ts` (tarayıcıda da çalışır),
+  `import.ts` (önizleme, `applyRow`), `import-runs.ts`; `packages/shared/src/import-runs.ts`;
+  `packages/db/migrations/0013_import_runs.sql`; `apps/web/src/app/(panel)/urunler/aktar/`
+  (`parse.worker.ts`, `actions.ts`, `wizard.tsx`), `apps/web/src/app/api/rapor/aktarim/route.ts`.
+- **Kabul:** önizleme ürün ve stok verisini değiştirmez; bozuk satır diğerlerini düşürmez;
+  ≤20.000 satır, ≤100 MB; okuma sırasında sayfa donmaz; ilerleme ve iptal çalışır; tekrar yükleme
+  ikinci devri yazmaz; defter = projeksiyon. Ölçümler `CURRENT_STATE`'te.
+- **Sınırlar:** sekme kapanırsa aktarım durur, kaldığı yerden devam ekranı yok (ürün kapsamı);
+  devirde geçmiş tarihli fiyat yok (T172). Bir satır veritabanında 2 dakikadan uzun takılırsa
+  ikinci işleyici onu yeniden deneyebilir: veri bozulmaz, sonucu `Çakışma` görünebilir (ADR-007).
 
 ### F-03 — Stok hareketleri ve append-only defter
 - **İhtiyaç:** "elimde kaç tane var"dan çok "neden bu kadar": kim, ne zaman, hangi sebeple.
@@ -208,6 +238,8 @@ Katman kuralları `PROJECT_BRAIN` §5, ilkeler §12. Kayıtlarda yalnız özelli
   - Dosyanın tamamı reddedilir: başlık yok, zorunlu sütun yok (Ürün Adı, Fiyat ve Tedarikçi
     Kodu ya da Barkod), aynı alana iki sütun, en fazla 5.000 satır aşıldı, veri satırı yok.
     Geçersiz satır yalnız kendisi atlanır ve listelenir. Metin stok satırı reddetmez.
+  - Belirsiz Türkçe sayı ("1.234", `DAT-20`): fiyat ya da fiyat miktarında satır hatası, stokta
+    satır kalır ve stok boş bırakılıp "belirsiz" notu düşülür. Excel'in sayı hücresi belirsiz değil.
   - Değerler kesilmez: uzun kod, ad, marka ya da barkod o satırda Türkçe hata olur; önizleme ve
     kayıt aynı kuralı (`supplierFeedItemSchema`) kullanır. Okunmayan sütunlardan en fazla 200 ad
     listelenir, 200 karakteri aşan ad "…" ile kısaltılır, kalanın sayısı söylenir

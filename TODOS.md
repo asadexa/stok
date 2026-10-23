@@ -7,7 +7,7 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
 **Kurallar**
 
 - ID `T<n>`. Arşivdeki görevler numaralarını korur. Yeni görev en büyük
-  numaradan devam eder — **sıradaki boş numara: T216**. Numara yeniden
+  numaradan devam eder — **sıradaki boş numara: T217**. Numara yeniden
   kullanılmaz.
 - Biçim: `- [ ] **T<n> (P0–P3)** - <alan> - **Başlık**`. Altında kısa
   **Neden / Kanıt / Bağlı / Doğrula / Kaynak** satırları.
@@ -36,7 +36,7 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
 ## P1
 
 Yol haritasının üstü (kullanıcı kararı 2026-10-22; 2026-10-17 sırasının yerine), bu sırayla:
-(1) T171, toplu ürün aktarımını 20.000 satıra ölçeklendirme (önce PLAN; mimari kararlaştırılmadı);
+(1) T171, toplu ürün aktarımını 20.000 satıra ölçeklendirme (geliştirme tamamlandı, manuel UAT bekleniyor);
 (2) T201, gerçek tedarikçi API entegrasyonu; (3) T200 Dilim 2; (4) UX iyileştirmeleri uygun ürün
 dilimlerinde (T212–T215, T210, T211), tek bir yeniden tasarım olarak değil. T200 PLAN ve Dilim 1
 tamam; Dilim 1 kullanıcı kabul testinde kabul edildi (2026-10-22). HTTPS test ortamı (T144; üretim
@@ -55,7 +55,10 @@ güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
     almalı. Bugün sınır `IMPORT_ROW_LIMIT = 2_000` (`packages/core/src/import.ts:61`; ekran metni
     `urunler/aktar/page.tsx:56` aynı sabitten). Amaç: büyük işletmelerin dosyalarının güvenilir
     işlenmesi; 20.000 satır ürün gereksinimi, uygulanacak mimari henüz kararlaştırılmadı.
-  - Sıra: yol haritasının ilk işi (kullanıcı kararı 2026-10-22; önceki P2). Önce PLAN.
+  - Sıra: yol haritasının ilk işi (kullanıcı kararı 2026-10-22; önceki P2).
+  - Durum (2026-10-23): geliştirme tamamlandı, manuel UAT bekleniyor. PLAN ve Engineering Review
+    onaylı; kod ve belgeler `development`'a gönderildi. Kabul testinden önce kapatılmaz. Mimari `ARC-15` (ADR-007), sayı kuralı `DAT-20`, özellik
+    F-02, koruma S21, ölçümler `CURRENT_STATE`.
   - YAPILMAYACAK: yalnız `IMPORT_ROW_LIMIT`'i 20.000'e çıkarmak. Doğrusal tahminle (ölçülmedi)
     devirli 20.000 satır tek istekte ~8 dk sürer; süre sınırına takılan istek yarım aktarım bırakır.
   - PLAN'da değerlendirilecek: dosya boyutu (`MAX_UPLOAD_BYTES` 4 MiB, Vercel 4,5 MB gövde
@@ -272,6 +275,21 @@ güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
 
 ## P2
 
+- [ ] **T216 (P2)** - cron - **Kuyruğa alınan büyük dışa aktarma hiç çalışmıyor: cron'da `STOCK_EXPORT`/`MOVEMENT_EXPORT` işleyicisi yok**
+  - Neden: `planExport` büyük raporu kuyruğa atıp e-postayla göndermeyi vaat ediyor, ama
+    `runCron` `runQueuedJobs`'a yalnız `DAILY_REPORT`, `LOW_STOCK_SCAN`, `HEALTH_ALARM`
+    işleyicilerini veriyor. İşleyicisi olmayan iş `SERVER_ERROR` ("no handler") ile başarısız
+    sayılıyor: kullanıcı raporu hiç almıyor. Ekran ise "Bu boyuttaki rapor arka planda
+    hazırlanıp e-posta ile gönderilir" diyor (`apps/web/src/components/export-control.tsx:71`);
+    README bu sınırı ve sorunu açıkça yazıyor (T171 belge senkronu).
+  - Kanıt: `packages/core/src/cron.ts:529-537` (işleyici haritası); `packages/core/src/jobs.ts:333-345`
+    (işleyicisiz iş başarısız); kuyruğa alma `apps/web/src/server/export.ts:21`,
+    `packages/core/src/exports.ts:357`, `:390`. `createExportJobHandler` yalnız `exports.test.ts`'te
+    kullanılıyor. Kod okumasıyla bulundu; tarayıcıda ya da üretimde denenmedi.
+  - Bağlı: T138 (cron turu sınırı), `OPS-02`.
+  - Doğrula: kuyruğa giden bir stok raporu için `runCron` turundan sonra işin `DONE` olduğu ve
+    e-postanın gönderildiği bir test (gerçek PostgreSQL, sahte posta taşıyıcısı).
+  - Kaynak: T171 BUILD sırasında kod okuması, 2026-10-23.
 - [ ] **T204 (P2)** - güvenlik - **Web eylemleri ham hatayı logluyor; Drizzle hata mesajı sorgu parametrelerini (fiyat, barkod) taşıyor**
   - Neden: beklenmeyen bir veritabanı hatasında Drizzle'ın hata mesajı `Failed query: …` ile
     birlikte `params: [...]` satırını da içeriyor. `console.error('[import action]', err)` gibi
@@ -304,6 +322,9 @@ güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
   - Bağlı: F-02, F-12, T200.
   - Doğrula: "1.234" ve "1.234,00" içeren CSV'nin önizlemesi.
   - Kaynak: T200 Dilim 1a, 2026-10-19.
+  - Durum (2026-10-23): T171 K1 ile çözüldü: `DAT-20` (belirsiz yazım satır hatası, iki içe
+    aktarmada aynı kural `isAmbiguousTurkishNumber`); testler `import.test.ts`,
+    `supplier-feed.test.ts`. T171'in manuel UAT'siyle birlikte kapanacak.
 - [ ] **T207 (P2)** - test - **`invariant.test.ts` (1000 hareket) bu makinede 30 sn sınırını aşıyor; yerel `pnpm test` kırmızı**
   - Neden: test ~32 sn sürüyor, vitest sınırı 30 sn. Invariant BOZULMUYOR (sınır yükseltilince
     defter = projeksiyon, yeşil); sorun süre payı. Yerel kapı kırmızı göründüğünde gerçek bir
@@ -590,8 +611,8 @@ güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
   - Kanıt: 2026-10-20 tarayıcı ölçümü, tedarikçi sihirbazı: 4.192.256 B dosya → istek 4.193.191 B,
     önizleme geldi; 4.194.304 B → istek 4.195.242 B, sunucu logu `Body exceeded 4194304 limit`,
     yanıt 500, hata sınırı göründü; 4.194.305 B → istemci denetimi durdurdu, istek gitmedi.
-    Ürün içe aktarma (`urunler/aktar`) aynı sabiti ve aynı denetimi kullanıyor; orada tarayıcıda
-    denenmedi.
+    Ürün içe aktarma (`urunler/aktar`) T171'den sonra dosyayı yüklemiyor (tarayıcıda okuyor,
+    satırları ~1,5 MB'lık parçalarla gönderiyor); bu görev artık yalnız tedarikçi sihirbazını etkiliyor.
   - Öneri: `bodySizeLimit = MAX_UPLOAD_BYTES + zarf payı` (ör. 64 KB; Vercel'in 4,5 MB sınırının
     altında kalır). Böylece 4 MB'a kadar her dosya eyleme ulaşır, üstünü Türkçe kontrol karşılar.
   - Bağlı: T118 (sınırın tek kaynağı, arşiv), T200.
@@ -614,7 +635,7 @@ güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
 - [ ] **T147 (P3)** - gizlilik - Hareket formunun hata yolunda girilen fiyatlar URL'de taşınıyor (tarayıcı geçmişi, erişim logları).
 - [ ] **T148 (P3)** - test - `test:e2e:ci`'daki `--grep-invert @kararsiz` ölü filtre; artık hiçbir test etiketli değil.
 - [ ] **T149 (P3)** - deploy - `apps/web/package.json`'da `engines` yok; Root Directory `apps/web` olunca Vercel'in Node sürümü sabit değil.
-- [ ] **T150 (P3)** - test - E2E testleri demo veritabanını kalıcı değiştiriyor (2026-10-08 koşusu: +4 ürün, +4 hareket, +2 kullanıcı) ve seed verisine bağımlı.
+- [ ] **T150 (P3)** - test - E2E testleri demo veritabanını kalıcı değiştiriyor (2026-10-08 koşusu: +4 ürün, +4 hareket, +2 kullanıcı) ve seed verisine bağımlı. T171'in `t171-toplu-aktarim.spec.ts`'i koşu başına ~40 + iptal testinde birkaç yüz ürün ekliyor (iptal anına bağlı). T171 doğrulamasında E2E ayrı bir `stok_test_*` veritabanına ve 3100 portuna yönlendirilerek koşuldu (`DATABASE_URL`/`MIGRATION_DATABASE_URL` ortamdan, `PORT`/`SMOKE_PORT`); çözüm için olası yol.
 - [ ] **T151 (P3)** - test - `pnpm test` `stok_test_*` veritabanlarını silmeden bırakıyor (zararsız).
 - [ ] **T152 (P3)** - repo - `.claude/gstack-main/bin/gstack-global-discover.ts` lisanssız artık üçüncü taraf dosyası; 32 MB'lık vendor kopyası git geçmişinde.
 - [ ] **T153 (P3)** - db - FK'lar kiracı-bileşik değil (RI kontrolü RLS'i atlıyor); bugün uygulama kontrolleriyle kapalı, savunma derinliği yok.
@@ -623,7 +644,7 @@ güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
 - [ ] **T166 (P3)** - operasyon - Kalan `openssl` önerileri: `CRON_SECRET` uyarısı (`apps/web/src/server/config.ts:173`, `.env.example:72`) ve runbook'taki `stok_app` parolası (`docs/uretim-runbook.md:47`). openssl Windows'ta varsayılan olarak yok; `AUTH_SECRET` için node komutuna geçildi (T133), bunlar WS-A kapsamı dışında kaldı.
 - [ ] **T169 (P3)** - ci - Telefon kamerası ve çözücü yolu otomatik testte yok. `e2e/telefon-tarama.spec.ts` telefonu API istemcisiyle taklit ediyor; Playwright'ın headless shell'inde `getUserMedia` yok (`NotSupportedError`), geliştirme makinesinde Playwright'ın tam Chromium'u açılmıyor (`spawn UNKNOWN`). Yerelde kurulu Edge + sahte kamera aygıtı + sentetik EAN-13 Y4M ile uçtan uca geçti (2026-10-09, repoda değil). Seçenek: CI'da (Linux) tam Chromium + `--use-file-for-fake-video-capture` ile tek senaryo. Tetikleyici: çözücü ya da Next/Turbopack yükseltmesi.
 - [ ] **T170 (P3)** - ürün - Ürünün birimi sonradan değiştirilince (KG → ADET) eski koli çarpanları ve kesirli hareketler denetlenmiyor; birim kuralı (T130, `DAT-17`) yalnız yeni yazımlarda. Kritik seviye (`minStock`) da birim hassasiyetine bağlı değil (adetli üründe 0,5 kabul). Kaynak: WS-B, 2026-10-10.
-- [ ] **T172 (P3)** - import - İçe aktarma devrinde fiyatın ekonomik tarihi ("Açılış Fiyat Tarihi", `PRC-05`) ve "Tahmini" sütunu yok; devir bugünün alış fiyatıyla yazılıyor. Satır notları (devir atlandı / yazılamadı) ekranda ilk 50 satır, indirilebilir raporda yok. Plan polish'i; tetikleyici: eski stoğu geçmiş fiyatla değerlemek isteyen müşteri. Kaynak: WS-B, 2026-10-10.
+- [ ] **T172 (P3)** - import - İçe aktarma devrinde fiyatın ekonomik tarihi ("Açılış Fiyat Tarihi", `PRC-05`) ve "Tahmini" sütunu yok; devir bugünün alış fiyatıyla yazılıyor. (Satır notlarının indirilebilir raporda olmaması T171 ile çözüldü: aktarım raporu devri atlanan ve yazılamayan satırları da içeriyor.) Plan polish'i; tetikleyici: eski stoğu geçmiş fiyatla değerlemek isteyen müşteri. Kaynak: WS-B, 2026-10-10.
 - [ ] **T189 (P3)** - test - **`db:reset`'in iki kurtarma yolu kalıcı testte yok**
   - Neden: `docker stop` hatası ve asıl kapsayıcı silindikten sonra `docker volume rm` hatası
     `db-reset.test.ts`'te üretilemiyor (CLI `docker`'ı kabuksuz çağırıyor, araya girecek bir

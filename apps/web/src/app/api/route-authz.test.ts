@@ -1,3 +1,4 @@
+import { appendImportRows, finalizeImportPreview, startImportRun } from '@stok/core'
 import { closeAppDb } from '@stok/db'
 import { TEST_PASSWORD, type TestTenant, seedTestTenant, testAdminDb } from '@stok/db/testing'
 import { NextRequest } from 'next/server'
@@ -8,7 +9,7 @@ import { TEST_DB_NAME } from '@/test/db-name'
 
 import { GET as aramaGET } from './arama/route'
 import { GET as cronGET, POST as cronPOST } from './cron/route'
-import { POST as aktarimHatalariPOST } from './rapor/aktarim-hatalari/route'
+import { GET as aktarimGET } from './rapor/aktarim/route'
 import { GET as hareketGET } from './rapor/hareket/route'
 import { GET as sablonGET } from './rapor/sablon/route'
 import { GET as stokGET } from './rapor/stok/route'
@@ -34,6 +35,7 @@ import { GET as stokGET } from './rapor/stok/route'
 
 const admin = testAdminDb(TEST_DB_NAME)
 let tenant: TestTenant
+const UNKNOWN_RUN = '00000000-0000-4000-8000-000000000000'
 
 function req(path: string, method: 'GET' | 'POST' = 'GET'): NextRequest {
   return new NextRequest(new URL(`http://localhost${path}`), { method })
@@ -89,13 +91,13 @@ const ROTALAR: RouteCase[] = [
     calisan: true,
   },
 
-  // Gövdede çözümlenmiş dosya bekliyor (`dosyaJson`). Oturum sınırı burada
-  // sınanabiliyor çünkü `requireActor()` gövde okunmadan ÖNCE fırlatıyor.
+  // Var olan bir aktarım kaydı bekliyor (`?kayit=`). Burada yalnız oturum
+  // sınırı; çalışan ve kiracı sınırı aşağıda kendi kaydıyla sınanıyor.
   {
-    ad: 'rapor/aktarim-hatalari',
-    path: '/api/rapor/aktarim-hatalari',
-    method: 'POST',
-    handler: aktarimHatalariPOST,
+    ad: 'rapor/aktarim',
+    path: `/api/rapor/aktarim?kayit=${UNKNOWN_RUN}`,
+    method: 'GET',
+    handler: aktarimGET,
     calisan: null,
   },
 ]
@@ -182,6 +184,53 @@ describe('çalışan sınırı sunucuda duruyor (tehdit S6, S7)', () => {
       }
     })
   }
+})
+
+/**
+ * T171: aktarım raporu kayıttan okunuyor ve satırlar alış fiyatı taşıyabiliyor.
+ * Çalışan rapor alamamalı; yönetici yalnız kendi işletmesinin kaydını görmeli.
+ */
+describe('aktarım raporu', () => {
+  async function runOf(t: TestTenant): Promise<string> {
+    const actor = { tenantId: t.tenantId, userId: t.adminUserId, role: 'ADMIN' as const }
+    const { runId } = await startImportRun(actor, {
+      fileName: 'rapor.csv',
+      fileBytes: 10,
+      totalRows: 1,
+      columns: ['sku', 'name'],
+    })
+    await appendImportRows(actor, runId, { rows: [{ rowNumber: 2, cells: { sku: '', name: 'Adsız' } }] })
+    await finalizeImportPreview(actor, runId)
+    return runId
+  }
+
+  it('yönetici kendi kaydının raporunu indiriyor', async () => {
+    const runId = await runOf(tenant)
+    await loginAs(tenant.adminEmail)
+    const res = await aktarimGET(req(`/api/rapor/aktarim?kayit=${runId}`))
+
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toContain('spreadsheetml')
+  })
+
+  it('çalışana kapalı', async () => {
+    const runId = await runOf(tenant)
+    await loginAs(tenant.staffEmail)
+    const res = await aktarimGET(req(`/api/rapor/aktarim?kayit=${runId}`))
+
+    expect(res.status).toBe(403)
+    expect(((await res.json()) as { code?: string }).code).toBe('FORBIDDEN')
+  })
+
+  it('başka işletmenin kaydı bulunamıyor', async () => {
+    const other = await seedTestTenant(admin.db, 'webauthz-diger')
+    const runId = await runOf(other)
+    await loginAs(tenant.adminEmail)
+    const res = await aktarimGET(req(`/api/rapor/aktarim?kayit=${runId}`))
+
+    expect(res.status).toBe(404)
+    expect(((await res.json()) as { code?: string }).code).toBe('NOT_FOUND')
+  })
 })
 
 describe('oturum yaşam döngüsü', () => {

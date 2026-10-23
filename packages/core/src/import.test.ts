@@ -5,10 +5,13 @@ import JSZip from 'jszip'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { Actor } from './authz'
 import {
+  IMPORT_CELL_LIMIT,
+  IMPORT_FILE_BYTES_LIMIT,
   IMPORT_ROW_LIMIT,
   type ParsedFile,
+  XLSX_PARTS_BYTE_LIMIT,
   commitImport,
-  importErrorRows,
+  isAmbiguousTurkishNumber,
   parseCsv,
   parseProductFile,
   parseTurkishNumber,
@@ -59,12 +62,17 @@ function uniq(prefix: string) {
   return `${prefix}${seq}-${randomUUID().slice(0, 6)}`
 }
 
+/** ExcelJS'in tipleri Node `Buffer`'ını değil kendi `Buffer` arayüzünü bekliyor; çalışma zamanında Node Buffer doğru. */
+function excelBuffer(b: Buffer): ArrayBuffer {
+  return b as unknown as ArrayBuffer
+}
+
 function csv(lines: string[]): Buffer {
   return Buffer.from(lines.join('\n'), 'utf8')
 }
 
 async function parse(lines: string[], name = 'urunler.csv') {
-  return parseProductFile(csv(lines), name, opts)
+  return parseProductFile(csv(lines), name)
 }
 
 async function preview(lines: string[]) {
@@ -84,7 +92,7 @@ describe('dosya çözümleme', () => {
     // Excel UTF-8 BOM yazıyor; atılmazsa "Stok Kodu" sütunu eşleşmez ve
     // kullanıcı "sütun bulunamadı" hatasının sebebini asla göremez.
     const withBom = Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), csv(['Stok Kodu,Ürün Adı', 'A-1,Vida'])])
-    const file = await parseProductFile(withBom, 'x.csv', opts)
+    const file = await parseProductFile(withBom, 'x.csv')
     expect(file.rows[0]?.cells.sku).toBe('A-1')
   })
 
@@ -125,7 +133,7 @@ describe('dosya çözümleme', () => {
   it('satır sınırı aşılırsa reddediliyor', async () => {
     const lines = ['Stok Kodu,Ürün Adı', ...Array.from({ length: 6 }, (_, i) => `A-${i},Ürün`)]
     await expect(
-      parseProductFile(csv(lines), 'x.csv', { ...opts, rowLimit: 5 }),
+      parseProductFile(csv(lines), 'x.csv', { rowLimit: 5 }),
     ).rejects.toMatchObject({ code: 'IMPORT_TOO_LARGE' })
   })
 
@@ -136,9 +144,10 @@ describe('dosya çözümleme', () => {
     sheet.addRow(['X-1', 'Şeffaf Poşet', 12.5])
     const buffer = Buffer.from(await wb.xlsx.writeBuffer())
 
-    const file = await parseProductFile(buffer, 'urunler.xlsx', opts)
+    const file = await parseProductFile(buffer, 'urunler.xlsx')
     expect(file.rows[0]?.cells.name).toBe('Şeffaf Poşet')
-    expect(file.rows[0]?.cells.purchasePrice).toBe('12.5')
+    // Sayı hücresi virgüllü ondalıkla metne çevriliyor (K1): Türkçe okuyucuda tek anlamlı.
+    expect(file.rows[0]?.cells.purchasePrice).toBe('12,5')
   })
 
   it('önekli SpreadsheetML xlsx dosyasını da okuyor (.NET Open XML SDK, ChatGPT)', async () => {
@@ -174,9 +183,9 @@ describe('dosya çözümleme', () => {
     )
     const buffer = await zip.generateAsync({ type: 'nodebuffer' })
 
-    const file = await parseProductFile(buffer, 'urunler.xlsx', opts)
+    const file = await parseProductFile(buffer, 'urunler.xlsx')
     expect(file.rows).toEqual([
-      { rowNumber: 2, cells: { sku: 'X-1', name: 'Şeffaf Poşet', purchasePrice: '12.5' } },
+      { rowNumber: 2, cells: { sku: 'X-1', name: 'Şeffaf Poşet', purchasePrice: '12,5' } },
     ])
   })
 })
@@ -193,6 +202,123 @@ describe('Türkçe sayı', () => {
   it('boş hücre undefined, çöp girdi NaN', () => {
     expect(parseTurkishNumber('')).toBeUndefined()
     expect(Number.isNaN(parseTurkishNumber('abc'))).toBe(true)
+  })
+
+  it('belirsiz yazım ("1.234") sayı DEĞİL; tek anlamlı yazımlar okunuyor (K1)', () => {
+    // Binlik mi ondalık mı anlaşılmıyor: bin kat fark. Sessizce bir anlam
+    // seçilseydi açılış stoğu append-only deftere yanlış yazılırdı.
+    for (const raw of ['1.234', '12.500', '999.000', '-1.250']) {
+      expect(Number.isNaN(parseTurkishNumber(raw)), raw).toBe(true)
+      expect(isAmbiguousTurkishNumber(raw), raw).toBe(true)
+    }
+    // Tek anlamlı: virgüllü, binliksiz, 3'ten farklı ondalık, sıfırla başlayan.
+    expect(parseTurkishNumber('1.234,00')).toBe(1234)
+    expect(parseTurkishNumber('1234')).toBe(1234)
+    expect(parseTurkishNumber('1,234')).toBe(1.234)
+    expect(parseTurkishNumber('12.50')).toBe(12.5)
+    expect(parseTurkishNumber('1.5')).toBe(1.5)
+    expect(parseTurkishNumber('0.125')).toBe(0.125)
+    expect(isAmbiguousTurkishNumber('0.125')).toBe(false)
+  })
+
+  it('önizleme belirsiz sayıyı satır hatası yapıyor ve NEDENİNİ söylüyor (K1)', async () => {
+    const p = await preview([
+      'Stok Kodu;Ürün Adı;Barkod;Alış Fiyatı',
+      `${uniq('K1-')};Belirsiz Fiyat;${uniq('bc')};1.234`,
+      `${uniq('K1-')};Açık Fiyat;${uniq('bc')};1.234,00`,
+    ])
+    expect(p.rows[0]?.action).toBe('error')
+    expect(p.rows[0]?.issues[0]).toMatchObject({ column: 'Alış Fiyatı' })
+    expect(p.rows[0]?.issues[0]?.message).toContain('belirsiz')
+    expect(p.rows[1]?.action).toBe('create')
+    expect(p.rows[1]?.data?.purchasePrice).toBe(1234)
+  })
+
+  it('xlsx SAYI hücresi belirsiz sayılmıyor: 1,125 kg ve 1234 aynen okunuyor (K1)', async () => {
+    // `String(1.125)` "1.125" verirdi ve K1 kuralı kesin bir sayıyı reddederdi.
+    // Kilogramlı üründe kritik seviye 3 ondalık alıyor (DAT-17).
+    const wb = new ExcelJS.Workbook()
+    const sheet = wb.addWorksheet('Ürünler')
+    sheet.addRow(['Stok Kodu', 'Ürün Adı', 'Birim', 'Barkod', 'Kritik Seviye', 'Alış Fiyatı'])
+    sheet.addRow([uniq('NUM-'), 'Kesirli', 'Kilogram', uniq('bc'), 1.125, 12.5])
+    sheet.addRow([uniq('NUM-'), 'Tam', 'Adet', uniq('bc'), 1234, 1234])
+    const file = await parseProductFile(Buffer.from(await wb.xlsx.writeBuffer()), 'sayi.xlsx')
+    const p = await previewImport(boss, file, opts)
+    expect(p.rows.map((r) => r.action)).toEqual(['create', 'create'])
+    expect(p.rows[0]?.data).toMatchObject({ minStock: 1.125, purchasePrice: 12.5 })
+    expect(p.rows[1]?.data).toMatchObject({ minStock: 1234, purchasePrice: 1234 })
+  })
+})
+
+describe('dosya güvenliği ve sınırlar (T171)', () => {
+  it('görselli, köprülü, tablolu xlsx yalnız değerleriyle okunuyor; görsel açılmıyor', async () => {
+    const wb = new ExcelJS.Workbook()
+    const sheet = wb.addWorksheet('Ürünler')
+    sheet.addRow(['Stok Kodu', 'Ürün Adı', 'Alış Fiyatı'])
+    sheet.addRow(['G-1', { text: 'Bağlantılı Ürün', hyperlink: 'https://ornek.com' }, 12.5])
+    sheet.getCell('C2').note = 'yorum'
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+      'base64',
+    )
+    sheet.addImage(wb.addImage({ buffer: excelBuffer(png), extension: 'png' }), 'E2:F4')
+    sheet.addTable({ name: 'T1', ref: 'H1', columns: [{ name: 'a' }], rows: [[1]] })
+    wb.addWorksheet('İkinci').addRow(['yalnız ilk sayfa okunur'])
+
+    const file = await parseProductFile(Buffer.from(await wb.xlsx.writeBuffer()), 'gorselli.xlsx')
+    expect(file.rows).toEqual([
+      { rowNumber: 2, cells: { sku: 'G-1', name: 'Bağlantılı Ürün', purchasePrice: '12,5' } },
+    ])
+  })
+
+  it('gömülü görsel AÇILMIYOR: açılmış hâli sınırı aşan görsel dosyayı reddettirmiyor', async () => {
+    // Açılsaydı 70 MB'lık görsel 64 MiB'lık bütçeyi tek başına aşardı.
+    const wb = new ExcelJS.Workbook()
+    const sheet = wb.addWorksheet('Ürünler')
+    sheet.addRow(['Stok Kodu', 'Ürün Adı'])
+    sheet.addRow(['IMG-1', 'Görselli Ürün'])
+    const image = new Uint8Array(70 * 1024 * 1024)
+    sheet.addImage(wb.addImage({ buffer: excelBuffer(Buffer.from(image.buffer)), extension: 'png' }), 'C2:D3')
+    const buffer = Buffer.from(await wb.xlsx.writeBuffer())
+    expect(buffer.byteLength).toBeLessThan(5 * 1024 * 1024)
+
+    const file = await parseProductFile(buffer, 'buyuk-gorsel.xlsx')
+    expect(file.rows).toEqual([{ rowNumber: 2, cells: { sku: 'IMG-1', name: 'Görselli Ürün' } }])
+  })
+
+  it('açılınca sınırı aşan xlsx sıkıştırma bombası gibi reddediliyor', async () => {
+    // 70 MB'lık tek tip içerik birkaç yüz KB'a sıkışır; sınır sayfa açılırken
+    // aşılıyor ve geri kalanı hiç açılmıyor.
+    const zip = new JSZip()
+    zip.file('xl/workbook.xml', '<workbook/>')
+    zip.file('xl/worksheets/sheet1.xml', 'a'.repeat(XLSX_PARTS_BYTE_LIMIT + 1024))
+    const bomb = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' })
+    expect(bomb.byteLength).toBeLessThan(1024 * 1024)
+    await expect(parseProductFile(bomb, 'bomba.xlsx')).rejects.toMatchObject({
+      code: 'IMPORT_XLSX_TOO_LARGE',
+    })
+  })
+
+  it('zip olmayan .xlsx anlaşılır hatayla reddediliyor', async () => {
+    await expect(parseProductFile(Buffer.from('bu bir excel değil'), 'sahte.xlsx')).rejects.toMatchObject({
+      code: 'IMPORT_UNREADABLE',
+    })
+  })
+
+  it('dosya boyutu sınırı uygulanıyor (100 MB)', async () => {
+    const big = new Uint8Array(IMPORT_FILE_BYTES_LIMIT + 1)
+    await expect(parseProductFile(big, 'buyuk.csv')).rejects.toMatchObject({
+      code: 'IMPORT_FILE_TOO_LARGE',
+    })
+  })
+
+  it('uzun hücre sınıra kısaltılıyor ve satır yine HATA oluyor', async () => {
+    const long = 'x'.repeat(5_000)
+    const file = await parse(['Stok Kodu;Ürün Adı;Barkod', `${uniq('L-')};${long};${uniq('bc')}`])
+    expect(file.rows[0]?.cells.name).toHaveLength(IMPORT_CELL_LIMIT + 1)
+    const p = await previewImport(boss, file, opts)
+    expect(p.rows[0]?.action).toBe('error')
+    expect(p.rows[0]?.issues[0]?.column).toBe('Ürün Adı')
   })
 })
 
@@ -439,19 +565,8 @@ describe('uygulama', () => {
   })
 })
 
-describe('hata raporu ve şablon', () => {
-  it('her sorun için ayrı satır üretiyor', async () => {
-    const plan = await preview([
-      'Stok Kodu,Ürün Adı,Barkod,Birim,Alış Fiyatı',
-      `${uniq('RAP-')},Ürün,${uniq('bc')},kutu,bedava`,
-    ])
-    const rows = importErrorRows(plan.rows.filter((r) => r.action === 'error'))
-
-    expect(rows).toHaveLength(2)
-    expect(rows.map((r) => r.column).sort()).toEqual(['Alış Fiyatı', 'Birim'])
-    expect(rows.every((r) => r.rowNumber === 2)).toBe(true)
-  })
-
+// Hata raporu aktarım kaydından üretiliyor: `import-runs.test.ts` (T171).
+describe('şablon', () => {
   it('şablon kendi başlıklarıyla geri okunabiliyor', async () => {
     // Şablonu indirip doldurup yükleyen kullanıcı, sütun adı yüzünden
     // hata almamalı — şablon ile çözümleyici aynı listeden beslenmeli.
@@ -469,8 +584,8 @@ describe('hata raporu ve şablon', () => {
     )
   })
 
-  it('varsayılan satır sınırı 2000', () => {
-    expect(IMPORT_ROW_LIMIT).toBe(2_000)
+  it('varsayılan satır sınırı 20.000 (T171)', () => {
+    expect(IMPORT_ROW_LIMIT).toBe(20_000)
   })
 })
 

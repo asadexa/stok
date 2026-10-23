@@ -71,7 +71,8 @@ describe('dosya düzeyi: tamamı okunur ya da tamamı reddedilir', () => {
 
     const file = await parseSupplierFile(buffer, 'liste.xlsx')
     expect(file.headerPriceType).toBe('LIST')
-    expect(file.rows[0]?.cells).toEqual({ barcode: '869002', name: 'Defter', price: '7.25' })
+    // Sayı hücresi virgüllü ondalıkla (K1, T171); okunan fiyat yine 7,25.
+    expect(file.rows[0]?.cells).toEqual({ barcode: '869002', name: 'Defter', price: '7,25' })
   })
 
   it('zorunlu sütun yoksa reddedilir ve bulunanları söyler', async () => {
@@ -200,6 +201,35 @@ describe('satır düzeyi: yalnız bozuk satır atlanır', () => {
       ['USD', 'INCLUDED', 'NET'],
       ['TRY', 'EXCLUDED', 'LIST'],
     ])
+  })
+
+  it('belirsiz fiyat ("1.234") satırı reddediyor, belirsiz stok boş bırakılıp SÖYLENİYOR (K1, T171)', () => {
+    const result = normalizeSupplierRows(
+      rows(
+        { supplierCode: 'A', name: 'a', price: '1.234' },
+        { supplierCode: 'B', name: 'b', price: '1.234,00', stockQty: '2.500' },
+        { supplierCode: 'C', name: 'c', price: '12,50', priceQty: '1.000' },
+      ),
+      defaults,
+    )
+    expect(result.items.map((i) => i.supplierCode)).toEqual(['B'])
+    expect(result.items[0]?.price).toBe(1234)
+    expect(result.items[0]?.stockQty).toBeUndefined()
+    expect(result.warnings[0]?.messages[0]).toContain('belirsiz')
+    expect(result.errors.map((e) => e.supplierCode)).toEqual(['A', 'C'])
+    expect(result.errors[0]?.messages[0]).toMatch(/^Fiyat: .*belirsiz/)
+    expect(result.errors[1]?.messages[0]).toMatch(/^Fiyat Miktarı: .*belirsiz/)
+  })
+
+  it('xlsx sayı hücresindeki kesirli fiyat belirsiz sayılmıyor (K1, T171)', async () => {
+    const wb = new ExcelJS.Workbook()
+    const sheet = wb.addWorksheet('Liste')
+    sheet.addRow(['Tedarikçi Kodu', 'Ürün Adı', 'Fiyat', 'Stok'])
+    sheet.addRow(['N-1', 'Kesirli', 1.125, 2500])
+    const file = await parseSupplierFile(Buffer.from(await wb.xlsx.writeBuffer()), 'liste.xlsx')
+    const result = normalizeSupplierRows(file, defaults)
+    expect(result.errors).toEqual([])
+    expect(result.items[0]).toMatchObject({ price: 1.125, stockQty: 2500 })
   })
 
   it.each([

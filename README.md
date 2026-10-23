@@ -137,8 +137,28 @@ Ctrl+C ile kapatın.
   sonu raporunda kullanıcı bazında
 - **Stok tablosu**: Türkçe arama (`ısıtıcı` → `Isıtıcı Şerit`), kategori / kritik / arşiv filtreleri
 - **Hareket logu**: kim, ne zaman, neden; çalışan yalnız kendi kayıtlarını görür
-- **Ürün yönetimi**: çoklu barkod, arşivleme, Excel/CSV toplu aktarma (önizleme + hata raporu; "Açılış Stoğu" sütunuyla devir)
-- **Raporlar**: stok ve hareket Excel'i; büyük raporlar e-postayla
+- **Ürün yönetimi**: çoklu barkod, arşivleme
+- **Toplu ürün aktarma** (Excel/CSV, yalnız yönetici): en fazla 20.000 satır ve 100 MB. Dosya
+  tarayıcıda okunur, sunucuya yalnız hücre verisi gider (görseller açılmaz). Akış: önizleme
+  (hiçbir şey yazılmaz) → onay → ilerleme çubuğu ve **İptal et** → sonuç ve indirilebilir rapor
+  (hatalı, yazılamayan, çakışan, belirsiz, işlenmeyen satırlar). "Açılış Stoğu" sütunu devir
+  yazar; aynı dosyayı yeniden yüklemek ikinci devri yazmaz. Belirsiz sayı ("1.234") satır hatası
+  sayılır; "1.234,56" ya da Excel'in sayı hücresi kullanın.
+  - **Aktarım bitene kadar sekme açık kalmalı.** Sekme kapanırsa aktarım durur; işlenen satırlar
+    kalır, kalanlar için dosya yeniden yüklenir. İptal işlenenleri geri almaz.
+  - **Süre:** geliştirme bilgisayarında ölçüm (Windows + Docker, 2026-10-23): satır başına
+    devirsiz ~35–43 ms, devirli ~68–80 ms. 2.000 satır ~1,5 (devirsiz) / ~2,7 dk (devirli),
+    20.000 satır ~11,5 / ~22,6 dk. Önizleme 20.000 satırda ~2 sn. Sunucu ve veritabanı farklıysa
+    süre değişir; ayrıntı `CURRENT_STATE.md`.
+- **Tedarikçi verisi** (V1, yalnız yönetici): tedarikçinin ürün, fiyat ve stok bilgisi dosyadan
+  (Excel/CSV ya da JSON örnek API verisi, en fazla 5.000 satır, 4 MB) **Verileri Getir** ile
+  önizlenip kaydedilir. Barkodla otomatik eşleşme, elle bağlama ve yok sayma; fiyat ve koşul
+  değişim geçmişi; ürün sayfasında tedarikçi teklifleri ve karşılaştırma. Tedarikçi verisi ürünün
+  fiyatını ve stoğunu değiştirmez, hareket üretmez. Gerçek bir tedarikçi API bağlantısı henüz yok
+  (T201); sipariş ve otomatik senkron yok
+- **Raporlar**: stok ve hareket Excel'i, 20.000 satıra kadar anında iner. Daha büyük rapor
+  kuyruğa alınıyor ve ekran "e-posta ile gönderilir" diyor, ama kuyruk bu işi bugün işlemiyor:
+  e-posta gelmez (T216). Büyük rapor için süzgeçle satır sayısını 20.000'in altına indirin
 - **Kullanıcılar ve roller**: yönetici / çalışan; alış fiyatı çalışana gösterilmez
 - **Sistem sağlığı**: defter tutarlılığı, iş kuyruğu, hareketsizlik
 - **Kiracı izolasyonu**: PostgreSQL Row Level Security ile veritabanı seviyesinde
@@ -267,7 +287,7 @@ curl -X POST -H "Authorization: Bearer <CRON_SECRET>" http://localhost:3000/api/
 | `pnpm test` | Birim + entegrasyon. Gerçek PostgreSQL gerekir; her paket kendi `stok_test_*` veritabanını sıfırdan kurar. `db:reset` ve `db:backup` testleri Docker ister ve kendi geçici compose projelerini açıp siler |
 | `pnpm --filter @stok/db exec drizzle-kit generate` | Şema ile migration'lar senkron mu ("No schema changes" beklenir) |
 | `pnpm --filter @stok/web run build` | Üretim derlemesi |
-| `pnpm --filter @stok/web run test:e2e` | Playwright; önce build gerekir, port 3000 boş olmalı, demo veritabanını kullanır |
+| `pnpm --filter @stok/web run test:e2e` | Playwright; önce build gerekir, port 3000 boş olmalı, demo veritabanını kullanır ve ona kalıcı kayıt yazar (toplu aktarma testi koşu başına yüzlerce ürün; T150) |
 | `pnpm db:up` | Docker veritabanını aç ve hazır olana kadar bekle |
 | `pnpm db:reset --dry-run` / `--confirm-volume=<ad>` | Volume'ü sıfırlamadan önce salt okunur kontrol / doğrulanmış sıfırlama (yukarıda) |
 | `pnpm db:backup` / `--status` | Doğrulanmış yerel yedek / yedek dizininin durumu (yukarıda) |

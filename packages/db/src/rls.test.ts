@@ -298,6 +298,8 @@ describe('T46.4 - uygulama rolü RLS atlayamaz', () => {
       'suppliers',
       'supplier_items',
       'supplier_price_changes',
+      'import_runs',
+      'import_run_rows',
       // Tenant'a bağlı değil ama politikası var: sadece sahip role açık,
       // uygulama rolüne hiçbir satır geçmiyor (T51).
       'auth_attempts',
