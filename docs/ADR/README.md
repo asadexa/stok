@@ -29,7 +29,7 @@ gerekiyorsa `DECISIONS.md`'de tek satır olur.
   satır da `Superseded` olur.
 - **Elenen yol yazılır.** Bir ADR'nin en değerli kısmı seçilmeyenlerin neyi
   bozacağıdır. Onu yazmayan ADR, kodun kendisinin söylemediği hiçbir şeyi söylemez.
-- **Sıradaki numara: ADR-008.**
+- **Sıradaki numara: ADR-009.**
 
 ## Durum etiketleri
 
@@ -67,6 +67,7 @@ gerekiyorsa `DECISIONS.md`'de tek satır olur.
 | [005](005-api-versiyonlama.md) | API versiyonlama ve zorunlu güncelleme | Kabul edildi (uygulanmadı) | ARC-09 |
 | [006](006-tedarikci-fiyat-gecmisi.md) | Tedarikçi verisi: güncel durum + yalnız değişimde append-only fiyat geçmişi | Kabul edildi | DAT-19 |
 | [007](007-buyuk-toplu-aktarim.md) | Büyük toplu aktarım: tarayıcıda okuma, kalıcı aktarım kaydı, tarayıcının sürdüğü parçalar | Kabul edildi | ARC-15, DAT-20 |
+| [008](008-depo-modeli.md) | Depo modeli: depo miktarı hareket defterinden türetilir | Kabul edildi | PRD-17, DAT-21–DAT-25 |
 
 ## Notlar
 

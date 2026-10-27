@@ -7,7 +7,7 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
 **Kurallar**
 
 - ID `T<n>`. Arşivdeki görevler numaralarını korur. Yeni görev en büyük
-  numaradan devam eder — **sıradaki boş numara: T217**. Numara yeniden
+  numaradan devam eder — **sıradaki boş numara: T230**. Numara yeniden
   kullanılmaz.
 - Biçim: `- [ ] **T<n> (P0–P3)** - <alan> - **Başlık**`. Altında kısa
   **Neden / Kanıt / Bağlı / Doğrula / Kaynak** satırları.
@@ -35,14 +35,95 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
 
 ## P1
 
-Yol haritasının üstü (kullanıcı kararı 2026-10-22; 2026-10-17 sırasının yerine), bu sırayla:
-(1) T171, toplu ürün aktarımını 20.000 satıra ölçeklendirme (geliştirme tamamlandı, manuel UAT bekleniyor);
-(2) T201, gerçek tedarikçi API entegrasyonu; (3) T200 Dilim 2; (4) UX iyileştirmeleri uygun ürün
-dilimlerinde (T212–T215, T210, T211), tek bir yeniden tasarım olarak değil. T200 PLAN ve Dilim 1
-tamam; Dilim 1 kullanıcı kabul testinde kabul edildi (2026-10-22). HTTPS test ortamı (T144; üretim
-T42 ayrı) ayrı operasyon hattında yürüyor; bu ürün sırası onu değiştirmez. Sıra ürün önceliğidir:
-kritik veri bütünlüğü ve güvenlik işlerini ertelemenin gerekçesi değildir. Diğer P1 işler ve
-güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
+Yol haritasının üstü (kullanıcı kararı 2026-10-27, A2 ve CEO-8; 2026-10-22 sırasının üstüne):
+(1) **çok depolu stok ve Envanteri Güncelle** (`PRD-17`, `PRD-18`; F-15): Dilim 1 bitti (T217);
+30 Ekim Cuma hedefi Dilim 2 (T218) ve Dilim 3 (T219), değer dürüstlüğü (T221'in değer kısmı, CEO-1)
+ile birlikte; T171 kabul testi aynı gün yapılabilir (T222). Perşembe 12:00 karar noktası: Dilim 2
+güvenilir biçimde bitmemişse Cuma'da yarım envanter akışı hazırmış gibi sunulmaz; T171 kabul testi
+ve çalışan özelliklerin demosu yapılır. Geliştirme Cuma'ya sıkıştırılmaz. (2) Temel akıştan sonra
+Dilim 4 (T220, manuel depo seçimi; önemli) ve Dilim 5'in kalanı (T221). (3) Bu kritik yolun dışında
+ve sıraları korunarak: T201 gerçek tedarikçi API'si, sonra T200 Dilim 2; UX iyileştirmeleri uygun
+ürün dilimlerinde (T212–T215, T210, T211), tek bir yeniden tasarım olarak değil. T200 PLAN ve
+Dilim 1 tamam; Dilim 1 kullanıcı kabul testinde kabul edildi (2026-10-22). HTTPS test ortamı (T144;
+üretim T42 ayrı) ayrı operasyon hattında yürüyor; bu ürün sırası onu değiştirmez. Sıra ürün
+önceliğidir: kritik veri bütünlüğü ve güvenlik işlerini ertelemenin gerekçesi değildir. Diğer P1
+işler ve güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
+
+- [ ] **T218 (P1)** - core - **Çok depo Dilim 2: envanter dosyası aktarımı ve ilk kurulum (arayüz yok)**
+  - Neden: `PRD-18`'in dosya hattı yok. Dilim 1'in kapısı (`DAT-24`) ve aktarım bağlantısı
+    (`DAT-25`) hazır, ama onları çağıran üretim yolu yok; depo açan bir yol da yok.
+  - Kapsam (onaylı PLAN, CEO ve ENG kararları 2026-10-27): T171 hattına ikinci aktarım türü
+    (`import_runs.kind`) ve sunucuda hesaplanan içerik parmak izi; sütunlar `Malzeme Kodu`,
+    `Envanter Miktarı`, `Ambar` her satırda, yeni üründe ayrıca `Malzeme Açıklaması` ve tanınan
+    `Birim`; diğer sütunlar "okunmadı" (fiyat sütunları sunucuya gitmez). Birim eş adları `AD`,
+    `LT`, `MT` (ENG-2) ve `import.ts`'teki "AD tanınıyor" yorumunun düzeltilmesi. Satır türleri:
+    değişecek (eski → yeni), değişmeyecek, yeni ürün, yeni depo, hata, belirsiz eşleşme (ne
+    eşleştirilir ne oluşturulur), depoya atama bekliyor (yalnız o satır; dosyanın geri kalanı
+    işlenir). Boş miktar, boş `Ambar` ve negatif miktar satır hatası (CEO-6). Yeni ürün stok kodu
+    başına bir kez, barkodsuz ve fiyatsız; yeni depo eşzamanlı açılışa dayanıklı. Fark hareketi
+    `createMovement`'ın `inventory` seçeneğiyle, anahtar aktarım + satırdan, `import_run_id` dolu;
+    kilit altındaki uyuşmazlık satırı `Çakışma` yapar. "Bu yeni bir sayım" onayı sunucuda zorunlu;
+    son yüklenen dosyanın adı ve tarihi; envanter aktarım başlıkları 30 günlük temizlikte
+    korunur. Ürün aktarımında birden çok depolu işletmede devrin `DEPOT_REQUIRED` mesajı
+    kullanıcıyı Envanteri Güncelle'ye yönlendirmeli. Kesinti doğrulaması T171'deki gibi.
+  - Bağlı: T217, T171 (hat), T219, T155; `PRD-18`, `DAT-24`, `DAT-25`, `ARC-15`, `DAT-20`.
+  - Doğrula: taze kiracıda tek dosya ürün, depo ve stokları oluşturuyor; kısmi depo dosyası
+    diğer depoları koruyor; dosyada olmayan ürün değişmiyor; belirsiz eşleşme işlenmiyor; fiyat
+    hiçbir yere yazılmıyor. `dogrula`: aynı aktarımın tekrarında 0 yeni hareket, önizleme ile onay
+    arası çakışma, atanmamış stoklu ürünün atlanması, yeni ürünün bir kez oluşması, boş miktar ve
+    boş Ambar, sunucudaki aynı içerik onayı. Parçanın ortasında kesinti. Süre ölçümü (T171'den
+    sonraki hat için ölçülmedi).
+  - Risk: Perşembe 12:00 karar noktası (yukarıda). İlk depo bu dilimle açılır: demo kiracısında
+    depo açılmamalı, Cuma testi taze kiracıda (`pnpm tenant:create`).
+  - Kaynak: depo bazlı envanter PLAN'ı, CEO ve Engineering Review, 2026-10-27.
+- [ ] **T219 (P1)** - web - **Çok depo Dilim 3: Envanteri Güncelle ekranı ve ürün sayfasında depo dağılımı**
+  - Neden: T218 arayüzsüz; kullanıcı dosyayı yükleyemez ve bir deponun güncellenmesinden sonra
+    diğerlerinin değişmediğini ekranda göremez (stok listesi yalnız toplamı gösteriyor).
+  - Kapsam: Stok menüsünde yeni ekran (yalnız yönetici): yükleme → sütun tablosu → depo listesi
+    → önizleme → onay ("Bu yeni bir sayım" ek onayı) → ilerleme → rapor; mevcut sihirbazın
+    iskeleti, kopyası değil. Dosyada olmayan ürünlerin stoğunun değişmeyeceğini söyleyen metin
+    (CEO-7); boş dosya ya da hepsi hatalı durumu. Ürün sayfasında salt okunur, depo bazında miktar
+    bölümü (CEO-2; kapsamlı ürün sayfası ya da depo yönetim ekranı yok; "Depoya atama bekliyor"
+    rozeti T221). `DEPOT_REQUIRED` mesajı ve Cuma test notu: birden çok depolu işletmede manuel
+    hareket Dilim 4'e kadar çalışmıyor.
+  - Bağlı: T218 (önkoşul), T217, T150 (E2E demo veritabanına yazıyor).
+  - Doğrula: Playwright, sentetik dosyayla, izole veritabanı ve portta; çalışan ekranı açamıyor.
+  - Kaynak: depo bazlı envanter PLAN'ı ve CEO Review, 2026-10-27.
+- [ ] **T220 (P1)** - web - **Çok depo Dilim 4: manuel harekette depo seçimi, Atanmamış Stok ve barkodsuz ürün seçimi**
+  - Neden: hareket formunda depo alanı yok. Bir işletmede birden çok depo açılınca manuel hareket
+    `DEPOT_REQUIRED` ile reddedilir; deposu bilinmeyen eski stoktan çıkış yapılamaz; barkodsuz
+    ürüne manuel hareket girilemez.
+  - Kapsam: hareket formunda depo seçimi (tek depo önceden seçili); A1: çıkışta "Atanmamış Stok"
+    kaynağı (sunucu kuralı + arayüz; gerçek depo değil, yalnız mevcut atanmamış miktardan, açık
+    seçimle, girişte yok; `PRD-17`); ürün sayfasından `urunId` ile harekete geçiş; ürün formunda
+    barkodun isteğe bağlı olması (`PRD-19`). `LAST_BARCODE` ("ürünün son barkodu kaldırılamaz")
+    kuralı ve onun eskiyen yorumları gözden geçirilir (`errors.ts`, `products.ts`,
+    `products.test.ts`: "barkodsuz ürün okutulamaz" artık tam doğru değil).
+  - Bağlı: T217 (önkoşul), T177, T218 (depo açan yol); `DAT-22`, `DAT-23`.
+  - Doğrula: satış yalnız seçilen depoyu azaltıyor; depoda yetmeyen miktar açık mesajla
+    reddediliyor; Atanmamış Stok'tan atanmamış miktarı aşan çıkış reddediliyor (`dogrula`).
+  - Öncelik: Cuma'nın kesin hedefi değil (A2); temel akıştan sonra ilk iş. Yetişmezse Cuma'da
+    birden çok depolu manuel hareketin çalışmadığı açıkça söylenir.
+  - Kaynak: depo bazlı envanter PLAN'ı, A1/A2 ve CEO-3, 2026-10-27.
+- [ ] **T221 (P1)** - core - **Çok depo Dilim 5: değer dürüstlüğü ve "Depoya atama bekliyor" rozeti**
+  - Neden: panel ve kategori değeri `qty × COALESCE(alış fiyatı, 0)` (`stock.ts`); dosyadan
+    oluşan ürünlerin hiçbirinde alış fiyatı olmayacağı için değer 0 ₺ görünür, `PRC-12`'yi ihlal
+    eder.
+  - Kapsam: değer kısmı Cuma hedefi (CEO-1): yalnız fiyatı bilinen stoklu ürünler toplanır,
+    değerlemeye girmeyen ürün sayısı gösterilir; minimum kapsam. Ürün sayfasında "Depoya atama
+    bekliyor" rozeti Cuma'dan sonra (CEO-2).
+  - Bağlı: `PRC-12`; rozet T217 ve T219'a bağlı. Fiyat gizliliği (INV-10) korunur.
+  - Doğrula: fiyatsız stoklu ürün toplamı 0 yapmıyor ve sayıda görünüyor; çalışan alış fiyatı
+    türevi bir değer görmüyor.
+  - Kaynak: K5, CEO-1, CEO-2, 2026-10-27.
+- [ ] **T222 (P1)** - doküman - **Çok depo Dilim 6: Cuma senaryosu, tam kapılar ve belge senkronu**
+  - Kapsam: T171 kabul testiyle birlikte; taze sentetik kiracıda Cuma senaryosu (iki depolu
+    dosya → ikinci dosya yalnız Depo 1 → aynı dosya yeniden: uyarı); tam kapılar (lint,
+    typecheck, test, drift, build, izole E2E); Cuma test notu (çalışmayanlar, yanlış dosya
+    düzeltme yolu: yanlış depoya yazılan miktarlar o depo için 0 miktarlı dosyayla geri alınır;
+    yanlış açılan depo silinemez, T226).
+  - Bağlı: T218, T219, T221, T171. Gerçek işletme verisi repoya ve fixture'a girmez.
+  - Kaynak: depo bazlı envanter PLAN'ı ve CEO-8, 2026-10-27.
 
 - [ ] **T171 (P1)** - import - **Büyük içe aktarma tek istekte uzun sürüyor (2.000 satır devirli 47 sn); kullanıcı hedefi 20.000 satır**
   - Neden: satırlar tek tek, her devir kendi `createMovement` transaction'ında yazılıyor
@@ -275,6 +356,54 @@ güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
 
 ## P2
 
+- [ ] **T223 (P2)** - core - **Çok depo Dilim 7: deposu bilinmeyen eski stoğun depolara atanması**
+  - Neden: bir işletmede depo açılınca eski stok "atanmamış" kalır (`DAT-21`); depoya atama ve
+    A1 (T220) olmadan o işletmede bu stok satılamaz, envanter dosyası da o ürünün satırını yazmaz
+    (`STOCK_CHANGED`, `DAT-24`).
+  - Kapsam (onaylı PLAN): tek transaction'da iki satır: atanmamıştan −q, seçilen depoya +q;
+    elle seçilemeyen, fiyat taşımayan yeni bir sebep çifti; q atanmamış miktarı aşamaz; toplam
+    değişmez (INV-1). Panelin günlük giriş/çıkış sayısı bu sebepleri dışlar (bayrak
+    `reasons.ts`'te, INV-9). Kapının şekli (seçenek mi ayrı fonksiyon mu) ve INV-3 metni bu
+    dilimin Engineering Review'unda.
+  - Bağlı: T217, T220; `PRD-17`.
+  - Doğrula: atama sonrası `current_stock` aynı, depolar doğru; atanmamışı aşan atama reddi
+    (`dogrula`); defter = projeksiyon.
+  - Kaynak: depo bazlı envanter PLAN'ı (S2), 2026-10-27.
+- [ ] **T224 (P2)** - core - **Çok depo Dilim 8: fiyat geçmişi, ardından isteğe bağlı toplu satış fiyatı güncellemesi**
+  - Neden: `PRC-13` onaylı ama ürün fiyatı yerinde güncelleniyor, geçmiş yok; geçmiş olmadan
+    toplu değişiklik eski fiyatları geri dönülmez biçimde kaybettirir.
+  - Kapsam: önce yalnız ekleme yapılan fiyat değişikliği kaydı (ürün, alan, eski, yeni,
+    kullanıcı, zaman, kaynak), `patchProduct` içinde yazılır; sonra toplu satış fiyatı (`PRC-13`).
+    Aynı dilimde karar: ürün aktarımında boş satış/alış fiyatı hücresi bugün mevcut fiyatı
+    siliyor (`import.ts:307-308`); `PRC-13`'ün "boş satır fiyatı silmez" kuralıyla çelişiyor.
+  - Bağlı: `PRC-13`, F-02, F-04. Cuma için zorunlu değil.
+  - Kaynak: depo bazlı envanter PLAN'ı §3.6, 2026-10-27.
+- [ ] **T225 (P2)** - core - **Çok depo Dilim 9: dosyayla toplu mal kabulü (Stoğa Ekle)**
+  - Neden: `PRD-18`'in Stoğa Ekle tarafı yalnız manuel; dosyayla toplu giriş yok.
+  - Kapsam: aynı aktarım hattı, ayrı tür; miktar topladığı için aynı içerik açık onay olmadan
+    uygulanmaz; mevcut fiyatlar değişmez; depo seçilir.
+  - Bağlı: T218 (hat ve parmak izi), T220.
+  - Kaynak: depo bazlı envanter PLAN'ı, 2026-10-27.
+- [ ] **T227 (P2)** - import - **ERP envanter çıktısı stoğu sıfır olan ürünleri atlıyorsa toplam sessizce şişer**
+  - Neden: `PRD-18` gereği dosyada olmayan ürün değişmez. Stoğu sıfıra düşen ürün dosyada hiç yer
+    almazsa sistemde eski miktarıyla kalır; toplam stok ve değer gerçekten yüksek görünür.
+  - Kanıt: doğrulanmadı; gerçek dosyanın sıfır satırları içerip içermediği bilinmiyor (sentetik
+    örnek bekleniyor).
+  - Kapsam: önizlemede "bu depoda stoğu olup dosyada olmayan N ürün" bilgisi ertelendi (CEO-7);
+    otomatik sıfırlama yok. Örnek dosya sıfır satırları atlıyorsa öncelik yükselir.
+  - Bağlı: T218, T219.
+  - Kaynak: CEO Review bulgu 6 ve CEO-7, 2026-10-27.
+- [ ] **T228 (P2)** - import - **Ürün aktarımında barkodu isteğe bağlı yapmak: barkodsuz yeni satırın Açılış Stoğu sessizce düşüyor**
+  - Neden: bugün ürün aktarımı barkodsuz yeni satırı hata yapıyor (`import.ts`). Kural kalkarsa
+    fiyatı olan barkodsuz yeni satırda devir yazılmadan ve hatasız geçer: devir planı tekli
+    barkod istiyor, yeni satırda barkod boşsa ne plan ne satır hatası oluşuyor (`import.ts`,
+    `openingBarcode` kontrolü).
+  - Kapsam: devir ürün kimliğiyle (`DAT-22`) yazılmalı ya da açıkça raporlanmalı; ardından
+    barkod zorunluluğu kalkar (`PRD-19`). CEO-4 gereği bu çözülene kadar ertelendi.
+  - Bağlı: T177, `DAT-18`, `PRD-19`.
+  - Doğrula: barkodsuz yeni satırın devri ya yazılıyor ya da satır sonucunda görünüyor; sessiz
+    kayıp yok.
+  - Kaynak: CEO Review bulgu 4 ve CEO-4, 2026-10-27.
 - [ ] **T216 (P2)** - cron - **Kuyruğa alınan büyük dışa aktarma hiç çalışmıyor: cron'da `STOCK_EXPORT`/`MOVEMENT_EXPORT` işleyicisi yok**
   - Neden: `planExport` büyük raporu kuyruğa atıp e-postayla göndermeyi vaat ediyor, ama
     `runCron` `runQueuedJobs`'a yalnız `DAILY_REPORT`, `LOW_STOCK_SCAN`, `HEALTH_ALARM`
@@ -521,6 +650,17 @@ güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
 
 ## P3
 
+- [ ] **T226 (P3)** - core - **Depo arşivleme ve yeniden adlandırma yok; depoyu kimin açtığı izlenmiyor**
+  - Neden: dosyadaki yanlış bir `Ambar` değeri kalıcı bir depo açar; Dilim 1–3'te depo silme,
+    arşivleme ve yeniden adlandırma yok (`DAT-21`). Depo satırında açan kullanıcı tutulmuyor.
+  - Bağlı: T218, T219. Kapsamlı depo yönetimi şimdilik ürün kapsamı dışında (`PRD-17`); açılmadan
+    önce kapsam kararı gerekir.
+  - Kaynak: CEO Review (WARNING), 2026-10-27.
+- [ ] **T229 (P3)** - import - **Envanter dosyasında manuel sütun eşleştirme**
+  - Neden: ilk sürüm gerçek dosyanın başlıklarını otomatik tanıyor (S4); farklı başlıklı dosya
+    kritik sütun eksik diye reddedilir.
+  - Bağlı: T218. Cuma'dan sonra (S4).
+  - Kaynak: depo bazlı envanter PLAN'ı, 2026-10-27.
 - [ ] **T209 (P3)** - web - **Başarısız kayıttan sonra hata, yeni önizlemede de görünüyor (tedarikçi sihirbazı)**
   - Neden: `tedarikciler/[id]/refresh-wizard.tsx` hata metnini `sizeError ?? saved.error ??
     state.error` ile seçiyor ve kayıt eyleminin durumu yeni önizlemede sıfırlanmıyor. Kayıt bir
@@ -742,12 +882,14 @@ kullanıcılı ama ortak laptop kullanımına özel hedef yok; önce kritik stok
 tükenme tahmini sonra; öncelik günlük stok takibi, 2026 yıl sonu envanteri zorunlu hedef
 değil. Kayıtlarda "Ürün kararı" onaylı kapsamdır; "Teknik not" henüz onaylanmamış tasarım girdisidir.
 
-- En üst öncelik (kullanıcı kararı 2026-10-22; 2026-10-17 sırasının yerine): T171 (20.000 satır
-  içe aktarma), sonra T201 (gerçek tedarikçi API'si), sonra T200 Dilim 2; UX iyileştirmeleri uygun
-  dilimlerde. T200 Dilim 1 kabul edildi (2026-10-22). T144 (HTTPS test ortamı, `OPS-12`) ayrı
-  operasyon hattında. Sıra ve kayıtlar P1'de.
+- En üst öncelik (kullanıcı kararı 2026-10-27): çok depolu stok ve Envanteri Güncelle (T218–T222;
+  Dilim 1 bitti, T217) ve T171 kabul testi; sonra T201 (gerçek tedarikçi API'si), sonra T200
+  Dilim 2; UX iyileştirmeleri uygun dilimlerde. T200 Dilim 1 kabul edildi (2026-10-22). T144
+  (HTTPS test ortamı, `OPS-12`) ayrı operasyon hattında. Sıra ve kayıtlar P1'de. Cuma sonrası
+  çok depo işleri (T223–T229) P2 ve P3'te; bu öncelikler önerilen iş sıralamasıdır, kesinleşmiş
+  ürün kararı değildir.
 - Öncelikli: T155 (sayım), T175 (telefondan ürün yönetimi), T176 (uygulama içi gün sonu
-  raporu), T177 (barkodsuz ürün).
+  raporu), T177 (barkodsuz ürün; çekirdeği bitti).
 - Kritik stok takibi mevcut, yeniden geliştirilmeyecek (doğrulandı 2026-10-13): ürün bazlı
   eşik `products.min_stock` (`packages/db/src/schema.ts:157-158`, ürün formunda "Kritik eşik"),
   kritik liste `/stok?kritik=1`, panel uyarısı ve "Kritik stok" listesi
@@ -764,7 +906,11 @@ değil. Kayıtlarda "Ürün kararı" onaylı kapsamdır; "Teknik not" henüz ona
     sayıma ara verip devam etme; sistem ve fiziksel miktar karşılaştırması; yetkili onayıyla
     fark düzeltmesi; append-only defter korunur; sayım sırasındaki hareketler doğru hesaba
     katılır; telefondan sayım seçeneği değerlendirilir.
-  - Teknik not (onaylanmadı): `COUNT_ADJUST_*` bugün tek yazma kapısından geçemiyor
+  - Not (2026-10-27): Dilim 1'den beri kapıda sunucuya özel envanter seçeneği var (`DAT-24`:
+    `count:approve`, beklenen depo miktarı, işaret sunucuda). Envanter dosyası (T218) sayım
+    oturumu değildir ama aynı kapıyı kullanır; `count_session_id` sayım oturumlarına ayrılmış,
+    aktarım bağlantısı `import_run_id`'de (`DAT-25`).
+  - Teknik not (onaylanmadı; Dilim 1'den önce yazıldı): `COUNT_ADJUST_*` bugün tek yazma kapısından geçemiyor
     (`packages/shared/src/schemas.ts:128`, `userSelectable` refine); aday desen
     `requireFirstMovement` gibi sunucu tarafı çağıran seçeneği (`movements.ts:86-92`). Fark,
     satırın sayıldığı andaki sistem miktarına göre delta olarak yazılmalı ("sayılanı yaz"
@@ -803,6 +949,10 @@ değil. Kayıtlarda "Ürün kararı" onaylı kapsamdır; "Teknik not" henüz ona
     `import.ts:609-611`) ve hareket girişi barkodla (`schemas.ts:126`).
   - Teknik not (onaylanmadı): seçenekler iç kod üretimi (T156 ile) ya da ürün kimliğiyle
     hareket yolu; `DAT-18` devri, `PRD-12` köprüsü ve içe aktarma etkilenir.
+  - Durum (2026-10-27): karar `PRD-19` (sahte/iç barkod yok). Yalnız çekirdek kısmı bitti:
+    barkodsuz ürün oluşturuluyor ve ürün kimliğiyle hareket alıyor (Dilim 1, T217, `DAT-22`).
+    Kalan: ürün formu (T220), ürün aktarımı (T228), envanter dosyasından barkodsuz yeni ürün
+    (T218). Kalanlar bitince kapanır.
   - Bağlı: T155, T175, T156.
 - [ ] **T178** - hareket - **Seri barkod okutma** (değerlendirilecek, 2026-10-13). Kayıttan sonra
   sebep sıfırlanıyor (`hareket/page.tsx:145-148`), mal kabulünde her kalemde yeniden seçiliyor.
@@ -826,7 +976,7 @@ değil. Kayıtlarda "Ürün kararı" onaylı kapsamdır; "Teknik not" henüz ona
   2026-10-17). V1'de yenileme yalnız "Verileri Getir" düğmesiyle (`PRD-14`). Bağlı: T201,
   `OPS-02` (zamanlayıcı), T139 (cron kiracıları sırayla işliyor).
 - [ ] **T157** - Maliyet takibi + kâr raporu (eski E8, P2). BLOKE: `DAT-15`. Geçmiş hareketlerde fiyat verisi yok.
-- [ ] **T158** - Raf/konum yönetimi arayüzü (eski E9, P3). Şema hazır.
+- [ ] **T158** - Raf/konum yönetimi arayüzü (eski E9, P3). Şema hazır. Raf (`locations`) depo değildir; depo ayrı kavram (`DAT-21`, 2026-10-27).
 - [ ] **T159** - Mobilde tam katalog senkronu (P2). Tetikleyici: sahada "ürün adını göremiyorum" şikâyeti.
 - [ ] **T160** - Mobil cihaz test otomasyonu, Maestro (P3). Tetikleyici: elle kontrol listesinin atlanması.
 - [ ] **T161** - Çok katmanlı paketleme hiyerarşisi (P3). Tetikleyici: ikiden fazla paket seviyesi isteyen müşteri.
@@ -836,7 +986,7 @@ değil. Kayıtlarda "Ürün kararı" onaylı kapsamdır; "Teknik not" henüz ona
 - [ ] **T163** - Parola kurtarma. Son yönetici parolasını unutursa veritabanına elle müdahale gerekiyor.
 - [ ] **T164** - KVKK: aydınlatma metni, saklama süresi, kiracı verisini dışa aktarma ve silme (tehdit S10).
 
-**Yön (henüz madde değil):** çok depo / transfer, satın alma siparişi (B2B tedarikçi verisi
+**Yön (henüz madde değil):** depolar arası transfer (çok depo T217–T229'da), satın alma siparişi (B2B tedarikçi verisi
 T200'de, B2B sipariş T202'de),
 e-Fatura / e-Arşiv, Logo / Mikro / Paraşüt köprüsü, SaaS kayıt / abonelik / faturalama,
 FIFO maliyet.
@@ -844,6 +994,24 @@ FIFO maliyet.
 ## Kapananlar
 
 _(Bu dosyada açılıp kapanan görevler buraya iner. T1–T119'un kapanış kayıtları arşivde.)_
+
+- [x] **T217 (P1)** - core - **Çok depo Dilim 1: depo modeli ve depo farkındalıklı hareket kapısı (arayüz yok)**
+  - Kapsam: migration 0014 (yalnız ekleme): `depots` (FORCE RLS, `tenant_isolation`, `name_key`
+    tekil, ad CHECK), `stock_movements.depot_id` ve `import_run_id` (kiracıyla birleşik FK),
+    `import_runs (tenant_id, id)` tekil indeksi. `createMovement`: barkod ya da ürün kimliği,
+    depo kuralı (0 / 1 / 2+ depo, `DEPOT_REQUIRED`), toplamdan sonra depo bazlı yetersiz stok,
+    sunucuya özel envanter seçeneği (`count:approve`, işaret sunucuda, `STOCK_CHANGED`).
+    Barkodsuz ürün çekirdekte. Temizlik deftere bağlı aktarım kaydını atlıyor. Kararlar `DAT-21`–
+    `DAT-25`, ADR-008.
+  - Kapanış (2026-10-27): `50b6dd9`, CI #88 (3/3 iş yeşil). Yerel: lint, typecheck, test
+    **1.284/1.284** (shared 83, db 326, core 688, web 187; gerçek PostgreSQL), drift "No schema
+    changes", web build; arayüz değişmediği için E2E yok. `depots.test.ts` 28 test. `dogrula`
+    (yalnız `stok_test_*`): `count:approve`, depo kiracı filtresi + `depots` RLS (yalnız filtre
+    kaldırılınca FORCE RLS koruyor), depo bazlı yetersiz stok, beklenen depo miktarı (kilit
+    testi dahil), atanmamış stok, `DEPOT_REQUIRED`, işaretin ters çevrilmesi, temizlikteki
+    `NOT EXISTS` kaldırılınca testler kırmızı yandı; ürün kimliği yolunda kiracı filtresi
+    kaldırılınca `products` RLS koruyor (yeşil, `rls.test.ts` kanıtlıyor).
+  - Devredilen: T218–T229; T177 kısmen.
 
 - [x] **T196 (P2)** - operasyon - **CLI, junction/symlink içeren ya da uzantısız yoldan çağrılınca hiçbir şey yapmadan 0 dönüyordu**
   - Sorun: `backup.ts` ve `db-reset.ts` `main`'i `resolve(process.argv[1])` ile `import.meta.url`

@@ -347,7 +347,9 @@ güncellenir. Yeni tehdit yeni ID alır; ID yeniden kullanılmaz.
     işlev `product:create` + `barcode:create` istiyor (yalnız yönetici). Rapor kayıttan
     okunuyor (`GET /api/rapor/aktarim?kayit=`); başka kiracının kaydı NOT_FOUND.
   - Kayıtlar 30 gün, yarıda kalmış yüklemeler 24 saat sonra siliniyor (cron bakımı ve yeni
-    aktarım başı). Gerçek tablolara yabancı anahtar yok: silme gerçek veriye ulaşamıyor.
+    aktarım başı). Silme gerçek veriye ulaşamıyor: kayıtlardan gerçek tablolara yabancı anahtar
+    yok. Ters yönde defterden `import_runs`'a FK var (0014, `DAT-25`): deftere bağlı kayıt
+    silinemez ve temizlik onu atlıyor (`import-runs.test.ts`); bugün kayda bağlanan hareket yok.
   - Beklenmeyen hata yalnız sınıf, SQLSTATE ve constraint adıyla loglanıyor (`messageOf`,
     `logUnexpected`).
 - **Katman:** `packages/core/src/sheet.ts`, `product-file.ts`, `import.ts`, `import-runs.ts`;
@@ -364,6 +366,46 @@ güncellenir. Yeni tehdit yeni ID alır; ID yeniden kullanılmaz.
     sınırlı değil (rapor bağlantısı paylaşılabilir, yalnız aynı işletmenin yöneticisi açar).
   - Tarayıcıda 100 MB'lık dosya belleğe okunuyor; çok düşük bellekli cihazda işçi düşerse
     kullanıcı "dosya bu tarayıcıda okunamadı" görür (veri yazılmaz).
+
+### S22 — Depo kimlikleri ve envanter düzeltmesi (çok depo Dilim 1)
+- **Tehdit:**
+  - Başka kiracının depo, ürün ya da aktarım kaydı kimliğiyle hareket yazmak: yabancı anahtar
+    RLS'i atlıyor, hareket başka işletmenin deposuna bağlanır ya da başka işletmenin stoğu
+    hakkında bilgi sızar.
+  - Çalışanın sayım düzeltmesi (`COUNT_ADJUST`) yazarak stoğu istediği değere getirmesi ve
+    açığı gizlemesi.
+  - Çağıranın işaret hatası (artış yerine azalış) ya da önizlemeden sonra araya giren satışın
+    envanter dosyasıyla ezilmesi; deposu bilinmeyen eski stoğun iki kez sayılması.
+  - Depo adında görünmez fark ("Merkez  Depo") ya da kontrol karakteriyle ikinci bir depo açmak.
+- **Koruma:**
+  - `depots`: ENABLE + FORCE RLS + `tenant_isolation` (migration 0014). Verilen depo kimliği kapıda
+    kiracı içinde aranıyor, yoksa NOT_FOUND (varlığı sızmıyor); ürün kimliği de kiracı içinde.
+  - `import_run_id` kiracıyla birleşik FK ile `import_runs(tenant_id, id)`'ye bağlı: başka
+    kiracının kaydına bağlanan hareket veritabanında reddediliyor. `depot_id` tek sütunlu FK;
+    kiracı kontrolü kapıda ve RLS'te (ADR-008).
+  - Envanter düzeltmesi yalnız `createMovement`'ın sunucuya özel seçeneğiyle; seçenek
+    `count:approve` istiyor (yalnız yönetici, `roles.ts`). `COUNT_ADJUST` normal hareket şemasından
+    seçilemiyor. Sebep ve işaret sunucuda hedef ile beklenen miktarın farkından türüyor. Kilit
+    altında depo miktarı beklenenden farklıysa ya da üründe atanmamış stok varsa `STOCK_CHANGED`,
+    hareket yazılmıyor.
+  - Depo adı anahtarı kırpılmış, iç boşlukları teklenmiş `tr_norm` (üretilmiş sütun, kiracı içinde
+    tekil); ad 1–100 karakter, kontrol karakteri yok (CHECK).
+- **Katman:** `packages/core/src/movements.ts`; `packages/shared/src/schemas.ts`, `roles.ts`;
+  `packages/db/migrations/0014_depots.sql`.
+- **Test:** `depots.test.ts` (başka kiracının depo, ürün ve aktarım kimliği; çalışan reddi; normal
+  şemadan `COUNT_ADJUST` reddi; `STOCK_CHANGED`, kilit altında araya giren satış dahil; ad
+  normalizasyonu ve CHECK; uygulama rolüyle başka kiracının deposu görünmüyor); `rls.test.ts`
+  FORCE taraması yeni tabloyu kapsıyor. `dogrula` (2026-10-27, yalnız `stok_test_*`):
+  `count:approve` kaldırılınca kırmızı; depo kiracı filtresi tek başına kaldırılınca FORCE RLS
+  koruyor (yeşil), filtre ve `depots` RLS birlikte kaldırılınca 2 test kırmızı; beklenen depo
+  miktarı ve atanmamış stok kontrolleri kaldırılınca kırmızı. Ürün kimliği yolunda kiracı filtresi
+  kaldırılınca `products` RLS koruyor (yeşil).
+- **Açık:**
+  - Bugün kapıyı envanter seçeneğiyle çağıran üretim yolu ve depo açan yol yok; dosya hattının
+    korumaları (fiyat sütunlarının sunucuya gitmemesi, aynı içerik onayının sunucuda zorunlu
+    olması) Dilim 2'de yazılacak (T218).
+  - Depoyu kimin açtığı izlenmiyor; depo arşivleme yok (T226).
+  - FK'ların genel kiracı-bileşik olmaması S1'in açığı olarak duruyor (T153).
 
 ---
 

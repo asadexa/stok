@@ -49,6 +49,7 @@ Katman kuralları `PROJECT_BRAIN` §5, ilkeler §12. Kayıtlarda yalnız özelli
 | F-14 | Windows tek tıkla başlatma (`BASLAT.bat`) | Uygulandı |
 | F-12 | B2B tedarikçi verisi V1 | **Geliştiriliyor** (Dilim 1 bitti, UAT kabul 2026-10-22; Dilim 2 T201'den sonra) |
 | F-13 | İnternetten erişilebilir test ortamı | **Planlandı** |
+| F-15 | Envanteri Güncelle: depo bazlı envanter dosyası ve tek dosyayla ilk kurulum | **Geliştiriliyor** (Dilim 1 çekirdeği bitti; dosya hattı ve ekran yok, kullanıma hazır değil) |
 
 ---
 
@@ -60,9 +61,13 @@ Katman kuralları `PROJECT_BRAIN` §5, ilkeler §12. Kayıtlarda yalnız özelli
   Barkod türü ve koli çarpanı, harekette miktarı ürünün birimine çevirir.
 - **Neden böyle:** USB barkod okuyucu klavye gibi yazar, ürünü barkodla bulmak girişi hızlandırır;
   koli barkodu çarpanla adede çevrildiği için stok tek birimde tutulur.
-- **Kararlar:** `DAT-17` (birim hassasiyeti, koli çarpanı); listeler tek kaynaktan (INV-9).
+- **Kararlar:** `DAT-17` (birim hassasiyeti, koli çarpanı); `PRD-19` (barkod isteğe bağlı, sahte barkod yok);
+  listeler tek kaynaktan (INV-9).
 - **Dosyalar:** `packages/core/src/products.ts`, `packages/db/src/schema.ts`, `apps/web/src/app/(panel)/urunler/`.
-- **Sınırlar:** yeni üründe barkod zorunlu (T177); görsel yalnız URL (T136); birim değişimi sonrası eski veri denetlenmiyor (T170).
+- **Sınırlar:** barkodsuz ürün yalnız çekirdekte destekleniyor (`insertProduct` boş barkod listesini
+  kabul ediyor, Dilim 1); ürün formu (T220) ve ürün aktarımı (T228) yeni üründe hâlâ barkod istiyor;
+  "son barkod kaldırılamaz" kuralı gözden geçirilecek (T220). Görsel yalnız URL (T136); birim değişimi
+  sonrası eski veri denetlenmiyor (T170).
 
 ### F-02 — Excel/CSV toplu ürün aktarma (Geliştiriliyor: T171 BUILD bitti, kullanıcı kabul testi bekliyor)
 - **İhtiyaç:** ilk kurulumda yüzlerce, büyük işletmede 20.000'e kadar ürünü tek tek girmemek.
@@ -109,17 +114,35 @@ Katman kuralları `PROJECT_BRAIN` §5, ilkeler §12. Kayıtlarda yalnız özelli
 - **Sınırlar:** sekme kapanırsa aktarım durur, kaldığı yerden devam ekranı yok (ürün kapsamı);
   devirde geçmiş tarihli fiyat yok (T172). Bir satır veritabanında 2 dakikadan uzun takılırsa
   ikinci işleyici onu yeniden deneyebilir: veri bozulmaz, sonucu `Çakışma` görünebilir (ADR-007).
+  Yeni üründe barkod zorunlu: kaldırmak barkodsuz satırın devrini sessizce düşürür (CEO-4, T228).
+  Birden çok depolu işletmede devir `DEPOT_REQUIRED` ile yazılmaz (satır "devir yazılamadı"
+  gösterir; Envanteri Güncelle'ye yönlendirme T218). Deftere bağlı aktarım kaydı 30 günde silinmez
+  (`DAT-25`); bugün kayda bağlanan hareket yok.
 
 ### F-03 — Stok hareketleri ve append-only defter
 - **İhtiyaç:** "elimde kaç tane var"dan çok "neden bu kadar": kim, ne zaman, hangi sebeple.
 - **Akış:** barkod okuyucu (klavye) → hareket formu → `createMovement` (tek yazma kapısı):
   kilit altında stok kontrolü, idempotency, defter satırı; `current_stock` tetikleyiciyle güncellenir.
+- **Depo altyapısı (çekirdek, Dilim 1, `50b6dd9`):** kapı ürünü barkodla ya da ürün kimliğiyle
+  çözer (`DAT-22`); depo kuralı: depo yoksa hareket atanmamış, tek depoda o depo, birden çok depoda
+  depo zorunlu (`DEPOT_REQUIRED`, `DAT-23`); çıkışta toplamdan sonra depo bazlı yeterlilik, aynı
+  kilit altında; sunucuya özel envanter seçeneği (`count:approve`; sebep ve işaret farktan,
+  önizlemeden sonra değişen depo ya da atanmamış stok `STOCK_CHANGED`, `DAT-24`). Depo miktarı
+  defterden türetilir, `current_stock` toplam kalır (`DAT-21`, ADR-008).
 - **Neden böyle:** stok bir sayı değil, değiştirilemez defterin toplamı; geçmiş ancak böyle
   sorgulanabilir. Tek yazma kapısı ve DB tetikleyicisi defter ile stoğun ayrışmasını önler;
   satır kilidi eşzamanlı çıkışların stoğu yetkisiz eksiye düşürmesini engeller.
-- **Kararlar:** ADR-001; INV-1…INV-6 (`PROJECT_BRAIN` §6, §11).
-- **Dosyalar:** `packages/core/src/movements.ts`, `packages/shared/src/reasons.ts`, `apps/web/src/app/(panel)/hareket/`, `hareketler/`.
-- **Sınırlar:** düzeltme / ters hareket akışı yok (T127); sayım yok (T155).
+- **Kararlar:** ADR-001, ADR-008; INV-1…INV-6 (`PROJECT_BRAIN` §6, §11); `DAT-21`–`DAT-25`.
+- **Dosyalar:** `packages/core/src/movements.ts`, `packages/shared/src/reasons.ts`, `packages/shared/src/schemas.ts`,
+  `packages/db/migrations/0014_depots.sql`, `apps/web/src/app/(panel)/hareket/`, `hareketler/`.
+- **Kabul (depo):** `depots.test.ts`: deposu olmayan işletmede davranış aynı; tek/çok depo kuralı;
+  başka kiracının depo ve ürün kimliği NOT_FOUND; toplam yetse de depo yetmiyorsa çıkış reddi;
+  K1 örneği (10 + 20 → 5 + 20 = 25); `STOCK_CHANGED`; tekrar anahtarı ikinci hareket üretmiyor;
+  defter = projeksiyon.
+- **Sınırlar:** düzeltme / ters hareket akışı yok (T127); sayım yok (T155). Hareket formunda depo
+  seçimi ve ürün kimliğiyle hareket yok (T220): depolar açılınca birden çok depolu işletmede manuel
+  hareket `DEPOT_REQUIRED` alır. Deposu bilinmeyen eski stoktan çıkış (A1, T220) ve depoya atama
+  (T223) yok. Bugün depo açan bir yol yok (ilk yol T218).
 
 ### F-04 — Fiyat defteri ve kasa açığı
 - **İhtiyaç:** liste fiyatından sapmayı engellemek değil, gizlenemez yapmak.
@@ -135,7 +158,7 @@ Katman kuralları `PROJECT_BRAIN` §5, ilkeler §12. Kayıtlarda yalnız özelli
 - **Akış:** uygulama `stok_app` rolüyle bağlanır; her tabloda FORCE RLS; kiracı bağlamı yalnız `withTenant`.
 - **Neden böyle:** kiracı filtresi yalnız uygulama kodunda olsaydı tek unutulan `WHERE` veriyi
   sızdırırdı; RLS'te ayarsız bağlam boş sonuç döner (güvenli varsayılan kapalı taraf).
-- **Kararlar:** ADR-002, `PRD-01`, INV-4; tehditler S1, S2, S12.
+- **Kararlar:** ADR-002, `SEC-01` (`PRD-01`'in yerine `PRD-17`), INV-4; tehditler S1, S2, S12, S22.
 - **Dosyalar:** `packages/db/src/client.ts`, `packages/db/migrations/`, `db/init/`.
 - **Sınırlar:** Supabase fonksiyon yetkileri doğrulanmadı (T124, deploy öncesi).
 
@@ -154,7 +177,9 @@ Katman kuralları `PROJECT_BRAIN` §5, ilkeler §12. Kayıtlarda yalnız özelli
 - **Akış:** panel uyarılar → bugün → son hareketler; ürün bazlı `min_stock` eşiği; bildirim zili ve e-posta.
 - **Neden böyle:** yönetici önce sorunu görmeli, sonra tabloyu; tasarım ilkeleri `PROJECT_BRAIN` §13.
 - **Dosyalar:** `apps/web/src/app/(panel)/panel/`, `stok/`, `apps/web/src/components/alert-bell.tsx`.
-- **Sınırlar:** push bildirimi yok; tükenme tahmini ertelendi (T179).
+- **Sınırlar:** push bildirimi yok; tükenme tahmini ertelendi (T179). Panel ve kategori değeri
+  alış fiyatı bilinmeyen ürünü 0 sayıyor, `PRC-12` ile çelişiyor (T221). Stok listesi yalnız toplamı
+  gösteriyor; depo dağılımı yok (T219).
 
 ### F-08 — Raporlar ve Excel dışa aktarma
 - **İhtiyaç:** muhasebeciye ve yöneticiye Excel.
@@ -321,3 +346,40 @@ Katman kuralları `PROJECT_BRAIN` §5, ilkeler §12. Kayıtlarda yalnız özelli
   değildir, tatbikat T129.
 - **İşler ve sıra:** T144, B2B V1'in ilk BUILD diliminden sonraki yakın adım (B2B'yi geciktirmez);
   üretim ayrı iş T42.
+
+### F-15 — Envanteri Güncelle: depo bazlı envanter dosyası ve tek dosyayla ilk kurulum (Geliştiriliyor: Dilim 1 çekirdeği bitti, kullanıma hazır değil)
+- **İhtiyaç:** işletmenin envanter raporunu depo başına yükleyip yalnız o deponun miktarlarını
+  güncellemek; ilk kurulumda ürünleri, depoları ve stokları binlerce ürünü elle girmeden tek
+  dosyayla oluşturmak; toplam stoğu doğru görmek.
+- **Onaylı ürün kararları:** `PRD-17` (çok depo, eski stok, Atanmamış Stok), `PRD-18` (Envanteri
+  Güncelle ile Stoğa Ekle ayrımı, tekrar yükleme, ilk kurulum), `PRD-19` (barkod isteğe bağlı),
+  `PRC-12` (değer). Örnek: Depo 1 = 10, Depo 2 = 20; Depo 1 dosyasında 5 → Depo 1 = 5, Depo 2 = 20,
+  toplam 25.
+- **Dosya:** gerçek başlıklar `Malzeme Türü`, `Malzeme Kodu`, `Malzeme Açıklaması`, `Ambar`,
+  `Envanter Miktarı`, `Birim`, `Ortalama Değer`, `Envanter Tutarı`, `Envanter Tutarı (RD)`. Her
+  satırda zorunlu: `Malzeme Kodu`, `Envanter Miktarı`, `Ambar`; yeni üründe ayrıca `Malzeme
+  Açıklaması` ve tanınan `Birim`. Kritik sütun eksikse dosya sessizce geçilmez. `Ambar` arayüzde
+  "Depo". Fiyat sütunları okunmaz, sunucuya gitmez. Testte yalnız aynı biçimde sentetik dosya.
+- **Uygulanan (Dilim 1, `50b6dd9`, T217):** yalnız veri modeli ve hareket kapısı (F-03):
+  `depots`, `depot_id`, `import_run_id`, sunucuya özel envanter seçeneği (`DAT-24`), ürün kimliğiyle
+  hareket, barkodsuz ürün çekirdekte. Dosya okuma, önizleme, aktarım ve ekran **yok**.
+- **Akış (planlanan, onaylı PLAN 2026-10-27):** T171 hattı (`ARC-15`) ikinci aktarım türüyle →
+  önizleme: değişecek (eski → yeni), değişmeyecek, yeni ürün, yeni depo, hata, belirsiz eşleşme,
+  depoya atama bekliyor → onay (aynı içerikte "Bu yeni bir sayım", sunucuda zorunlu) → parça parça
+  uygulama: yeni ürün stok kodu başına bir kez (barkodsuz, fiyatsız) ve depo, sonra fark hareketi
+  `createMovement`'ın envanter seçeneğiyle (`import_run_id` dolu) → rapor. Ekran Stok menüsünde,
+  yalnız yönetici; ürün sayfasında salt okunur depo dağılımı.
+- **Kabul kriterleri:** taze kiracıda tek dosya ürünleri, depoları ve stokları oluşturur; kısmi
+  depo dosyası diğer depoları korur; dosyada olmayan ürün değişmez ve bu kullanıcıya söylenir;
+  belirsiz eşleşme ne eşleştirilir ne oluşturulur; fiyat hiçbir yere yazılmaz; aynı aktarımın
+  tekrarı 0 yeni hareket yazar; aynı içerik uyarı verir; önizlemeden sonra değişen stok `Çakışma`
+  olur; boş miktar, boş `Ambar` ve negatif miktar satır hatasıdır; çalışan ekranı açamaz; defter
+  = projeksiyon.
+- **Sınırlar:** deposu bilinmeyen eski stoğu olan ürünün satırı yazılmaz (depoya atama T223);
+  dosyada olmayan stoklu ürün sayısı gösterilmez ve ERP çıktısının sıfır satırları atlama riski
+  açık (T227); manuel sütun eşleştirme yok (T229); depo silme ya da arşivleme yok (T226); satış
+  fiyatı güncellemesi yok (`PRC-13`, T224); sekme kapanırsa aktarım durur (`ARC-15`).
+- **İşler ve sıra:** Dilim 1 bitti (T217). Cuma 30 Ekim hedefi: Dilim 2 (T218, dosya hattı) ve
+  Dilim 3 (T219, ekran ve depo dağılımı), değer dürüstlüğü (T221); Perşembe 12:00 karar noktası
+  (`CURRENT_STATE`). Sonra Dilim 4 (T220, manuel depo seçimi), Dilim 6 (T222), T223–T225.
+  Tehdit ve korumalar `SECURITY_MODEL` S22.

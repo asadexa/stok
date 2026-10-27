@@ -13,7 +13,9 @@ kapsamın sınırı). Özellik eklemek onu tek başına değiştirmez.
 ## 1. Amaç
 
 Küçük ve orta ölçekli depolar ve perakende işletmeler (kırtasiye, hırdavat) için
-barkod tabanlı stok takibi. Türkçe, çok kiracılı (`PRD-01`).
+barkod tabanlı stok takibi; barkod isteğe bağlı (`PRD-19`). Türkçe, çok kiracılı (`SEC-01`).
+Bir işletmenin birden çok deposu olabilir: toplam stok gösterilir, depolara dağılımı da
+izlenir (`PRD-17`, §6).
 
 Ürünün cevapladığı asıl soru "elimde kaç tane var" değil, **"neden bu kadar"**:
 40 adet kırmızı defter nereye gitti, ne zaman, kim tarafından. Bu yüzden stok bir
@@ -54,6 +56,9 @@ ve sunucuda zorlanır; arayüzde düğmeyi gizlemek yetki kontrolü değildir.
   (kim / ne zaman / neden), sistem sağlığı.
 - **Rapor**: stok ve hareket Excel'i; gün sonu raporu ve alarm e-postaları (cron).
 - **Yönetim**: kullanıcı ekleme, rol, pasifleştirme, parola sıfırlama.
+- **Envanteri Güncelle** (yazılıyor, F-15): deponun envanter dosyası o deponun yeni toplamıdır,
+  fark kadar sayım düzeltmesi yazılır; ilk kurulum da tek dosyayla (`PRD-18`). Stoğa Ekle / mal
+  kabulü ise miktarı ekler; ikisi ayrı işlemdir.
 - **Gelecek** (yazılmadı): mobilde kamerayla offline okutma, sayım, etiket basma.
 
 ## 4. Kapsamın genel çerçevesi
@@ -67,6 +72,8 @@ ve sunucuda zorlanır; arayüzde düğmeyi gizlemek yetki kontrolü değildir.
   Yüksek öncelikli (2026-10-17): tedarikçi verisini dışarıdan **çeken** B2B V1 (`PRD-14`;
   Dilim 1 yazıldı ve kabul edildi, Dilim 2 ile gerçek API T201 açık: F-12, ADR-006; bizim REST
   sunmamızdan ayrı; güncel sıra `CURRENT_STATE`) ve HTTPS alan adıyla çevrim içi test ortamı (`OPS-12`).
+  En üst öncelik (2026-10-27): çok depolu stok ve Envanteri Güncelle (`PRD-17`, `PRD-18`; veri modeli
+  ve hareket kapısı yazıldı, dosya hattı ve ekranlar yazılıyor).
   Özellik kayıtları `docs/TEKNIK_SARTNAME.md`'de.
 - **Bilinçli kapsam dışı**: §14.
 
@@ -107,17 +114,34 @@ sonrası trigger yazıyor; yani hareketi kim yazarsa yazsın güncellenir.
 
 **Tek yazma kapısı** `createMovement()` (`packages/core/src/movements.ts`, `DAT-02`). Sıra:
 
-1. Yetki kontrolü
+1. Yetki kontrolü (envanter düzeltmesinde ayrıca `count:approve`)
 2. zod doğrulaması
 3. Idempotency anahtarı aranır (varsa mevcut kayıt döner)
-4. Barkod → ürün (arşivli barkod çözülmez)
-5. Arşiv kontrolü
-6. `current_stock` satırını `FOR UPDATE` ile kilitle → çıkışta yeterlilik kontrolü
+4. Barkod ya da ürün kimliği → ürün (arşivli barkod çözülmez; `DAT-22`)
+5. Arşiv kontrolü, depo çözümü (`DAT-23`)
+6. `current_stock` satırını `FOR UPDATE` ile kilitle → çıkışta yeterlilik kontrolü: önce
+   toplam, sonra depo; envanter düzeltmesinde beklenen depo miktarı ve atanmamış stok (`DAT-24`)
 7. Fiyatı sunucuda çöz (§7)
 8. INSERT (trigger projeksiyonu yazar)
 9. Projeksiyon beklenenle aynı mı, aynı transaction içinde doğrula
 
 Deadlock'ta üç deneme; aynı anahtarla yarışan iki istekte UNIQUE indeks kazananı belirler.
+
+**Depo** (ADR-008, `DAT-21`). Depo ayrı bir tablo (`depots`); hareket satırı boş olabilen
+`depot_id` taşır, boş değer "depoya atanmamış" demektir. Depo miktarı ayrı tutulmaz, defterden
+türetilir: ürün ve depo için `SUM(delta)`. Depoların ve atanmamış miktarın toplamı tanım gereği
+`current_stock`'tur; `current_stock` ürün başına toplam olarak kalır. Depo kavramından önce yazılmış
+hareketlerin deposu tahmin edilmez; o miktar atanmamış kalır ve toplamda sayılır. Kontroller aynı
+ürün kilidinin altında: ürünün bütün hareketleri bu kilitten geçtiği için depo bazında ayrı kilit
+ya da projeksiyon yok.
+
+**Raf ile depo ayrı kavramlar.** `locations` (hareketteki `location_id`) raf/konumdur: "A-01 Rafı".
+Depo ise işletmenin stok tuttuğu ayrı yerdir ("Merkez Depo"); envanter dosyasındaki `Ambar` sütunu
+depoya karşılık gelir.
+
+**Kaynak bağlantıları.** `import_run_id` hareketi onu yazan toplu aktarım kaydına bağlar
+(kiracıyla birleşik FK; bağlı kayıt silinemez, `DAT-25`). `count_session_id` yalnız sayım
+oturumları içindir (T155) ve bugün yazılmaz.
 
 **Kurallar**
 
@@ -178,8 +202,8 @@ Yenileme maliyeti (Adım 3) henüz yazılmadı (`PRC-08`, `PRC-11`).
     `auth_prune_attempts` → kaba kuvvet sayacı (tablo kiracısız, uygulamaya kapalı)
 - `tenants` tablosuna uygulama yazamaz; kiracı açmak provisioning işidir (`SEC-03`).
 - Referans bütünlüğü (FK) kontrolleri RLS'i atlar. Kullanıcıdan gelen yabancı
-  kimlikler (ör. `locationId`) bu yüzden core'da kiracı içinde ayrıca doğrulanır
-  (`assertLocationExists`).
+  kimlikler (ör. `locationId`, `depotId`, `productId`) bu yüzden core'da kiracı içinde
+  ayrıca doğrulanır (`assertLocationExists`, depo ve ürün çözümü).
 
 ## 9. Kimlik doğrulama ve yetki
 
@@ -241,6 +265,10 @@ Bunlardan birini bozan değişiklik, testler yeşil olsa bile bozuktur.
 | INV-9 | Sebep/rol/birim/barkod türü/iş türü listeleri tek kaynaktan; DB CHECK onlardan üretilir | `schema-sync.test.ts` |
 | INV-10 | Alış fiyatı çalışana hiçbir yoldan gitmez (cevap, hata metni, log, Excel) | `role-matrix.test.ts`, `prices.test.ts`, e2e |
 
+Depo miktarı ayrı bir kopya olarak tutulmadığı için INV-1'in depo düzeyinde bir eşi gerekmiyor:
+depolar + atanmamış = `current_stock`, aynı defter satırlarından hesaplanıyor (§6, ADR-008).
+Depo bazlı çıkış kontrolü INV-5'in kilidini kullanıyor (`depots.test.ts`).
+
 ## 12. Güvenlik ve mimari ilkeleri
 
 1. **Kural veritabanında da durur.** Uygulama kodu unutabilir: ledger,
@@ -268,7 +296,9 @@ Bunlardan birini bozan değişiklik, testler yeşil olsa bile bozuktur.
    hatasını örtmez.
 10. **Kullanılmayan şema eklenmez.** "İleride lazım olur" diye eklenen tablo
     hazırlık değil bakım borcudur; özellik geldiğinde tasarımı büyük ihtimalle
-    değişir. Sayım tabloları bu yüzden yok (`count_session_id` kapısı açık).
+    değişir. Sayım tabloları bu yüzden yok (`count_session_id` kapısı açık ve yalnız sayıma
+    ayrılmış; toplu aktarım bağlantısı başka anlam taşıdığı için ayrı `import_run_id`
+    sütununda, `DAT-25`).
 
 ## 13. Tasarım ilkeleri
 
@@ -293,5 +323,7 @@ yöntem kararı `DAT-15`), e-Fatura ve Logo/Mikro/Paraşüt köprüsü, tam teda
 sipariş yönetimi (satın alma siparişi, tedarikçi cari hesabı; tedarikçinin ürün, fiyat ve
 stok verisini çekmek B2B V1'de kapsamda: `PRD-14`; B2B sipariş sonraki sürüm adayı, ayrı
 karar ister), mock API katmanı (gerçek Postgres + seed var), ayrı donanım
-terminali desteği (telefonun kendisi terminal), çoklu dil. Ertelenen özellikler
-(sayım, etiket, maliyet raporu, konum, çok depo) `TODOS.md` → "Product / Future".
+terminali desteği (telefonun kendisi terminal), çoklu dil, sahte ya da iç barkod üretimi
+(`PRD-19`). Çok depo artık kapsamda (`PRD-17`); depolar arası transfer ve kapsamlı depo yönetimi
+şimdilik yok. Ertelenen özellikler (sayım, etiket, maliyet raporu, raf/konum yönetimi, transfer)
+`TODOS.md` → "Product / Future"; çok depo dilimleri T218–T229.

@@ -4,7 +4,7 @@ Yalnız BUGÜNÜN gerçeği. Her merge'te ya da durum değiştiğinde güncellen
 satırlar silinir (tarihçe git'te). Ayrıntı yazılmaz: işler → `TODOS.md`,
 kararlar → `DECISIONS.md`, model → `PROJECT_BRAIN.md`.
 
-**Tarih:** 2026-10-23 · **Çalışma branch'i:** `development` · **Stabil referans:** `master`
+**Tarih:** 2026-10-27 · **Çalışma branch'i:** `development` · **Stabil referans:** `master`
 (`master` = `dac05ff`, devralma öncesi son kod; geliştirme `development`'ta yapılır)
 
 ## Deploy
@@ -39,6 +39,12 @@ T171 kapıları (2026-10-23, commit öncesi yerel koşu; `TZ=UTC`, saat T122 pen
 klasörleri, T206) 235 dosya 0 tanı, typecheck (4 paket), test **1254/1254** (shared 82, db 326,
 core 659, web 187; T207 bu koşuda geçti), drift "No schema changes", `next build` PASS, Playwright
 **30/30** (izole `stok_test_e2e_t171` veritabanı ve 3100 portu; demo veritabanına yazılmadı).
+
+Çok depo Dilim 1 kapıları (2026-10-27, `50b6dd9`, commit öncesi yerel koşu): lint temiz, typecheck
+(4 paket), test **1284/1284** (shared 83, db 326, core 688, web 187; gerçek PostgreSQL), drift "No
+schema changes", `next build` PASS; arayüz değişmediği için Playwright koşulmadı. Yerel
+`apps/web/.next/dev` önbelleği T171'de silinen bir rotaya işaret ettiği için typecheck'i kırıyordu;
+silinmedi, proje dışına taşındı (`next dev` yeniden üretir).
 
 T171 ölçümü (2026-10-23, izole `stok_test_perf`, core doğrudan, yarı yeni yarı güncelleme). Bu
 makine bugün 2026-10-10'dan ~2,5–3 kat yavaş: tek sorgu 1,9 ms, boş `withTenant` transaction'ı
@@ -86,7 +92,8 @@ sınırından geçti). Önizleme yanıtı blob'u tarayıcıya taşıyor (uzun: 3
 görünüyor. 4 MiB − 2 KB dosya eyleme ulaştı; tam 4 MiB dosya istemci denetimini geçip Next'in
 gövde sınırına çarptı (500, genel hata ekranı; T208); 4 MiB + 1 B istemcide durdu.
 
-GitHub CI: son koşu #84 (`667512a`, T200 1b, 2026-10-20) yeşil; üç iş de adım adım geçti (Linux
+GitHub CI: son koşu #88 (`50b6dd9`, çok depo Dilim 1, 2026-10-27) yeşil, üç iş de geçti; öncesinde
+#87 (`3db7d81`, T171, 2026-10-23) yeşil. #84 (`667512a`, T200 1b, 2026-10-20) yeşil; üç iş de adım adım geçti (Linux
 test işinde lint, drift, testler ve derleme; demo işinde temiz kurulum ve Playwright duman testi;
 Windows'ta temiz checkout'ta lint, typecheck ve derleme). Öncesinde #83 (`9d4bc8c`, T200 1a,
 2026-10-19) ve #82 (`93b38f6`) yeşil. Önceki
@@ -130,6 +137,16 @@ okutup `/hareket`te açma (`ENABLE_PHONE_SCANNER`, `PRD-12`, `ARC-14`).
   UAT bekleniyor. 20.000 devirli satır bu makinede ~23 dk; sekme açık kalmalı. T171 çalışmasında
   yerel demo veritabanına migration uygulanmadı; ekran için 0013 gerekir (`pnpm demo` uygular). Devirde geçmiş tarihli fiyat yok (T172); birim değişimi sonrası eski veri denetlenmiyor (T170).
 - **Kuyruğa alınan büyük dışa aktarma**: cron'da işleyicisi yok, çalışmıyor (T216, kod okumasıyla).
+- **Çok depo ve Envanteri Güncelle** (`PRD-17`, `PRD-18`, F-15): yalnız çekirdek var (Dilim 1,
+  `50b6dd9`): depo modeli, depo farkındalıklı hareket kapısı, sunucuya özel envanter düzeltmesi,
+  barkodsuz ürün ve ürün kimliğiyle hareket. **Kullanıcının göreceği bir şey yok:** depo açan yol,
+  envanter dosyası aktarımı (Dilim 2, T218), Envanteri Güncelle ekranı ve depo dağılımı (Dilim 3,
+  T219) yok; bugünkü kiracılarda depo olmadığı için davranış değişmedi. Depolar açılınca (Dilim 2):
+  birden çok depolu işletmede manuel hareket ve ürün aktarımının Açılış Stoğu `DEPOT_REQUIRED` ile
+  reddedilir (hareket formunda depo seçimi Dilim 4, T220); tek depolu işletmede de deposu bilinmeyen
+  eski stoktan çıkış yapılamaz (Atanmamış Stok T220, depoya atama T223). Ürün formu ve ürün
+  aktarımı hâlâ barkod istiyor (T220, T228). Panel değeri fiyatı bilinmeyeni 0 sayıyor (`PRC-12`,
+  T221). Fiyat geçmişi ve toplu satış fiyatı (T224), toplu mal kabulü (T225) yok.
 - **Ürün görseli**: yalnız URL; yükleme yok (T136).
 - **Kritik stok**: yalnız e-posta, push yok.
 - **Konum yönetimi**: arayüz yok.
@@ -165,7 +182,15 @@ işaretli (öne çıkanlar `DAT-15`, `DAT-16`, `SEC-14`, `OPS-01`, `OPS-02`, `UX
 
 ## Son tamamlanan workstream
 
-**T200 Dilim 1 — B2B V1 tedarikçi verisi** (kabul 2026-10-22, F-12, `PRD-14`): 1a `9d4bc8c` (CI #83),
+**Çok depo Dilim 1 — depo modeli ve hareket kapısı** (T217, 2026-10-27; `DAT-21`–`DAT-25`, ADR-008):
+`50b6dd9`, CI #88 yeşil; 1.284 yerel test, `dogrula` ile sekiz koruma kırmızıya düşürüldü (T217
+kaydı). Uygulananlar: ayrı `depots` tablosu (FORCE RLS; `locations` raf olarak kaldı); defterde
+`depot_id` ve `import_run_id` (`count_session_id` sayıma ayrıldı); depo miktarı defterden türetiliyor,
+toplam `current_stock` değişmedi; depo kuralı ve depo bazlı yetersiz stok; barkod ya da ürün
+kimliğiyle hareket; barkodsuz ürün çekirdekte; sunucu kontrollü `COUNT_ADJUST`; deposu bilinmeyen
+eski stok olduğu gibi korunuyor. Migration yalnız ekleme yapıyor. Arayüz değişmedi.
+
+Öncesinde **T200 Dilim 1 — B2B V1 tedarikçi verisi** (kabul 2026-10-22, F-12, `PRD-14`): 1a `9d4bc8c` (CI #83),
 1b `667512a` (CI #84). Kullanıcı kabul testi 2026-10-20…22, yerel `next dev`, demo kiracısı Yılmaz;
 işlemleri kullanıcı arayüzden yaptı, her adım salt okunur DB parmak iziyle doğrulandı: **10/10 senaryo
 geçti, kanıtlanmış yeni teknik hata yok.** Doğrulananlar: tedarikçi oluşturma ve ayarlar; CSV/XLSX
@@ -201,12 +226,28 @@ geçici kapsayıcıda izole inceleme, yalnız tanınan kümede silme. Geliştirm
 
 ## Sıradaki workstream
 
-**Yol haritasının üstü** (kullanıcı kararı, 2026-10-22; 2026-10-17 sırasının yerine), bu sırayla:
-1. **T171 toplu ürün aktarımı → 20.000 satır**: geliştirme tamamlandı, manuel UAT bekleniyor
-   (`ARC-15`, ADR-007, `DAT-20`, S21, F-02). Kabul testinden önce kapatılmaz.
+**Sıradaki iş: çok depo Dilim 2, envanter dosyası aktarımı** (T218; arayüz yok). Onay bekliyor.
+
+**30 Ekim 2026 Cuma ekip testi** (kullanıcı kararı 2026-10-27, A2 ve CEO-8):
+- **Hedef:** Dilim 2 (T218), Dilim 3 (T219: Envanteri Güncelle ekranı ve ürün sayfasında depo
+  dağılımı) ve değer dürüstlüğü (T221'in değer kısmı). Senaryo taze sentetik kiracıda: iki depolu
+  dosyayla ilk kurulum, yalnız Depo 1'i içeren ikinci dosya (Depo 2 ve toplam doğru), aynı dosya
+  yeniden yüklenince uyarı. T171 kabul testi aynı gün (T222).
+- **Risk:** tahmin, Cuma işinin kalan süreyi aştığını gösteriyor (Dilim 2 tek başına ~1,1 gün,
+  ölçüm değil). **Perşembe 12:00 karar noktası:** Dilim 2 güvenilir biçimde bitmemişse Cuma'da yarım
+  envanter akışı hazırmış gibi sunulmaz; T171 kabul testi ve çalışan özelliklerin demosu yapılır,
+  envanter UAT tarihi ekip uygunluğuna göre ayrıca belirlenir. Geliştirme Cuma'ya sıkıştırılmaz.
+- **Cuma'da çalışmayacaklar:** Dilim 4 (T220) yetişmezse birden çok depolu işletmede manuel hareket
+  (`DEPOT_REQUIRED`) ve barkodsuz ürüne manuel hareket; her durumda depoya atama (T223), toplu satış
+  fiyatı ve fiyat geçmişi (T224), toplu mal kabulü (T225), manuel sütun eşleştirme (T229).
+
+**Yol haritası sırası** (kullanıcı kararı 2026-10-27; 2026-10-22 sırasının üstüne):
+1. **Çok depo ve Envanteri Güncelle** (T218, T219, T221 değer kısmı; ardından T220 ve T221'in kalanı)
+   ve **T171 kabul testi**. T171 (20.000 satır) geliştirmesi tamam, manuel UAT bekleniyor (`ARC-15`,
+   ADR-007, `DAT-20`, S21, F-02); kabul testinden önce kapatılmaz.
 2. **T201 gerçek tedarikçi API'si**: ilk hedef, erişimi sağlanabilen bir sağlayıcıyla uçtan uca.
    Sağlayıcı, kimlik doğrulama ve yaklaşım PLAN'da kanıtla seçilir; gerçek sağlayıcı seçilmeden genel
-   entegrasyon iddia edilmez.
+   entegrasyon iddia edilmez. Çok depo kritik yolunun dışında.
 3. **T200 Dilim 2**: genel karşılaştırma ekranı, kod eşitliğinden onaylı eşleşme önerisi, şablon
    indirme değerlendirmesi. İptal değil; önceliği değişti.
 4. **UX iyileştirmeleri** uygun ürün dilimlerinde, tek bir yeniden tasarım olarak değil: T212–T215,
