@@ -208,12 +208,13 @@ export async function insertProduct(
   options: ProductOptions = {},
 ): Promise<string> {
   requirePermission(actor, 'product:create')
-  // Barkodsuz ürün okutulamaz, yani şema en az bir barkod istiyor. O da
-  // ayrı bir yetki: ikisini de arıyoruz, yoksa `product:create` verilmiş
-  // ama `barcode:create` verilmemiş bir rol yarım ürün yaratırdı.
-  requirePermission(actor, 'barcode:create')
 
   const input = parseOrThrow(createProductSchema, raw)
+  // Barkod ayrı bir yetki. Barkodsuz ürün (S3) ürün kimliğiyle hareket alıyor,
+  // yani barkod yazmayan oluşturmada bu yetki aranmıyor. Barkod gönderildiyse
+  // aranıyor: `product:create` verilmiş ama `barcode:create` verilmemiş bir
+  // rol başka türlü barkod tanımlamış olurdu.
+  if (input.barcodes.length > 0) requirePermission(actor, 'barcode:create')
 
   const productId = await withTenant(
     actor.tenantId,
@@ -241,6 +242,9 @@ export async function insertProduct(
         })
 
       const id = inserted!.id
+
+      // Boş listeyle INSERT çağrılamaz (drizzle `values([])` hata verir).
+      if (input.barcodes.length === 0) return id
 
       await tx
         .insert(productBarcodes)

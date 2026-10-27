@@ -129,8 +129,17 @@ describe('ürün oluşturma: koli çarpanı (D7)', () => {
     if (r.success) expect(r.data.barcodes[0]?.qtyMultiplier).toBe(1)
   })
 
-  it('en az bir barkod zorunlu', () => {
-    expect(createProductSchema.safeParse({ ...base, barcodes: [] }).success).toBe(false)
+  it('barkod listesi boş olabilir (S3: barkodsuz ürün)', () => {
+    expect(createProductSchema.safeParse({ ...base, barcodes: [] }).success).toBe(true)
+    expect(createProductSchema.safeParse(base).success).toBe(true)
+  })
+
+  it('verilen barkod boş metin olamaz', () => {
+    // Barkod isteğe bağlı; ama gönderilmiş boş bir hücre "barkod yok" değil,
+    // eksik doldurulmuş bir form. Sessizce boş barkod kaydedilmesin.
+    expect(createProductSchema.safeParse({ ...base, barcodes: [{ barcode: '  ' }] }).success).toBe(
+      false,
+    )
   })
 })
 

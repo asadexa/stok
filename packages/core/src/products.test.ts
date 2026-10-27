@@ -135,10 +135,14 @@ describe('createProduct', () => {
     ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' })
   })
 
-  it('barkodsuz ürün reddediliyor', async () => {
-    await expect(createProduct(boss, draft({ barcodes: [] }), opts)).rejects.toMatchObject({
-      code: 'VALIDATION_FAILED',
-    })
+  it('barkodsuz ürün oluşturuluyor (S3) ve barkod tablosuna boş satır yazılmıyor', async () => {
+    const product = await createProduct(boss, draft({ barcodes: [] }), opts)
+
+    expect(product.barcodes).toEqual([])
+    const [row] = await admin.client<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM product_barcodes WHERE product_id = ${product.productId}
+    `
+    expect(row!.n).toBe(0)
   })
 
   it('kuruştan küçük fiyat sessizce yuvarlanmıyor, reddediliyor', async () => {

@@ -131,7 +131,19 @@ export const barcodeSchema = z
  */
 export const createMovementSchema = z.object({
   idempotencyKey: z.string().uuid(),
-  barcode: barcodeSchema,
+  /**
+   * Ürün ya barkodla ya kimliğiyle seçiliyor; ikisinden TAM OLARAK biri.
+   * Barkodsuz ürün (S3) yalnız kimlikle bulunabiliyor; sahte barkod
+   * üretilmiyor. İkisi birden kabul edilseydi farklı ürünü gösteren bir
+   * çiftte hangisinin geçerli olduğu sessizce seçilirdi.
+   */
+  barcode: barcodeSchema.optional(),
+  productId: z.string().uuid().optional(),
+  /**
+   * Hareketin deposu. Boşsa sunucu karar veriyor: depo yoksa atanmamış, tek
+   * depo varsa o depo, birden çok depo varsa `DEPOT_REQUIRED`.
+   */
+  depotId: z.string().uuid().optional(),
   qty: qtySchema,
   reason: reasonEnum.refine((r) => MOVEMENT_REASONS[r].userSelectable, {
     message: 'Bu sebep elle seçilemez',
@@ -196,8 +208,50 @@ export const createMovementSchema = z.object({
       (m.note !== undefined && m.note !== ''),
     { message: '"Diğer" seçildiğinde açıklama zorunlu', path: ['note'] },
   )
+  .refine((m) => (m.barcode === undefined) !== (m.productId === undefined), {
+    message: 'Ürün barkodla ya da ürün seçilerek belirtilmeli (ikisi birden değil)',
+    path: ['barcode'],
+  })
 
 export type CreateMovementInput = z.infer<typeof createMovementSchema>
+
+/**
+ * ============================================================================
+ * ENVANTER DÜZELTMESİ (sunucuya özel)
+ *
+ * "Envanteri Güncelle": dosyadaki miktar deponun YENİ TOPLAMI. Hareket farkı
+ * kadar yazılıyor (`COUNT_ADJUST_UP/DOWN`). Bu şema kullanıcı formuna AÇIK
+ * DEĞİL: `createMovement` onu yalnız sunucudaki çağıranın `inventory`
+ * seçeneğiyle okuyor; normal hareket şeması COUNT_ADJUST'u reddetmeye devam
+ * ediyor.
+ *
+ * Sebep ve miktar BURADA YOK: farkın işaretini sunucu `targetQty -
+ * expectedQty`'den türetiyor. Çağıran gönderseydi bir işaret hatası azalmayı
+ * artış olarak yazardı ve sayı makul göründüğü için kimse fark etmezdi.
+ *
+ * `expectedQty`, önizlemede okunan depo miktarı. Kilit altında aynı değilse
+ * yazılmıyor (`STOCK_CHANGED`): arada yapılan satış dosyadaki değerle ezilmesin.
+ * ============================================================================
+ */
+export const inventoryAdjustmentSchema = z.object({
+  idempotencyKey: z.string().uuid(),
+  productId: z.string().uuid(),
+  depotId: z.string().uuid(),
+  expectedQty: z
+    .number({ invalid_type_error: 'Miktar sayı olmalı' })
+    .min(-1_000_000_000)
+    .max(1_000_000_000)
+    .refine(hasValidPrecision, { message: `En fazla ${MAX_DECIMALS} ondalık basamak` }),
+  targetQty: z
+    .number({ invalid_type_error: 'Miktar sayı olmalı' })
+    .nonnegative('Envanter miktarı negatif olamaz')
+    .max(1_000_000, 'Miktar en fazla 1.000.000 olabilir')
+    .refine(hasValidPrecision, { message: `En fazla ${MAX_DECIMALS} ondalık basamak` }),
+  note: z.string().trim().max(500).optional(),
+  clientCreatedAt: z.string().datetime({ offset: true }),
+})
+
+export type InventoryAdjustmentInput = z.infer<typeof inventoryAdjustmentSchema>
 
 export const createMovementResponseSchema = z.object({
   movementId: z.string().uuid(),
@@ -285,7 +339,10 @@ export const createProductSchema = z.object({
     .refine(hasValidPrecision, { message: `En fazla ${MAX_DECIMALS} ondalık basamak` })
     .default(0),
   locationId: z.string().uuid().optional(),
-  barcodes: z.array(barcodeInputSchema).min(1, 'En az bir barkod gerekli'),
+  // Barkod isteğe bağlı (S3): barkodsuz ürün ürün kimliğiyle hareket alıyor
+  // (`createMovementSchema.productId`). Ürün formu ve ürün aktarımı bugün yine
+  // barkod gönderiyor; aktarımın kuralı ayrı (açılış stoğu sessizce düşmesin).
+  barcodes: z.array(barcodeInputSchema).default([]),
 })
   // Adetle sayılan üründe koli çarpanı tam sayı (T130). 2,5 çarpanlı bir
   // koli barkodu tanımlansaydı her okutması kesirli adet üretir ve tek yazma

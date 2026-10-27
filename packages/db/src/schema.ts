@@ -24,6 +24,7 @@ import {
   boolean,
   check,
   date,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -127,6 +128,52 @@ export const locations = pgTable(
     createdAt: createdAt(),
   },
   (t) => [uniqueIndex('locations_tenant_code_uq').on(t.tenantId, t.code)],
+)
+
+/**
+ * ============================================================================
+ * DEPO (depo bazlı envanter, Dilim 1)
+ *
+ * `locations` RAF/KONUM demek (ürün formundaki "Konum", seed'deki "A-01
+ * Rafı"); depo ayrı bir kavram. `locations` depoya çevrilseydi raf kimliği
+ * taşıyan eski hareketler depo stoğu sayılırdı: eski stok sessizce bir
+ * depoya taşınmış olurdu.
+ *
+ * Depo MİKTARI burada tutulmuyor. Defterden türüyor:
+ * `SUM(stock_movements.delta)` ürün + depo bazında. İkinci bir projeksiyon
+ * ikinci bir doğruluk kaynağı ve ikinci bir trigger demek olurdu; ürün
+ * satırı kilidi (`createMovement`) bütün hareketleri zaten sıraya sokuyor.
+ * ============================================================================
+ */
+export const depots = pgTable(
+  'depots',
+  {
+    id: pk(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
+    /** Kullanıcının gördüğü ad, dosyadaki "Ambar" hücresinden geldiği gibi. */
+    name: text('name').notNull(),
+    /**
+     * Eşleştirme ve tekillik anahtarı. `tr_norm` yalnız harf katlıyor, boşluğa
+     * dokunmuyor: kırpılmasaydı "Merkez Depo " ve "Merkez  Depo" ayrı depo
+     * açardı ve aynı malın stoğu iki depoya bölünürdü. Kural uygulamada değil
+     * veritabanında: depoyu kim yazarsa yazsın aynı anahtar çıkıyor.
+     */
+    nameKey: text('name_key').generatedAlwaysAs(
+      sql`tr_norm(regexp_replace(btrim(name), '\\s+', ' ', 'g'))`,
+    ),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex('depots_tenant_name_key_uq').on(t.tenantId, t.nameKey),
+    // Boş ad "Depo belirtilmemiş" ile karışırdı; kontrol karakteri dosyadan
+    // gelen bozuk hücrenin işareti ve ekranda görünmez bir fark yaratır.
+    check(
+      'depots_name_ck',
+      sql`char_length(btrim(name)) BETWEEN 1 AND 100 AND name !~ '[[:cntrl:]]'`,
+    ),
+  ],
 )
 
 export const products = pgTable(
@@ -278,6 +325,15 @@ export const stockMovements = pgTable(
     note: text('note'),
     locationId: uuid('location_id').references(() => locations.id),
     /**
+     * Hareketin deposu. NULL = "depoya atanmamış": depolar gelmeden önce
+     * yazılmış bütün hareketler böyle kalıyor. Eski stoğun deposu TAHMİN
+     * EDİLMİYOR; NULL kovası toplamı korur, ürün "depoya atama bekliyor" olur.
+     *
+     * Yabancı anahtar kiracıyı kontrol etmiyor (FK, RLS'i atlar): depo
+     * kimliğinin bu kiracıya ait olduğu tek yazma kapısında doğrulanıyor.
+     */
+    depotId: uuid('depot_id').references(() => depots.id),
+    /**
      * Birim fiyat. ANLAMI YÖNDEN TÜRÜYOR: girişte alış maliyeti, çıkışta
      * satış hasılatı. Eskiden `unit_cost` idi; çıkış hareketlerinde hasılat
      * tutan bir sütuna "maliyet" demek kalıcı bir yalan olurdu ve ilk
@@ -334,6 +390,17 @@ export const stockMovements = pgTable(
     /** Sayım oturumu (TODOS E2). Tablo henüz yok (D4), bu yüzden FK yok.
      *  Sütun bugün duruyor ki özellik gelince geriye dönük bağlanabilsin. */
     countSessionId: uuid('count_session_id'),
+    /**
+     * Hareketi yazan dosya aktarımı (envanter güncellemesi). `count_session_id`
+     * BİLEREK kullanılmıyor: o sütun sayım oturumlarına ayrılmış. Aktarım
+     * kimlikleri oraya yazılsaydı sayım tablosu geldiğinde FK doğrulanamazdı
+     * ve append-only defterdeki satırlar düzeltilemezdi.
+     *
+     * Yabancı anahtar (kiracı, aktarım) çiftinde: başka kiracının aktarımına
+     * bağlanan satırı veritabanı reddediyor. Bağlı aktarım silinemiyor; 30
+     * günlük temizlik bu aktarımları atlıyor (`pruneImportRuns`).
+     */
+    importRunId: uuid('import_run_id'),
     /** Bu hareket bir düzeltme ise, hangi hareketi ters çeviriyor. */
     reversesId: uuid('reverses_id').references((): AnyPgColumn => stockMovements.id),
     createdAt: createdAt(),
@@ -350,6 +417,17 @@ export const stockMovements = pgTable(
       t.createdAt.desc(),
     ),
     index('movements_tenant_user_created_idx').on(t.tenantId, t.userId, t.createdAt.desc()),
+    foreignKey({
+      name: 'movements_import_run_fk',
+      columns: [t.tenantId, t.importRunId],
+      foreignColumns: [importRuns.tenantId, importRuns.id],
+    }),
+    // Yabancı anahtarın arka indeksi. Olmasaydı silinen her aktarım için
+    // PostgreSQL bağlı satır aramak üzere bütün defteri tarardı. Kısmi: satırların
+    // çoğu elle girilen hareket ve aktarıma bağlı değil.
+    index('movements_import_run_idx')
+      .on(t.tenantId, t.importRunId)
+      .where(sql`import_run_id IS NOT NULL`),
     check('movements_reason_ck', sql.raw(reasonsCheckConstraint('reason'))),
     // Hiçbir şeyi değiştirmeyen hareket olmamalı: ya veri hatası ya da hata ayıklama artığı.
     check('movements_delta_nonzero_ck', sql`delta <> 0`),
@@ -726,6 +804,10 @@ export const importRuns = pgTable(
   },
   (t) => [
     index('import_runs_tenant_created_idx').on(t.tenantId, t.createdAt),
+    // Defterin (kiracı, aktarım) yabancı anahtarının hedefi. `id` zaten tekil;
+    // çift sütunlu tekillik, başka kiracının aktarımına bağlanmayı
+    // veritabanında imkânsız kılmak için var.
+    uniqueIndex('import_runs_tenant_id_uq').on(t.tenantId, t.id),
     check('import_runs_status_ck', sql.raw(importRunStatusCheckConstraint('status'))),
     check('import_runs_total_rows_ck', sql`total_rows >= 0`),
   ],

@@ -164,6 +164,7 @@ export const APP_TABLES: readonly string[] = [
   'auth_attempts',
   'background_jobs',
   'current_stock',
+  'depots',
   'import_run_rows',
   'import_runs',
   'locations',

@@ -73,7 +73,33 @@ export const ERROR_CODES = {
   INSUFFICIENT_STOCK: {
     http: 409,
     retryable: false,
-    tr: (d) => `Elde ${d.available} adet var, ${d.requested} adet çıkışı yapılamaz`,
+    // Depo bazlı kontrolde depo adı ve atanmamış miktar da söyleniyor: toplam
+    // stok yetiyorken "elde 0 var" demek kullanıcıyı şaşırtır; malın bir kısmı
+    // henüz hiçbir depoya atanmamış olabilir.
+    tr: (d) => {
+      const where = typeof d.depotName === 'string' ? `${d.depotName} deposunda ` : 'Elde '
+      const base = `${where}${d.available} adet var, ${d.requested} adet çıkışı yapılamaz`
+      const unassigned = typeof d.unassigned === 'number' && d.unassigned > 0 ? d.unassigned : 0
+      return unassigned > 0 ? `${base} (${unassigned} adet depoya atama bekliyor)` : base
+    },
+  },
+  DEPOT_REQUIRED: {
+    http: 400,
+    retryable: false,
+    // Birden çok depo varken hangisinden çıkıldığını sunucu tahmin edemez;
+    // tahmin etseydi stok yanlış depodan düşerdi.
+    tr: () => 'Bu işletmede birden fazla depo var; hareket için depo seçilmeli',
+  },
+  STOCK_CHANGED: {
+    http: 409,
+    retryable: false,
+    // Envanter güncellemesi: önizlemeden sonra depoda hareket oldu ya da üründe
+    // depoya atanmamış stok var. Dosyadaki değer sessizce yazılsaydı aradaki
+    // satış ya da mal kabulü kaybolurdu.
+    tr: (d) =>
+      d.reason === 'UNASSIGNED'
+        ? 'Bu üründe depoya atama bekleyen stok var; envanter satırı yazılmadı'
+        : 'Depodaki miktar önizlemeden sonra değişti; dosyadaki değer yazılmadı',
   },
   INVALID_QUANTITY: {
     http: 400,

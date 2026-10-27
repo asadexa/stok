@@ -145,9 +145,15 @@ const wrongState = (runId: string, status: string) =>
 /**
  * Kiracının süresi dolmuş aktarım kayıtlarını siler; satırlar `ON DELETE CASCADE`.
  *
- * Yalnız `import_runs`'a dokunuyor ve gerçek tablolardan (ürün, barkod, hareket,
- * `current_stock`) buraya yabancı anahtar YOK: silme yapı gereği gerçek veriye
- * ulaşamaz. Kiracı kapsamı RLS'ten de geliyor (çağıran `withTenant` içinde).
+ * Yalnız `import_runs`'a dokunuyor: silme yapı gereği gerçek veriye (ürün,
+ * barkod, hareket, `current_stock`) ulaşamaz. Kiracı kapsamı RLS'ten de geliyor
+ * (çağıran `withTenant` içinde).
+ *
+ * DEFTERE BAĞLI AKTARIM SİLİNMİYOR. Envanter hareketleri `import_run_id` ile
+ * kendi aktarımını gösteriyor ("bu sayım hangi dosyadan geldi"). O kayıt
+ * silinseydi kaynak bilgisi kaybolurdu; yabancı anahtar da silmeyi reddeder ve
+ * bütün temizlik o kiracı için patlardı. Bu yüzden bağlı kayıtlar baştan
+ * atlanıyor.
  */
 export async function pruneImportRuns(tx: Tx, tenantId: string): Promise<number> {
   const deleted = await tx
@@ -155,6 +161,11 @@ export async function pruneImportRuns(tx: Tx, tenantId: string): Promise<number>
     .where(
       and(
         eq(importRuns.tenantId, tenantId),
+        sql`NOT EXISTS (
+              SELECT 1 FROM ${stockMovements}
+               WHERE ${stockMovements.tenantId} = ${importRuns.tenantId}
+                 AND ${stockMovements.importRunId} = ${importRuns.id}
+            )`,
         or(
           lt(importRuns.createdAt, sql`now() - make_interval(days => ${IMPORT_RUN_RETENTION_DAYS})`),
           and(

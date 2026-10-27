@@ -555,6 +555,34 @@ describe('temizlik (K4)', () => {
     expect(await counts(tenant.tenantId)).toEqual(before)
   })
 
+  it('deftere bağlı aktarım kaydı süresi dolsa da silinmiyor ve temizlik patlamıyor', async () => {
+    // Envanter hareketi kendi aktarımını `import_run_id` ile gösteriyor. Kayıt
+    // silinseydi "bu sayım hangi dosyadan" sorusu cevapsız kalırdı; yabancı
+    // anahtar silmeyi reddedip bütün temizliği düşürürdü.
+    const linked = await startImportRun(
+      boss,
+      { fileName: 'envanter.csv', fileBytes: 1, totalRows: 1, columns: ['sku', 'name'] },
+      opts,
+    )
+    const [product] = await admin.client<{ id: string }[]>`
+      INSERT INTO products (tenant_id, sku, name)
+      VALUES (${tenant.tenantId}, ${uniq('ENV-')}, 'Envanter Ürünü')
+      RETURNING id
+    `
+    await admin.client`
+      INSERT INTO stock_movements (tenant_id, product_id, user_id, delta, reason, idempotency_key, import_run_id)
+      VALUES (${tenant.tenantId}, ${product!.id}, ${tenant.adminUserId}, 4, 'COUNT_ADJUST_UP', ${randomUUID()}, ${linked.runId})
+    `
+    await admin.client`UPDATE import_runs SET created_at = now() - interval '31 days' WHERE id = ${linked.runId}`
+
+    await pruneTenantImportRuns(tenant.tenantId, opts)
+
+    const [row] = await admin.client<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM import_runs WHERE id = ${linked.runId}
+    `
+    expect(row!.n).toBe(1)
+  })
+
   it('yeni aktarım açılırken eski kayıtlar da temizleniyor (cron kapalıyken)', async () => {
     const old = await upload([HEADER, newRow()])
     await admin.client`UPDATE import_runs SET created_at = now() - interval '31 days' WHERE id = ${old.runId}`

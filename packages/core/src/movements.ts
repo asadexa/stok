@@ -6,6 +6,7 @@ import {
   type PriceSource,
   type Unit,
   createMovementSchema,
+  inventoryAdjustmentSchema,
   listMovementsSchema,
   priceOverrideRequiresReason,
   reasonLabel,
@@ -17,6 +18,7 @@ import {
   type Db,
   type Tx,
   currentStock,
+  depots,
   isDeadlock,
   isUniqueViolation,
   locations,
@@ -58,19 +60,27 @@ import {
  * Sıra önemli, her adım bir hata yolunu kapatıyor:
  *
  *   1. rol kontrolü          → FORBIDDEN        (arayüzde buton gizlemek yetki değildir)
+ *      (envanter seçeneğinde ayrıca `count:approve`)
  *   2. zod doğrulaması       → VALIDATION_FAILED / INVALID_QUANTITY
  *   3. idempotency okuması   → duplicate:true   (kullanıcı hiçbir şey görmez)
- *   4. barkod → ürün         → BARCODE_UNKNOWN  (depoda EN SIK yaşanan olay)
+ *   4. barkod ya da kimlik → ürün → BARCODE_UNKNOWN / NOT_FOUND
  *   5. arşiv kontrolü        → PRODUCT_ARCHIVED
+ *   5a. depo çözümü          → NOT_FOUND / DEPOT_REQUIRED
  *   5b. birim hassasiyeti    → INVALID_QUANTITY (efektif miktar, T130)
- *   6. SATIR KİLİDİ + kontrol→ INSUFFICIENT_STOCK
+ *   6. SATIR KİLİDİ + kontrol→ INSUFFICIENT_STOCK (toplam, sonra depo)
  *      (+ istenirse ilk hareket → PRODUCT_HAS_MOVEMENTS, T128)
+ *      (+ envanterde depo miktarı ve atanmamış stok → STOCK_CHANGED)
  *   7. ledger insert         → trigger projeksiyonu günceller
  *
  * 6. adım neden kilitli (D-1.2): stok okuyup sonra yazmak klasik bir TOCTOU
  * yarışıdır. İki eşzamanlı çıkış isteği ikisi de "yeterli stok var"
  * kontrolünden geçer ve stok negatife düşer. Kilit ürün bazlı olduğu için
  * farklı ürünlere yazanlar birbirini beklemez.
+ *
+ * DEPO MİKTARI aynı kilidin altında defterden okunuyor (READ COMMITTED: her
+ * ifade kendi anlık görüntüsünü alıyor, yani kilidi bırakan transaction'ın
+ * yazdığı hareket görünüyor). Ürünün bütün hareketleri bu kilitten geçtiği
+ * için depo bazında ayrı bir kilit ya da projeksiyon gerekmiyor.
  * ============================================================================
  */
 
@@ -93,6 +103,20 @@ interface CreateMovementOptions {
    * satıştan sonra yazılırdı: satılan mal stoğa ikinci kez girerdi.
    */
   requireFirstMovement?: boolean
+  /**
+   * Girdi bir ENVANTER DÜZELTMESİ (`inventoryAdjustmentSchema`): dosyadaki
+   * miktar deponun yeni toplamı, hareket farkı kadar COUNT_ADJUST. Kullanıcı
+   * girdisi DEĞİL, sunucudaki çağıranın seçeneği: COUNT_ADJUST normal hareket
+   * şemasından geçemiyor, istemci bu kapıyı açamıyor. `count:approve` ister.
+   */
+  inventory?: boolean
+}
+
+/** Envanter düzeltmesinin kilit altında sınanan değerleri (ölçekli). */
+interface InventoryCheck {
+  depotId: string
+  expected: bigint
+  target: bigint
 }
 
 /** Deadlock ve serileştirme hatalarında kaç kez tekrar denenir. */
@@ -147,8 +171,14 @@ async function createMovementInner(
   alanlar: LogFields,
 ): Promise<CreateMovementResponse> {
   requirePermission(actor, 'movement:create')
+  // Envanter düzeltmesi stoğu dosyadaki sayıya ÇEKİYOR; satış ya da mal
+  // kabulünden ağır bir yetki. Sunucudaki çağıran zaten kontrol etse de kapı
+  // kendisi de arıyor: yetki kontrolü tek yazma kapısının işi.
+  if (options.inventory) requirePermission(actor, 'count:approve')
 
-  const input = parseInput(raw)
+  const { input, inventory } = options.inventory
+    ? parseInventoryInput(raw)
+    : { input: parseInput(raw), inventory: undefined }
   alanlar.reason = input.reason
   alanlar.idempotencyKey = input.idempotencyKey
 
@@ -160,7 +190,11 @@ async function createMovementInner(
     try {
       return await withTenant(
         actor.tenantId,
-        (tx) => writeMovement(tx, actor, input, options.requireFirstMovement === true),
+        (tx) =>
+          writeMovement(tx, actor, input, {
+            requireFirstMovement: options.requireFirstMovement === true,
+            inventory,
+          }),
         options.db,
       )
     } catch (err) {
@@ -243,16 +277,67 @@ function parseInput(raw: unknown): CreateMovementInput {
   throw validationError(issues, onlyQty ? 'INVALID_QUANTITY' : 'VALIDATION_FAILED')
 }
 
+/**
+ * Envanter düzeltmesini olağan hareket girdisine çevirir. Sebep ve miktar
+ * FARKTAN türüyor, çağırandan gelmiyor: fark ölçekli tamsayıda hesaplanıyor
+ * (INV-8), işaret sebebi seçiyor. Fark sıfırsa hareket yok; defterde
+ * `delta <> 0` CHECK'i de bunu zorluyor ama kullanıcıya anlaşılır hata burada.
+ */
+function parseInventoryInput(raw: unknown): {
+  input: CreateMovementInput
+  inventory: InventoryCheck
+} {
+  const parsed = inventoryAdjustmentSchema.safeParse(raw)
+  if (!parsed.success) {
+    const issues = issuesOf(parsed.error)
+    const onlyQty = issues.every((i) => i.path === 'targetQty' || i.path === 'expectedQty')
+    throw validationError(issues, onlyQty ? 'INVALID_QUANTITY' : 'VALIDATION_FAILED')
+  }
+  const adj = parsed.data
+  const expected = scaledFromNumber(adj.expectedQty)
+  const target = scaledFromNumber(adj.targetQty)
+  const diff = target - expected
+  if (diff === 0n) {
+    throw validationError(
+      [{ path: 'targetQty', message: 'Depodaki miktar zaten bu değerde; hareket gerekmiyor' }],
+      'VALIDATION_FAILED',
+    )
+  }
+
+  return {
+    input: {
+      idempotencyKey: adj.idempotencyKey,
+      productId: adj.productId,
+      depotId: adj.depotId,
+      qty: scaledToNumber(diff < 0n ? -diff : diff),
+      reason: diff > 0n ? 'COUNT_ADJUST_UP' : 'COUNT_ADJUST_DOWN',
+      ...(adj.note ? { note: adj.note } : {}),
+      clientCreatedAt: adj.clientCreatedAt,
+      priceEstimated: false,
+      allowNegative: false,
+    },
+    inventory: { depotId: adj.depotId, expected, target },
+  }
+}
+
+interface WriteFlags {
+  requireFirstMovement: boolean
+  inventory: InventoryCheck | undefined
+}
+
 async function writeMovement(
   tx: Tx,
   actor: Actor,
   input: CreateMovementInput,
-  requireFirstMovement: boolean,
+  flags: WriteFlags,
 ): Promise<CreateMovementResponse> {
   const duplicate = await findByIdempotencyKey(tx, actor.tenantId, input.idempotencyKey)
   if (duplicate) return duplicate
 
-  const target = await resolveBarcode(tx, actor.tenantId, input.barcode)
+  const target =
+    input.barcode !== undefined
+      ? await resolveBarcode(tx, actor.tenantId, input.barcode)
+      : await resolveProduct(tx, actor.tenantId, input.productId)
 
   if (target.archivedAt !== null) {
     throw new AppError('PRODUCT_ARCHIVED', `product ${target.productId} is archived`, {
@@ -263,13 +348,28 @@ async function writeMovement(
 
   if (input.locationId) await assertLocationExists(tx, actor.tenantId, input.locationId)
 
+  const depot = await resolveDepot(tx, actor.tenantId, input.depotId)
+
   const effectiveQty = effectiveQuantity(input.qty, target.qtyMultiplier, target.unit as Unit)
   const delta = toDelta(1, input.reason) === 1 ? effectiveQty : -effectiveQty
+
+  // Fark tam sayı olsa bile HEDEF ürünün biriminde olmalı: adetli üründe
+  // 0,5'ten 2,5'e çıkan bir sayım farkı (2) geçerdi ama depoya 2,5 adet yazardı.
+  if (flags.inventory) {
+    const decimals = unitDecimals(target.unit as Unit)
+    if (!fitsDecimals(flags.inventory.target, decimals)) {
+      throw new AppError(
+        'INVALID_QUANTITY',
+        `target qty ${formatScaled(flags.inventory.target)} does not fit unit ${target.unit}`,
+        { unit: target.unit, decimals },
+      )
+    }
+  }
 
   const before = await lockStockRow(tx, actor.tenantId, target.productId)
   const expected = before + delta
 
-  if (requireFirstMovement) {
+  if (flags.requireFirstMovement) {
     const [prior] = await tx
       .select({ id: stockMovements.id })
       .from(stockMovements)
@@ -294,23 +394,79 @@ async function writeMovement(
     }
   }
 
-  // Kontrol SADECE çıkışlara uygulanıyor. `expected < 0` tek başına
-  // yetmez: stok zaten -5 iken +3'lük bir MAL KABULÜ de -2'de kalır ve
-  // reddedilirdi. O zaman negatife düşmüş bir ürünü mal girişiyle
-  // düzeltmek imkansız olur, tek çare admin'in her seferinde
-  // `allowNegative` ile giriş yapması olurdu. Giriş her zaman serbest:
-  // stoğu gerçeğe yaklaştırıyor.
-  if (delta < 0n && expected < 0n && !input.allowNegative) {
-    throw new AppError(
-      'INSUFFICIENT_STOCK',
-      `requested ${formatScaled(-delta)} > available ${formatScaled(before)}`,
-      {
+  if (flags.inventory) {
+    // ÖNİZLEME İLE UYGULAMA ARASI. Dosya önizlenirken depo 10'du; kilit
+    // alınana kadar 3 satıldıysa depo 7. Hedefe (5) yazmak satışı geri almak
+    // olurdu: kullanıcı önizlemede 10 → 5 gördü, 7 → 5'i hiç onaylamadı.
+    const depotQty = await sumDelta(tx, actor.tenantId, target.productId, flags.inventory.depotId)
+    if (depotQty !== flags.inventory.expected) {
+      throw new AppError(
+        'STOCK_CHANGED',
+        `depot qty ${formatScaled(depotQty)} != expected ${formatScaled(flags.inventory.expected)}`,
+        {
+          reason: 'DEPOT_QTY',
+          productId: target.productId,
+          name: target.productName,
+          expected: scaledToNumber(flags.inventory.expected),
+          actual: scaledToNumber(depotQty),
+        },
+      )
+    }
+    // DEPOYA ATANMAMIŞ STOK. Eski stoğun hangi depoda olduğu bilinmiyor;
+    // yanına depo sayımı yazılsaydı aynı mal iki kez sayılırdı (toplam
+    // şişerdi). Ürün önce depoya atanmalı; satır yazılmıyor.
+    const unassigned = await sumDelta(tx, actor.tenantId, target.productId, null)
+    if (unassigned !== 0n) {
+      throw new AppError('STOCK_CHANGED', `unassigned stock ${formatScaled(unassigned)}`, {
+        reason: 'UNASSIGNED',
         productId: target.productId,
         name: target.productName,
-        available: scaledToNumber(before),
-        requested: scaledToNumber(-delta),
-      },
-    )
+        unassigned: scaledToNumber(unassigned),
+      })
+    }
+    // Envanterde yetersiz stok kontrolü YOK: hedef negatif olamaz ve depo
+    // kilit altında tam beklenen değerde, yani depo tam hedefe iniyor.
+  } else if (delta < 0n && !input.allowNegative) {
+    // Kontrol SADECE çıkışlara uygulanıyor. `expected < 0` tek başına
+    // yetmez: stok zaten -5 iken +3'lük bir MAL KABULÜ de -2'de kalır ve
+    // reddedilirdi. O zaman negatife düşmüş bir ürünü mal girişiyle
+    // düzeltmek imkansız olur, tek çare admin'in her seferinde
+    // `allowNegative` ile giriş yapması olurdu. Giriş her zaman serbest:
+    // stoğu gerçeğe yaklaştırıyor.
+    if (expected < 0n) {
+      throw new AppError(
+        'INSUFFICIENT_STOCK',
+        `requested ${formatScaled(-delta)} > available ${formatScaled(before)}`,
+        {
+          productId: target.productId,
+          name: target.productName,
+          available: scaledToNumber(before),
+          requested: scaledToNumber(-delta),
+        },
+      )
+    }
+    // DEPO BAZINDA. Toplam yetiyor diye depo 1'den, depo 2'deki mal
+    // satılamaz: depo 1 eksiye düşer, toplam doğru göründüğü için kimse fark
+    // etmez ve bir sonraki depo sayımında fark "kayıp" diye yazılır.
+    if (depot !== null) {
+      const depotQty = await sumDelta(tx, actor.tenantId, target.productId, depot.id)
+      if (depotQty + delta < 0n) {
+        const unassigned = await sumDelta(tx, actor.tenantId, target.productId, null)
+        throw new AppError(
+          'INSUFFICIENT_STOCK',
+          `requested ${formatScaled(-delta)} > depot available ${formatScaled(depotQty)}`,
+          {
+            productId: target.productId,
+            name: target.productName,
+            depotId: depot.id,
+            depotName: depot.name,
+            available: scaledToNumber(depotQty),
+            requested: scaledToNumber(-delta),
+            unassigned: scaledToNumber(unassigned),
+          },
+        )
+      }
+    }
   }
 
   // Liste fiyatı hata metnine YALNIZCA görmeye yetkili role konuyor
@@ -331,6 +487,7 @@ async function writeMovement(
       reason: input.reason,
       note: input.note ?? null,
       locationId: input.locationId ?? null,
+      depotId: depot?.id ?? null,
       unitPrice: price.unitPrice,
       listPrice: price.listPrice,
       clientListPrice: price.clientListPrice,
@@ -748,6 +905,102 @@ async function assertLocationExists(tx: Tx, tenantId: string, locationId: string
   if (!row) {
     throw new AppError('NOT_FOUND', `location ${locationId} not found`, { locationId })
   }
+}
+
+/**
+ * Ürünü KİMLİĞİYLE çözer: barkodsuz ürünün (S3) tek yolu. Sahte barkod
+ * üretilmiyor; hareket temel birimde (çarpan 1) yazılıyor ve `barcode_id` boş
+ * kalıyor, yani denetimde "kimlikle seçildi" diye okunuyor.
+ *
+ * `tenant_id` filtresi RLS'e EK: başka kiracının ürün kimliği gönderilirse
+ * cevap "bulunamadı", varlığı hakkında hiçbir şey sızmıyor.
+ */
+async function resolveProduct(tx: Tx, tenantId: string, productId: string | undefined) {
+  // Şema barkod ile kimlikten tam olarak birini zorluyor; buraya ikisi de
+  // olmadan gelmek bir programlama hatası, kullanıcı hatası değil.
+  if (productId === undefined) {
+    throw new AppError('SERVER_ERROR', 'movement input has neither barcode nor productId')
+  }
+  const [row] = await tx
+    .select({
+      productId: products.id,
+      productName: products.name,
+      unit: products.unit,
+      archivedAt: products.archivedAt,
+      purchasePrice: products.purchasePrice,
+      salePrice: products.salePrice,
+    })
+    .from(products)
+    .where(and(eq(products.tenantId, tenantId), eq(products.id, productId)))
+    .limit(1)
+
+  if (!row) throw new AppError('NOT_FOUND', `product ${productId} not found`, { productId })
+  return { ...row, barcodeId: null, qtyMultiplier: '1' }
+}
+
+/**
+ * Hareketin deposunu belirler.
+ *
+ *   depo verildi        → bu kiracıda olmalı, yoksa NOT_FOUND
+ *   kiracıda depo yok   → NULL (bugünkü davranış: depo kullanmayan işletme)
+ *   tek depo            → o depo
+ *   birden çok depo     → DEPOT_REQUIRED
+ *
+ * Depo kullanılmaya başlandıktan sonra yeni hareket depoya ATANMAMIŞ kovaya
+ * yazılamıyor: o kova yalnız eski stoğu tutuyor ve yalnız küçülüyor. Birden
+ * çok depoda sunucu seçim yapmıyor; yanlış depodan düşen stok, toplam doğru
+ * göründüğü için ancak bir sonraki sayımda "kayıp" olarak ortaya çıkardı.
+ *
+ * Yabancı anahtar kiracıyı kontrol etmiyor (RLS'i atlar); kontrol burada.
+ */
+async function resolveDepot(
+  tx: Tx,
+  tenantId: string,
+  depotId: string | undefined,
+): Promise<{ id: string; name: string } | null> {
+  if (depotId !== undefined) {
+    const [row] = await tx
+      .select({ id: depots.id, name: depots.name })
+      .from(depots)
+      .where(and(eq(depots.tenantId, tenantId), eq(depots.id, depotId)))
+      .limit(1)
+    if (!row) throw new AppError('NOT_FOUND', `depot ${depotId} not found`, { depotId })
+    return row
+  }
+
+  const rows = await tx
+    .select({ id: depots.id, name: depots.name })
+    .from(depots)
+    .where(eq(depots.tenantId, tenantId))
+    .limit(2)
+  if (rows.length === 0) return null
+  if (rows.length === 1) return rows[0]!
+  throw new AppError('DEPOT_REQUIRED', 'tenant has several depots; depot is required')
+}
+
+/**
+ * Ürünün bir depodaki (ya da `null` ile depoya atanmamış) miktarı, defterden.
+ * Ayrı bir projeksiyon yok: depo toplamları ile atanmamış miktarın toplamı
+ * tanım gereği `current_stock`'a eşit. Çağıran ürün satırının kilidini
+ * tutuyor; bu yüzden okuma ile yazma arasında başka hareket giremiyor.
+ */
+async function sumDelta(
+  tx: Tx,
+  tenantId: string,
+  productId: string,
+  depotId: string | null,
+): Promise<bigint> {
+  const [row] = await tx
+    .select({ total: sql<string>`COALESCE(SUM(${stockMovements.delta}), 0)::text` })
+    .from(stockMovements)
+    .where(
+      and(
+        eq(stockMovements.tenantId, tenantId),
+        eq(stockMovements.productId, productId),
+        depotId === null ? isNull(stockMovements.depotId) : eq(stockMovements.depotId, depotId),
+      ),
+    )
+  return parseScaled(row?.total ?? '0')
 }
 
 /**
