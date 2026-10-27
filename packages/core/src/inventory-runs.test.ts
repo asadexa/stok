@@ -7,11 +7,14 @@ import type { Actor } from './authz'
 import {
   appendImportRows,
   appendInventoryRows,
+  beginImportRun,
   beginInventoryRun,
+  finalizeImportPreview,
   finalizeInventoryPreview,
   getImportRunProgress,
   getInventoryRunProgress,
   getLastInventoryFile,
+  importRunReport,
   inventoryRunReport,
   processImportChunk,
   processInventoryChunk,
@@ -21,7 +24,9 @@ import {
 } from './import-runs'
 import { parseInventoryFile } from './inventory-file'
 import { checkStockInvariant, createMovement } from './movements'
+import { parseProductFile } from './product-file'
 import { createProduct } from './products'
+import { getProductDepotStock } from './stock'
 import { TEST_DB_NAME } from './test/db-name'
 
 /**
@@ -40,6 +45,8 @@ import { TEST_DB_NAME } from './test/db-name'
  *     başlamıyor
  *   - önizlemeden sonra değişen stok ezilmiyor (Çakışma)
  *   - yetki, kiracı ve aktarım türü izolasyonu; temizlik
+ *   - T219: önizlemenin eski → yeni miktarları, ürün sayfasının depo dağılımı,
+ *     ürün aktarımında birden çok depolu işletmenin devir mesajı
  * ============================================================================
  */
 
@@ -201,11 +208,25 @@ describe('ilk kurulum: tek dosyadan ürün, depo ve stok', () => {
       line('ILK-C', 'Zeytinyağı', 'Şube Deposu', '0', 'LT'),
       line('ILK-D', 'Bakır Kablo', '  merkez   DEPO ', '3', 'MT'),
     ])
-    expect(preview.counts).toMatchObject({ newProducts: 4, create: 5, update: 0, error: 0 })
+    // ILK-C'nin miktarı 0: yeni ürün ama ne artış ne azalış.
+    expect(preview.counts).toMatchObject({ newProducts: 4, create: 5, update: 0, error: 0, increase: 4, decrease: 0 })
+    expect(preview.columns).toEqual(['Malzeme Kodu', 'Malzeme Açıklaması', 'Ambar (Depo)', 'Envanter Miktarı', 'Birim'])
     expect(preview.depots).toEqual([
       { name: 'Merkez Depo', isNew: true },
       { name: 'Şube Deposu', isNew: true },
     ])
+    expect(preview.changes).toHaveLength(5)
+    expect(preview.changes[1]).toEqual({
+      rowNumber: 3,
+      sku: 'ILK-A',
+      name: 'Mavi Kalem',
+      depot: 'Şube Deposu',
+      unit: 'ADET',
+      oldQty: 0,
+      newQty: 7,
+      newProduct: true,
+      newDepot: true,
+    })
     expect(preview.notices[0]).toBe('Dosyada olmayan ürünlerin ve depoların stoğu değişmez.')
     expect(preview.notices[1]).toContain('Ortalama Değer')
 
@@ -261,7 +282,21 @@ describe('depo bazlı güncelleme (K1)', () => {
     expect(await total(tenant, 'K1-A')).toBe(30)
 
     const { runId, preview } = await upload(boss, [line('K1-A', 'Defter', 'K1 Depo 1', '5')], 'depo1.csv')
-    expect(preview.counts).toMatchObject({ update: 1, create: 0, unchanged: 0, error: 0 })
+    expect(preview.counts).toMatchObject({ update: 1, create: 0, unchanged: 0, error: 0, increase: 0, decrease: 1 })
+    // Önizleme deponun bugünkü miktarını ve dosyadaki YENİ TOPLAMI gösteriyor.
+    expect(preview.changes).toEqual([
+      {
+        rowNumber: 2,
+        sku: 'K1-A',
+        name: 'Defter',
+        depot: 'K1 Depo 1',
+        unit: 'ADET',
+        oldQty: 10,
+        newQty: 5,
+        newProduct: false,
+        newDepot: false,
+      },
+    ])
     await runToEnd(boss, runId)
 
     expect(await qtyIn(tenant, 'K1-A', 'K1 Depo 1')).toBe(5)
@@ -555,6 +590,76 @@ describe('temizlik', () => {
     // Başlık kaldığı için aynı içerik uyarısı 30 günden sonra da çalışıyor.
     const again = await upload(boss, [line('TM-1', 'Pul', 'TM Depo', '0')])
     expect(again.preview.repeatOf).toMatchObject({ fileName: 'eski-sayim.csv' })
+  })
+})
+
+describe('ürün sayfası ve ürün aktarımı (T219)', () => {
+  async function productId(t: TestTenant, sku: string): Promise<string> {
+    const [row] = await admin.client<{ id: string }[]>`
+      SELECT id FROM products WHERE tenant_id = ${t.tenantId} AND sku = ${sku}`
+    return row!.id
+  }
+
+  it('depo dağılımı defterden: depolar, deposu bilinmeyen eski stok ve toplam', async () => {
+    const k1 = await productId(tenant, 'K1-A')
+    expect(await getProductDepotStock(boss, k1, opts)).toEqual({
+      depots: [
+        { depotId: await depotId(tenant, 'K1 Depo 1'), name: 'K1 Depo 1', qty: 5 },
+        { depotId: await depotId(tenant, 'K1 Depo 2'), name: 'K1 Depo 2', qty: 20 },
+      ],
+      unassigned: 0,
+      total: 25,
+    })
+    // Çalışan da görüyor: miktar stok bilgisi, fiyat taşımıyor.
+    expect((await getProductDepotStock(staff, k1, opts))?.total).toBe(25)
+
+    // Depo açılmadan önce girilmiş stok depoya dağıtılmıyor, ayrı satırda.
+    expect(await getProductDepotStock(legacyBoss, legacy.products['ESKI-1']!.id, opts)).toEqual({
+      depots: [],
+      unassigned: 10,
+      total: 10,
+    })
+  })
+
+  it('depo kullanmayan işletmede bölüm yok (null); başka kiracının ürünü sızmıyor', async () => {
+    const plain = await seedTestTenant(admin.db, 'env-deposuz', [{ sku: 'DZ-1', name: 'Deposuz Ürün' }])
+    const plainBoss: Actor = { tenantId: plain.tenantId, userId: plain.adminUserId, role: 'ADMIN' }
+    expect(await getProductDepotStock(plainBoss, plain.products['DZ-1']!.id, opts)).toBeNull()
+
+    // `other`'ın kendi depoları var; `tenant`'ın ürün kimliğiyle sorunca hiçbir hareket görmüyor.
+    expect(await getProductDepotStock(otherBoss, await productId(tenant, 'K1-A'), opts)).toEqual({
+      depots: [],
+      unassigned: 0,
+      total: 0,
+    })
+  })
+
+  it("birden çok depolu işletmede ürün aktarımının devri Envanteri güncelle'ye yönlendiriyor", async () => {
+    const file = await parseProductFile(
+      new Uint8Array(
+        Buffer.from(
+          ['Stok Kodu;Ürün Adı;Birim;Alış Fiyatı;Barkod;Açılış Stoğu', `DV-1;Devirli Ürün;Adet;2,50;${randomUUID().slice(0, 12)};5`].join('\n'),
+          'utf8',
+        ),
+      ),
+      'urun.csv',
+    )
+    const { runId } = await startImportRun(
+      boss,
+      { fileName: 'urun.csv', fileBytes: 100, totalRows: 1, columns: file.columns, ignoredQtyColumns: file.ignoredQtyColumns },
+      opts,
+    )
+    await appendImportRows(boss, runId, { rows: file.rows }, opts)
+    await finalizeImportPreview(boss, runId, opts)
+    let progress = await beginImportRun(boss, runId, opts)
+    while (progress.status === 'RUNNING') progress = await processImportChunk(boss, runId, opts)
+
+    // Ürün açıldı, devir yazılmadı; stok sessizce bir depoya ya da atanmamışa düşmedi.
+    expect(progress).toMatchObject({ status: 'DONE', rows: { created: 1 }, openings: { failed: 1 } })
+    expect(await total(tenant, 'DV-1')).toBe(0)
+    const report = await importRunReport(boss, runId, opts)
+    expect(report[0]!.message).toContain('birden fazla depo var')
+    expect(report[0]!.message).toContain('Stok → Envanteri güncelle')
   })
 })
 

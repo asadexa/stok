@@ -1,12 +1,12 @@
 'use client'
 
-import type { ImportRunPreview, ImportRunProgress, ImportRunReportRow, RawRow } from '@stok/core'
+import type { ImportRunPreview, ImportRunProgress, ImportRunReportRow } from '@stok/core'
 import { errorText } from '@stok/shared'
-import { useEffect, useRef, useState } from 'react'
+import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { CountTile } from '@/components/count-tile'
 import { formatCount } from '@/lib/format'
-import type { ActionResult } from './actions'
-import type { ParseResult } from './parse.worker'
+import type { ActionResult } from '@/server/import-action'
+import type { ParseKind, ParseRequest, ParseResult } from './parse.worker'
 
 /**
  * ============================================================================
@@ -20,26 +20,36 @@ import type { ParseResult } from './parse.worker'
  * ONAY DÜĞMESİ HATALI SATIR SAYISINI GÖSTERİYOR. "Aktar" yazan bir düğme,
  * kullanıcıya 60 satırın atlanacağını söylemeden onay aldırırdı; eksik
  * ürünler haftalar sonra fark edilirdi.
+ *
+ * İKİ DOSYA TÜRÜ, TEK MOTOR (T219). Okuma, parça parça gönderim, onay, parça
+ * işleme, takılınca tekrar deneme, iptal ve sonuç ürün aktarımıyla envanter
+ * dosyasında aynı (aynı aktarım kaydı, ARC-15). Türe özel olan yalnız dosya
+ * okuyucusu, önizleme ve sonuç paneli: `RunWizard` onları dışarıdan alıyor.
+ * Envanter için ikinci bir sihirbaz, kesinti ve iptal davranışının bir gün
+ * ayrışacak kopyası olurdu.
  * ============================================================================
  */
 
-interface ImportActions {
+export interface ImportActions<P> {
   start: (meta: unknown) => Promise<ActionResult<{ runId: string }>>
   append: (runId: string, rows: unknown) => Promise<ActionResult<{ received: number; total: number }>>
-  preview: (runId: string) => Promise<ActionResult<ImportRunPreview>>
-  begin: (runId: string) => Promise<ActionResult<ImportRunProgress>>
+  preview: (runId: string) => Promise<ActionResult<P>>
+  /** `confirmNewCount` yalnız envanterde: aynı içeriğin "yeni sayım" onayı (sunucuda zorunlu). */
+  begin: (runId: string, confirmNewCount?: boolean) => Promise<ActionResult<ImportRunProgress>>
   chunk: (runId: string) => Promise<ActionResult<ImportRunProgress>>
   cancel: (runId: string) => Promise<ActionResult<ImportRunProgress>>
   report: (runId: string) => Promise<ActionResult<ImportRunReportRow[]>>
 }
 
-type Phase =
+type Phase<P> =
   | { step: 'select' }
   | { step: 'reading'; fileName: string }
   | { step: 'uploading'; fileName: string; sent: number; total: number }
-  | { step: 'preview'; fileName: string; runId: string; preview: ImportRunPreview }
+  | { step: 'preview'; fileName: string; runId: string; preview: P }
   | { step: 'running'; fileName: string; runId: string; progress: ImportRunProgress; cancelling: boolean; stalled: boolean }
   | { step: 'result'; fileName: string; runId: string; progress: ImportRunProgress; report: ImportRunReportRow[] }
+
+type ParsedOk = Extract<ParseResult, { ok: true }>
 
 /**
  * Bir ekleme isteğinin en fazla kodlanmış boyutu. Sunucu eyleminin gövde
@@ -78,7 +88,7 @@ async function once<T>(call: () => Promise<ActionResult<T>>): Promise<ActionResu
   }
 }
 
-function parseInWorker(file: File): Promise<ParseResult | null> {
+function parseInWorker(kind: ParseKind, file: File): Promise<ParseResult | null> {
   return new Promise((resolve) => {
     const worker = new Worker(new URL('./parse.worker.ts', import.meta.url), { type: 'module' })
     worker.onmessage = (event: MessageEvent<ParseResult>) => {
@@ -90,15 +100,33 @@ function parseInWorker(file: File): Promise<ParseResult | null> {
       worker.terminate()
       resolve(null)
     }
-    worker.postMessage(file)
+    worker.postMessage({ kind, file } satisfies ParseRequest)
   })
 }
 
+/**
+ * Aktarım kaydını açan özet: dosyanın kendisi değil, tarayıcının okuduğu
+ * sütunlar. Envanterde okunmayan sütunların yalnız BAŞLIKLARI gidiyor.
+ */
+function startMeta(parsed: ParsedOk, fileName: string, fileBytes: number) {
+  if (parsed.kind === 'INVENTORY') {
+    const { rows, columns, unreadColumns } = parsed.file
+    return { fileName, fileBytes, totalRows: rows.length, columns, unreadColumns }
+  }
+  const { rows, columns, ignoredQtyColumns } = parsed.file
+  return { fileName, fileBytes, totalRows: rows.length, columns, ignoredQtyColumns }
+}
+
+const NO_ROWS: Record<ParseKind, string> = {
+  PRODUCT: 'Dosyada başlık satırından sonra ürün satırı bulunamadı.',
+  INVENTORY: 'Dosyada başlık satırından sonra envanter satırı bulunamadı.',
+}
+
 /** Satırları bayt ve satır sınırına göre ekleme parçalarına böler. */
-function appendBatches(rows: RawRow[], maxRows: number): RawRow[][] {
+function appendBatches<R>(rows: R[], maxRows: number): R[][] {
   const encoder = new TextEncoder()
-  const batches: RawRow[][] = []
-  let batch: RawRow[] = []
+  const batches: R[][] = []
+  let batch: R[] = []
   let bytes = 0
   for (const row of rows) {
     const size = encoder.encode(JSON.stringify(row)).byteLength
@@ -114,16 +142,60 @@ function appendBatches(rows: RawRow[], maxRows: number): RawRow[][] {
   return batches
 }
 
+/** Ürün aktarımı (T171): ekranın kullandığı tek giriş, davranışı değişmedi. */
 export function ImportWizard({
   actions,
   fileBytesLimit,
   appendMaxRows,
 }: {
-  actions: ImportActions
+  actions: ImportActions<ImportRunPreview>
   fileBytesLimit: number
   appendMaxRows: number
 }) {
-  const [phase, setPhase] = useState<Phase>({ step: 'select' })
+  return (
+    <RunWizard
+      kind="PRODUCT"
+      actions={actions}
+      fileBytesLimit={fileBytesLimit}
+      appendMaxRows={appendMaxRows}
+      renderPreview={({ preview, runId, onBegin }) => (
+        <PreviewPanel preview={preview} runId={runId} onBegin={() => onBegin()} />
+      )}
+      renderResult={(result) => <ResultPanel {...result} />}
+    />
+  )
+}
+
+export interface PreviewSlot<P> {
+  preview: P
+  runId: string
+  /** Onay. `confirmNewCount` yalnız envanter önizlemesinden geliyor. */
+  onBegin: (confirmNewCount?: boolean) => Promise<void>
+}
+
+export interface ResultSlot {
+  progress: ImportRunProgress
+  report: ImportRunReportRow[]
+  runId: string
+}
+
+/** Türden bağımsız aktarım akışı; önizleme ve sonuç paneli türe özel. */
+export function RunWizard<P>({
+  kind,
+  actions,
+  fileBytesLimit,
+  appendMaxRows,
+  renderPreview,
+  renderResult,
+}: {
+  kind: ParseKind
+  actions: ImportActions<P>
+  fileBytesLimit: number
+  appendMaxRows: number
+  renderPreview: (slot: PreviewSlot<P>) => ReactNode
+  renderResult: (slot: ResultSlot) => ReactNode
+}) {
+  const [phase, setPhase] = useState<Phase<P>>({ step: 'select' })
   const [error, setError] = useState<string | null>(null)
   const cancelRequested = useRef(false)
 
@@ -155,7 +227,7 @@ export function ImportWizard({
 
     const fileName = upload.name
     setPhase({ step: 'reading', fileName })
-    const parsed = await parseInWorker(upload)
+    const parsed = await parseInWorker(kind, upload)
     if (!parsed) {
       setPhase({ step: 'select' })
       setError('Dosya bu tarayıcıda okunamadı. Sayfayı yenileyip tekrar deneyin.')
@@ -166,16 +238,14 @@ export function ImportWizard({
       setError(errorText(parsed.code, parsed.details))
       return
     }
-    const { rows, columns, ignoredQtyColumns } = parsed.file
+    const rows: unknown[] = parsed.file.rows
     if (rows.length === 0) {
       setPhase({ step: 'select' })
-      setError('Dosyada başlık satırından sonra ürün satırı bulunamadı.')
+      setError(NO_ROWS[kind])
       return
     }
 
-    const started = await once(() =>
-      actions.start({ fileName, fileBytes: upload.size, totalRows: rows.length, columns, ignoredQtyColumns }),
-    )
+    const started = await once(() => actions.start(startMeta(parsed, fileName, upload.size)))
     if (!started.ok) return failUpload(started.error)
     const { runId } = started.value
 
@@ -199,9 +269,13 @@ export function ImportWizard({
     setError(`${message} Dosyayı yeniden seçip tekrar deneyin.`)
   }
 
-  async function begin(fileName: string, runId: string) {
+  async function begin(fileName: string, runId: string, confirmNewCount?: boolean) {
     setError(null)
-    const begun = await once(() => actions.begin(runId))
+    // Ürün aktarımı eskisi gibi tek argümanla çağrılıyor; onay bayrağı yalnız
+    // envanter önizlemesi verdiğinde gidiyor.
+    const begun = await once(() =>
+      confirmNewCount === undefined ? actions.begin(runId) : actions.begin(runId, confirmNewCount),
+    )
     if (!begun.ok) {
       setError(begun.error)
       return
@@ -321,13 +395,13 @@ export function ImportWizard({
         </form>
       ) : null}
 
-      {phase.step === 'preview' ? (
-        <PreviewPanel
-          preview={phase.preview}
-          runId={phase.runId}
-          onBegin={() => begin(phase.fileName, phase.runId)}
-        />
-      ) : null}
+      {phase.step === 'preview'
+        ? renderPreview({
+            preview: phase.preview,
+            runId: phase.runId,
+            onBegin: (confirmNewCount) => begin(phase.fileName, phase.runId, confirmNewCount),
+          })
+        : null}
 
       {phase.step === 'running' ? (
         <ProgressPanel
@@ -340,9 +414,9 @@ export function ImportWizard({
         />
       ) : null}
 
-      {phase.step === 'result' ? (
-        <ResultPanel progress={phase.progress} report={phase.report} runId={phase.runId} />
-      ) : null}
+      {phase.step === 'result'
+        ? renderResult({ progress: phase.progress, report: phase.report, runId: phase.runId })
+        : null}
     </div>
   )
 }
@@ -594,8 +668,8 @@ interface NoteRow {
   message: string
 }
 
-/** Hata olmayan satır notları: ürün işlenecek ama devir yazılmayacak. */
-function NoteTable({ title, rows, more }: { title: string; rows: NoteRow[]; more: number }) {
+/** Hata olmayan satır notları: ürün işlenecek ama devir yazılmayacak (envanterde: depoya atama bekliyor). */
+export function NoteTable({ title, rows, more }: { title: string; rows: NoteRow[]; more: number }) {
   return (
     <div className="rounded-card border border-warn bg-surface">
       <h2 className="border-b border-line px-4 py-3 font-semibold">{title}</h2>
@@ -628,7 +702,7 @@ function NoteTable({ title, rows, more }: { title: string; rows: NoteRow[]; more
   )
 }
 
-function IssueTable({ rows }: { rows: ImportRunPreview['errors'] }) {
+export function IssueTable({ rows }: { rows: ImportRunPreview['errors'] }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
@@ -666,7 +740,7 @@ function IssueTable({ rows }: { rows: ImportRunPreview['errors'] }) {
 }
 
 /** Sonuç ekranı: raporun ilk satırları; durum sütunu satırın neden burada olduğunu söylüyor. */
-function ReportTable({ rows }: { rows: ImportRunReportRow[] }) {
+export function ReportTable({ rows }: { rows: ImportRunReportRow[] }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">

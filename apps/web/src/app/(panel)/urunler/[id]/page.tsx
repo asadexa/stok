@@ -11,6 +11,7 @@ import {
   addBarcode,
   archiveBarcode,
   archiveProduct,
+  getProductDepotStock,
   getProductDetail,
   listLocations,
   listProductOffers,
@@ -81,6 +82,8 @@ export default async function ProductPage({
 
   const canEdit = actor.role === 'ADMIN'
   const locations = canEdit ? await listLocations(actor, { db }) : []
+  // Depo kullanmayan işletmede `null`: bölüm hiç basılmıyor (T219).
+  const depotStock = await getProductDepotStock(actor, product.productId, { db })
   const activeBarcodes = product.barcodes.filter((b) => b.archivedAt === null)
   // Tedarikçi fiyatı alış fiyatı niteliğinde (INV-10, T200): çalışan için
   // sorgu HİÇ çalışmıyor. Çalışsaydı core 403 fırlatır ve sayfa çökerdi.
@@ -229,6 +232,52 @@ export default async function ProductPage({
           value={product.lastMovementAt ? formatDate(product.lastMovementAt) : 'Hiç'}
         />
       </section>
+
+      {/* DEPO DAĞILIMI (T219, PRD-17) — salt okunur. Depoya atanmamış eski
+          stok ayrı satırda: gizlenseydi depoların toplamı ürünün toplamını
+          tutmazdı ve kullanıcı stok kayboldu sanardı. */}
+      {depotStock ? (
+        <section
+          aria-label="Depolara göre stok"
+          className="mb-6 max-w-2xl rounded-card border border-line bg-surface shadow-card"
+        >
+          <h2 className="border-b border-line px-4 py-3 font-semibold">Depolara göre stok</h2>
+          {depotStock.depots.length === 0 && depotStock.unassigned === 0 ? (
+            <p className="px-4 py-3 text-sm text-ink-2">Bu ürünün henüz hiçbir depoda stok hareketi yok.</p>
+          ) : (
+            <table className="w-full text-sm">
+              <tbody>
+                {depotStock.depots.map((d) => (
+                  <tr key={d.depotId} className="border-b border-line">
+                    <th scope="row" className="px-4 py-2 text-left font-normal">
+                      {d.name}
+                    </th>
+                    <td className="tabular px-4 py-2 text-right">{formatQty(d.qty, product.unit as Unit)}</td>
+                  </tr>
+                ))}
+                {depotStock.unassigned !== 0 ? (
+                  <tr className="border-b border-line">
+                    <th scope="row" className="px-4 py-2 text-left font-normal text-ink-2">
+                      Depoya atama bekliyor (deposu bilinmeyen eski stok)
+                    </th>
+                    <td className="tabular px-4 py-2 text-right">
+                      {formatQty(depotStock.unassigned, product.unit as Unit)}
+                    </td>
+                  </tr>
+                ) : null}
+                <tr>
+                  <th scope="row" className="px-4 py-2 text-left font-semibold">
+                    Toplam
+                  </th>
+                  <td className="tabular px-4 py-2 text-right font-semibold">
+                    {formatQty(depotStock.total, product.unit as Unit)}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          )}
+        </section>
+      ) : null}
 
       {/* Masaüstünde iki sütun: solda var olan formlar (max-w-2xl), sağda
           yöneticiye tedarikçi fiyatları (T200 1b). Mobilde tek sütun; sıra

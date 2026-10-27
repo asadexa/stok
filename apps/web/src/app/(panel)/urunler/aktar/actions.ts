@@ -1,7 +1,6 @@
 'use server'
 
 import {
-  type Actor,
   type ImportRunPreview,
   type ImportRunProgress,
   type ImportRunReportRow,
@@ -13,10 +12,7 @@ import {
   processImportChunk,
   startImportRun,
 } from '@stok/core'
-import { type Db, appDb } from '@stok/db'
-import { AppError, errorText, isRetryable } from '@stok/shared'
-import { logUnexpected } from '@/server/safe-log'
-import { currentActor } from '@/server/session'
+import { type ActionResult, guarded } from '@/server/import-action'
 
 /**
  * ============================================================================
@@ -38,28 +34,6 @@ import { currentActor } from '@/server/session'
  * bilgisayarda yapılan bir iş.
  * ============================================================================
  */
-
-export type ActionResult<T> = { ok: true; value: T } | { ok: false; error: string; retryable: boolean }
-
-/**
- * Yetki ve hata sözleşmesi tek yerde. Hata metni kullanıcıya gidiyor;
- * `retryable` istemcinin kendiliğinden tekrar deneyip denemeyeceğini söylüyor
- * (ör. aynı aktarım başka bir istekte işleniyor). Beklenmeyen hata günlüğe
- * içeriksiz yazılıyor: satırlar alış fiyatı taşıyor (T204, INV-10).
- */
-async function guarded<T>(scope: string, fn: (actor: Actor, db: Db) => Promise<T>): Promise<ActionResult<T>> {
-  const actor = await currentActor()
-  if (!actor) return { ok: false, error: errorText('TOKEN_INVALID', {}), retryable: false }
-  try {
-    return { ok: true, value: await fn(actor, appDb()) }
-  } catch (err) {
-    if (err instanceof AppError) {
-      return { ok: false, error: errorText(err.code, err.details), retryable: isRetryable(err.code) }
-    }
-    logUnexpected(scope, err)
-    return { ok: false, error: errorText('SERVER_ERROR', {}), retryable: true }
-  }
-}
 
 /** Aktarım kaydını açar. Dosyanın kendisi değil, tarayıcının okuduğu özet geliyor. */
 export async function startImportAction(meta: unknown): Promise<ActionResult<{ runId: string }>> {

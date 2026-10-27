@@ -1,5 +1,5 @@
 import { AppError, type Unit, listStockSchema } from '@stok/shared'
-import { type Db, currentStock, locations, products, withTenant } from '@stok/db'
+import { type Db, currentStock, depots, locations, products, stockMovements, withTenant } from '@stok/db'
 import { and, asc, eq, isNull, or, sql } from 'drizzle-orm'
 import {
   type Actor,
@@ -692,4 +692,65 @@ export async function getProduct(
   const row = page.rows[0]
   if (!row) throw new AppError('NOT_FOUND', `product ${productId} not found`, { productId })
   return row
+}
+
+export interface ProductDepotStock {
+  /** Ürünün hareket gördüğü depolar, ada göre; miktar 0 olan da (sayımla sıfırlanmış) dahil. */
+  depots: { depotId: string; name: string; qty: number }[]
+  /** Deposu bilinmeyen eski stok (`depot_id` boş hareketler); depo kullanılmadan önce girilmiş. */
+  unassigned: number
+  /** Depolar + atanmamış = `current_stock` (INV-1, DAT-21). */
+  total: number
+}
+
+/**
+ * Ürünün depo dağılımı (T219, ürün sayfası). İşletmede hiç depo yoksa `null`:
+ * bugünkü tek depolu işletmelerin ürün sayfası değişmesin.
+ *
+ * Miktar DEFTERDEN türüyor (DAT-21): depo başına ayrı bir sayaç yok, olsaydı
+ * defterle ayrışabilirdi. Toplam aynı toplamın kendisi, `current_stock` ile
+ * INV-1 gereği eşit. Atanmamış miktar ayrıca gösteriliyor: gizlenseydi
+ * depoların toplamı ürünün toplamını tutmazdı.
+ */
+export async function getProductDepotStock(
+  actor: Actor,
+  productId: string,
+  options: StockOptions = {},
+): Promise<ProductDepotStock | null> {
+  requirePermission(actor, 'stock:read')
+  return withTenant(
+    actor.tenantId,
+    async (tx) => {
+      const [firstDepot] = await tx
+        .select({ id: depots.id })
+        .from(depots)
+        .where(eq(depots.tenantId, actor.tenantId))
+        .limit(1)
+      if (!firstDepot) return null
+
+      const rows = await tx
+        .select({
+          depotId: stockMovements.depotId,
+          name: depots.name,
+          qty: sql<string>`COALESCE(SUM(${stockMovements.delta}), 0)::text`,
+        })
+        .from(stockMovements)
+        .leftJoin(depots, and(eq(depots.id, stockMovements.depotId), eq(depots.tenantId, actor.tenantId)))
+        .where(and(eq(stockMovements.tenantId, actor.tenantId), eq(stockMovements.productId, productId)))
+        .groupBy(stockMovements.depotId, depots.name)
+        .orderBy(asc(depots.name))
+
+      let unassigned = 0n
+      let total = 0n
+      const list: ProductDepotStock['depots'] = []
+      for (const r of rows) {
+        const qty = parseScaled(r.qty)
+        total += qty
+        if (r.depotId === null) unassigned += qty
+        else list.push({ depotId: r.depotId, name: r.name ?? '', qty: scaledToNumber(qty) })
+      }
+      return { depots: list, unassigned: scaledToNumber(unassigned), total: scaledToNumber(total) }
+    },
+    options.db,
+  )
 }

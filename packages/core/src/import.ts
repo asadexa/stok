@@ -800,6 +800,16 @@ async function writeOpening(
     if (err instanceof AppError && err.code === 'PRODUCT_HAS_MOVEMENTS') {
       return { outcome: 'SKIPPED', message: `${done}, devir atlandı: üründe hareket var` }
     }
+    // Birden çok depolu işletmede devrin deposu bilinmiyor (DAT-23). Ürün
+    // dosyasında depo sütunu yok; depo bazlı stok envanter dosyasıyla giriliyor
+    // (T218). Genel "depo seçilmeli" metni ürün aktarımında seçilecek bir yer
+    // göstermezdi.
+    if (err instanceof AppError && err.code === 'DEPOT_REQUIRED') {
+      return {
+        outcome: 'FAILED',
+        message: `${done}, devir yazılamadı: bu işletmede birden fazla depo var. Depo bazında stok için Stok → Envanteri güncelle ekranını kullanın.`,
+      }
+    }
     return { outcome: 'FAILED', message: `${done}, devir yazılamadı: ${messageOf(err)}` }
   }
 }

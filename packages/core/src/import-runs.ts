@@ -5,6 +5,7 @@ import {
   type ImportRowStatus,
   type ImportRunKind,
   type ImportRunStatus,
+  type Unit,
 } from '@stok/shared'
 import { randomUUID } from 'node:crypto'
 import {
@@ -34,6 +35,7 @@ import {
   rawRowSchema,
 } from './import'
 import {
+  INVENTORY_COLUMN_LABELS,
   INVENTORY_FIELDS,
   INVENTORY_HEADER_LIMIT,
   INVENTORY_REQUIRED_FIELDS,
@@ -1306,9 +1308,33 @@ export interface InventoryRunPreview {
     unassigned: number
     error: number
     ambiguous: number
+    increase: number
+    decrease: number
   }
+  /**
+   * Dosyada tanınan sütunlar, kullanıcının dosyada aradığı adlarla. Etiket
+   * sunucudan: istemci `inventory-file`'ı ana pakete alsaydı dosya okuyucusu
+   * (ExcelJS) sayfa paketine girerdi.
+   */
+  columns: string[]
   /** Geçerli satırların depoları; `isNew` onayda açılacak. */
   depots: { name: string; isNew: boolean }[]
+  /**
+   * Yazılacak satırların (yeni ürün ve güncelleme) ilk `IMPORT_SAMPLE_SIZE`'ı:
+   * depo ve o deponun eski → yeni miktarı. Kullanıcı onaydan önce dosyadaki
+   * sayının "eklenecek" değil "yeni toplam" olduğunu satır üzerinde görüyor.
+   */
+  changes: {
+    rowNumber: number
+    sku: string
+    name: string
+    depot: string
+    unit: Unit
+    oldQty: number
+    newQty: number
+    newProduct: boolean
+    newDepot: boolean
+  }[]
   notices: string[]
   /** İlk `IMPORT_SAMPLE_SIZE` hatalı satır; tamamı raporda. */
   errors: { rowNumber: number; sku: string; name: string; issues: { column: string; message: string }[] }[]
@@ -1337,7 +1363,12 @@ export async function finalizeInventoryPreview(
     actor.tenantId,
     async (tx) => {
       const [run] = await tx
-        .select({ status: importRuns.status, totalRows: importRuns.totalRows, notices: importRuns.notices })
+        .select({
+          status: importRuns.status,
+          totalRows: importRuns.totalRows,
+          columns: importRuns.columns,
+          notices: importRuns.notices,
+        })
         .from(importRuns)
         .where(and(eq(importRuns.tenantId, actor.tenantId), eq(importRuns.id, runId), eq(importRuns.kind, 'INVENTORY')))
       if (!run) throw notFound(runId)
@@ -1404,10 +1435,25 @@ export async function finalizeInventoryPreview(
 
   const errorRows = preview.rows.filter((r) => r.action === 'error')
   const unassignedRows = preview.rows.filter((r) => r.action === 'unassigned')
+  const writeRows = preview.rows.filter((r) => r.data && (r.action === 'create' || r.action === 'update'))
   return {
     runId,
     counts: preview.counts,
+    columns: INVENTORY_FIELDS.filter((f) => (run.columns as InventoryField[]).includes(f)).map(
+      (f) => INVENTORY_COLUMN_LABELS[f],
+    ),
     depots: preview.depots,
+    changes: writeRows.slice(0, IMPORT_SAMPLE_SIZE).map((r) => ({
+      rowNumber: r.rowNumber,
+      sku: r.sku,
+      name: r.name,
+      depot: r.data!.depotName,
+      unit: r.data!.unit,
+      oldQty: r.data!.expectedQty,
+      newQty: r.data!.targetQty,
+      newProduct: r.action === 'create',
+      newDepot: r.data!.newDepot,
+    })),
     notices: run.notices,
     errors: errorRows
       .slice(0, IMPORT_SAMPLE_SIZE)

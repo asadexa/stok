@@ -127,6 +127,10 @@ export interface InventoryPreview {
     error: number
     /** Hataların içinden: belirsiz eşleşme. */
     ambiguous: number
+    /** Yazılacak satırların (yeni ürün ve güncelleme) içinden: depo miktarı artacak. */
+    increase: number
+    /** Yazılacak satırların içinden: depo miktarı azalacak. */
+    decrease: number
   }
   /** Dosyadaki geçerli satırların depoları; `isNew` onayda açılacak. */
   depots: { name: string; isNew: boolean }[]
@@ -527,6 +531,13 @@ export async function previewInventory(
   }
 
   const count = (a: InventoryRowAction) => finalRows.filter((r) => r.action === a).length
+  // Yön, uygulamanın yazacağı farkın işareti: miktarlar ölçekli tamsayı olarak
+  // karşılaştırılıyor (INV-8), kayan noktada 0,1 + 0,2 gibi bir fark yanlış
+  // yöne sayılabilirdi.
+  const direction = (r: InventoryPreviewRow) =>
+    r.data && (r.action === 'create' || r.action === 'update')
+      ? scaledFromNumber(r.data.targetQty) - scaledFromNumber(r.data.expectedQty)
+      : 0n
   return {
     rows: finalRows,
     counts: {
@@ -537,6 +548,8 @@ export async function previewInventory(
       unassigned: count('unassigned'),
       error: count('error'),
       ambiguous: finalRows.filter((r) => r.ambiguous).length,
+      increase: finalRows.filter((r) => direction(r) > 0n).length,
+      decrease: finalRows.filter((r) => direction(r) < 0n).length,
     },
     depots: [...depotsSeen.values()],
     contentHash: contentHashOf(parsed, keyOf),

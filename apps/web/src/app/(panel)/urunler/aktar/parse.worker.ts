@@ -1,3 +1,4 @@
+import { type ParsedInventoryFile, parseInventoryFile } from '@stok/core/inventory-file'
 import { type ParsedFile, parseProductFile } from '@stok/core/product-file'
 import { AppError, type ErrorDetails } from '@stok/shared'
 
@@ -14,21 +15,36 @@ import { AppError, type ErrorDetails } from '@stok/shared'
  * sayfa işçiyi kapatıyor ve bellek geri veriliyor. Sayfaya yalnız hücre
  * metinleri dönüyor.
  *
+ * Aynı işçi iki dosya türünü okuyor (T219): ürün kataloğu ve envanter
+ * dosyası. Tür sayfadan geliyor; ikinci bir işçi dosyası aynı bellek ve
+ * hata sözleşmesinin kopyası olurdu.
+ *
  * Buradaki kontroller kullanıcıya erken haber vermek için. Güvenlik sınırı
  * değil: sunucu gelen her satırı yeniden sınırlıyor ve doğruluyor.
  * ============================================================================
  */
 
+export type ParseKind = 'PRODUCT' | 'INVENTORY'
+
+export interface ParseRequest {
+  kind: ParseKind
+  file: File
+}
+
 export type ParseResult =
-  | { ok: true; file: ParsedFile }
+  | { ok: true; kind: 'PRODUCT'; file: ParsedFile }
+  | { ok: true; kind: 'INVENTORY'; file: ParsedInventoryFile }
   | { ok: false; code: string; details: ErrorDetails }
 
-self.onmessage = async (event: MessageEvent<File>) => {
+self.onmessage = async (event: MessageEvent<ParseRequest>) => {
   let result: ParseResult
   try {
-    const upload = event.data
-    const file = await parseProductFile(new Uint8Array(await upload.arrayBuffer()), upload.name)
-    result = { ok: true, file }
+    const { kind, file: upload } = event.data
+    const data = new Uint8Array(await upload.arrayBuffer())
+    result =
+      kind === 'INVENTORY'
+        ? { ok: true, kind, file: await parseInventoryFile(data, upload.name) }
+        : { ok: true, kind: 'PRODUCT', file: await parseProductFile(data, upload.name) }
   } catch (err) {
     // AppError sınıfı iş parçacıkları arasında taşınmıyor; kod ve ayrıntı taşınıyor.
     result =

@@ -172,6 +172,14 @@ export default async function StockPage({
           >
             Toplu aktar
           </Link>
+          {actorCan(actor, 'count:approve') ? (
+            <Link
+              href="/stok/envanter"
+              className="h-14 rounded-control border border-line-control bg-surface px-5 text-base font-medium leading-[3.5rem] hover:bg-surface-2"
+            >
+              Envanteri güncelle
+            </Link>
+          ) : null}
           <Link
             href="/urunler/yeni"
             className="h-14 rounded-control bg-accent px-6 text-base font-medium leading-[3.5rem] text-accent-ink hover:brightness-110"
