@@ -110,6 +110,12 @@ interface CreateMovementOptions {
    * şemasından geçemiyor, istemci bu kapıyı açamıyor. `count:approve` ister.
    */
   inventory?: boolean
+  /**
+   * Hareketi yazan toplu aktarım kaydı (DAT-25): "bu sayım hangi dosyadan
+   * geldi". Sunucudaki çağıranın seçeneği, kullanıcı girdisi değil. Başka
+   * kiracının kaydı verilse bile (kiracı, aktarım) yabancı anahtarı reddeder.
+   */
+  importRunId?: string
 }
 
 /** Envanter düzeltmesinin kilit altında sınanan değerleri (ölçekli). */
@@ -194,6 +200,7 @@ async function createMovementInner(
           writeMovement(tx, actor, input, {
             requireFirstMovement: options.requireFirstMovement === true,
             inventory,
+            importRunId: options.importRunId ?? null,
           }),
         options.db,
       )
@@ -323,6 +330,7 @@ function parseInventoryInput(raw: unknown): {
 interface WriteFlags {
   requireFirstMovement: boolean
   inventory: InventoryCheck | undefined
+  importRunId: string | null
 }
 
 async function writeMovement(
@@ -488,6 +496,7 @@ async function writeMovement(
       note: input.note ?? null,
       locationId: input.locationId ?? null,
       depotId: depot?.id ?? null,
+      importRunId: flags.importRunId,
       unitPrice: price.unitPrice,
       listPrice: price.listPrice,
       clientListPrice: price.clientListPrice,

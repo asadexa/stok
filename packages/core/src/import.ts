@@ -188,15 +188,27 @@ function numberIssue(cell: string, fallback: string): string {
   return isAmbiguousTurkishNumber(cell) ? ambiguousNumberMessage(cell) : fallback
 }
 
-function parseUnit(raw: string): Unit | undefined | null {
+/** Tanınmayan birimin satır hatası; iki aktarım aynı cümleyi kullanıyor. */
+export const UNKNOWN_UNIT_MESSAGE = 'Birim tanınmadı (Adet/AD, Kilogram/KG, Metre/MT, Litre/LT)'
+
+/**
+ * Dosyadaki birim hücresi → birim. `undefined` boş hücre, `null` tanınmadı.
+ * Envanter dosyası (T218) da bunu kullanıyor: iki aktarım aynı birimi farklı
+ * okusaydı aynı dosya birinde geçip ötekinde reddedilirdi.
+ */
+export function parseUnit(raw: string): Unit | undefined | null {
   const text = normalizeHeader(raw)
   if (text === '') return undefined
   const direct = UNIT_VALUES.find((u) => normalizeHeader(u) === text)
   if (direct) return direct
-  // "Adet", "adet", "AD" gibi Türkçe etiketler de kabul ediliyor: dosyayı
-  // dolduran kişi kod değil kelime yazar.
+  // "Adet", "adet" gibi Türkçe etiketler ve ERP kısaltmaları ("AD", "LT",
+  // "MT", `UNITS[].aliases`) da kabul ediliyor: dosyayı dolduran kişi kod
+  // değil kelime yazar, ERP raporu kısaltma basar.
   const byLabel = UNIT_VALUES.find(
-    (u) => normalizeHeader(UNITS[u].tr) === text || normalizeHeader(UNITS[u].short) === text,
+    (u) =>
+      normalizeHeader(UNITS[u].tr) === text ||
+      normalizeHeader(UNITS[u].short) === text ||
+      UNITS[u].aliases.some((a) => normalizeHeader(a) === text),
   )
   return byLabel ?? null
 }
@@ -281,7 +293,7 @@ function evaluateRow(
   const data: ParsedRow = { sku, name }
 
   const unit = parseUnit(raw.cells.unit ?? '')
-  if (unit === null) push('unit', 'Birim tanınmadı (Adet, Kilogram, Metre, Litre)')
+  if (unit === null) push('unit', UNKNOWN_UNIT_MESSAGE)
   else if (unit !== undefined) data.unit = unit
 
   if (file.columns.includes('category')) data.category = raw.cells.category || null
@@ -673,6 +685,15 @@ export async function commitImport(
 
 const OPENING_COUNTER = { WRITTEN: 'written', SKIPPED: 'skipped', FAILED: 'failed' } as const
 
+/**
+ * Kesintiye uğramış (`IN_PROGRESS`) satırın veritabanına bakılarak verilen
+ * kararı. `retry`: uygulanmadığı kanıtlandı, yeniden denenebilir. Değilse
+ * `status` (varsayılan UNCERTAIN): yalnız uygulandığı KANITLANAN satır DONE olur.
+ */
+export type RowVerdict =
+  | { retry: true }
+  | { retry: false; status?: 'DONE' | 'UNCERTAIN'; message?: string; productId?: string }
+
 /** Tek satırın uygulanmasının sonucu. Toplu aktarım kaydı (T171) bunu satıra yazıyor. */
 export interface RowOutcome {
   /** `DONE`: ürün yazıldı. `CONFLICT`: önizlemeden sonra başkası değiştirdi (K3). */
@@ -836,8 +857,9 @@ async function attachIfMissing(
  * sorgu parametrelerini, PostgreSQL'in "Failing row contains" ayrıntısı satır
  * değerlerini taşıyor; içe aktarılan alış fiyatları ve barkodlar günlüğe
  * düşerdi (INV-10). Yalnız hata sınıfı, SQLSTATE ve constraint adı yazılıyor.
+ * Envanter aktarımı (T218) da aynı kuralla raporluyor.
  */
-function messageOf(err: unknown): string {
+export function messageOf(err: unknown): string {
   if (err instanceof AppError) return errorText(err.code, err.details)
   console.error('[import] beklenmeyen hata', {
     type: err instanceof Error ? err.name : typeof err,

@@ -2,8 +2,8 @@ import {
   AppError,
   IMPORT_ROW_STATUSES,
   type ImportOpeningOutcome,
-  type ImportRowAction,
   type ImportRowStatus,
+  type ImportRunKind,
   type ImportRunStatus,
 } from '@stok/shared'
 import { randomUUID } from 'node:crypto'
@@ -17,20 +17,37 @@ import {
   stockMovements,
   withTenant,
 } from '@stok/db'
-import { and, asc, eq, inArray, isNull, lt, or, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, isNotNull, isNull, lt, ne, not, or, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { type Actor, requirePermission } from './authz'
 import type { SheetColumn } from './excel'
 import {
   type OpeningPlan,
   type PreviewRow,
+  type RowAction,
   type RowOutcome,
+  type RowVerdict,
   applyRow,
   importNotices,
   openingKey,
   previewImport,
   rawRowSchema,
 } from './import'
+import {
+  INVENTORY_FIELDS,
+  INVENTORY_HEADER_LIMIT,
+  INVENTORY_REQUIRED_FIELDS,
+  INVENTORY_UNREAD_COLUMNS_LIMIT,
+  type InventoryField,
+  type RawInventoryRow,
+} from './inventory-file'
+import {
+  applyInventoryRow,
+  previewInventory,
+  rawInventoryRowSchema,
+  resolveRunDepots,
+  verifyInventoryRow,
+} from './inventory-import'
 import {
   COLUMN_LABELS,
   IMPORT_FIELDS,
@@ -154,8 +171,16 @@ const wrongState = (runId: string, status: string) =>
  * silinseydi kaynak bilgisi kaybolurdu; yabancı anahtar da silmeyi reddeder ve
  * bütün temizlik o kiracı için patlardı. Bu yüzden bağlı kayıtlar baştan
  * atlanıyor.
+ *
+ * BAŞLAMIŞ ENVANTER AKTARIMININ BAŞLIĞI DA SİLİNMİYOR (T218, K3), hiç hareket
+ * yazmamış olsa bile: aynı içerik uyarısı ve son dosya bilgisi onu okuyor.
+ * Silinseydi aylar önceki dosya yeniden yüklendiğinde uyarı çıkmaz, arada
+ * girilen satışlar sessizce geri alınırdı. Ham satırları 30 gün sonra
+ * siliniyor: başlık küçük, satırlar binlerce.
  */
 export async function pruneImportRuns(tx: Tx, tenantId: string): Promise<number> {
+  const expired = lt(importRuns.createdAt, sql`now() - make_interval(days => ${IMPORT_RUN_RETENTION_DAYS})`)
+  const keptInventory = and(eq(importRuns.kind, 'INVENTORY'), isNotNull(importRuns.startedAt))
   const deleted = await tx
     .delete(importRuns)
     .where(
@@ -166,8 +191,9 @@ export async function pruneImportRuns(tx: Tx, tenantId: string): Promise<number>
                WHERE ${stockMovements.tenantId} = ${importRuns.tenantId}
                  AND ${stockMovements.importRunId} = ${importRuns.id}
             )`,
+        not(keptInventory!),
         or(
-          lt(importRuns.createdAt, sql`now() - make_interval(days => ${IMPORT_RUN_RETENTION_DAYS})`),
+          expired,
           and(
             eq(importRuns.status, 'UPLOADING'),
             lt(importRuns.createdAt, sql`now() - make_interval(hours => ${IMPORT_UPLOAD_ABANDON_HOURS})`),
@@ -176,6 +202,18 @@ export async function pruneImportRuns(tx: Tx, tenantId: string): Promise<number>
       ),
     )
     .returning({ id: importRuns.id })
+  await tx.delete(importRunRows).where(
+    and(
+      eq(importRunRows.tenantId, tenantId),
+      inArray(
+        importRunRows.runId,
+        tx
+          .select({ id: importRuns.id })
+          .from(importRuns)
+          .where(and(eq(importRuns.tenantId, tenantId), keptInventory, expired)),
+      ),
+    ),
+  )
   return deleted.length
 }
 
@@ -252,7 +290,20 @@ export async function appendImportRows(
   requireImport(actor)
   const runId = runIdOf(runIdRaw)
   const input = parseOrThrow(appendSchema, raw)
+  return appendRows(actor, runId, 'PRODUCT', input.rows, options)
+}
 
+/**
+ * Ham satırları türüne uyan kayda ekler. Tür şartı: envanter kaydına ürün
+ * satırı (fiyat hücreleriyle) ya da ürün kaydına envanter satırı giremesin.
+ */
+async function appendRows(
+  actor: Actor,
+  runId: string,
+  kind: ImportRunKind,
+  rows: { rowNumber: number; cells: Record<string, string | undefined> }[],
+  options: ImportRunOptions,
+): Promise<{ received: number; total: number }> {
   return withTenant(
     actor.tenantId,
     async (tx) => {
@@ -261,7 +312,7 @@ export async function appendImportRows(
       const [run] = await tx
         .select({ status: importRuns.status, totalRows: importRuns.totalRows })
         .from(importRuns)
-        .where(and(eq(importRuns.tenantId, actor.tenantId), eq(importRuns.id, runId)))
+        .where(and(eq(importRuns.tenantId, actor.tenantId), eq(importRuns.id, runId), eq(importRuns.kind, kind)))
         .for('update')
       if (!run) throw notFound(runId)
       if (run.status !== 'UPLOADING') throw wrongState(runId, run.status)
@@ -272,12 +323,12 @@ export async function appendImportRows(
         .where(and(eq(importRunRows.tenantId, actor.tenantId), eq(importRunRows.runId, runId)))) as [
         { n: number },
       ]
-      if (n + input.rows.length > run.totalRows) throw wrongState(runId, 'TOO_MANY_ROWS')
+      if (n + rows.length > run.totalRows) throw wrongState(runId, 'TOO_MANY_ROWS')
 
       await tx
         .insert(importRunRows)
         .values(
-          input.rows.map((r) => ({
+          rows.map((r) => ({
             tenantId: actor.tenantId,
             runId,
             rowNumber: r.rowNumber,
@@ -291,7 +342,7 @@ export async function appendImportRows(
           }
           throw err
         })
-      return { received: n + input.rows.length, total: run.totalRows }
+      return { received: n + rows.length, total: run.totalRows }
     },
     options.db,
   )
@@ -339,7 +390,7 @@ export async function finalizeImportPreview(
       const [run] = await tx
         .select({ status: importRuns.status, totalRows: importRuns.totalRows, columns: importRuns.columns, notices: importRuns.notices })
         .from(importRuns)
-        .where(and(eq(importRuns.tenantId, actor.tenantId), eq(importRuns.id, runId)))
+        .where(and(eq(importRuns.tenantId, actor.tenantId), eq(importRuns.id, runId), eq(importRuns.kind, 'PRODUCT')))
       if (!run) throw notFound(runId)
       if (run.status !== 'UPLOADING') throw wrongState(runId, run.status)
       const rows = await tx
@@ -447,7 +498,12 @@ export async function beginImportRun(
         .update(importRuns)
         .set({ status: 'RUNNING', startedAt: sql`now()` })
         .where(
-          and(eq(importRuns.tenantId, actor.tenantId), eq(importRuns.id, runId), eq(importRuns.status, 'PREVIEWED')),
+          and(
+            eq(importRuns.tenantId, actor.tenantId),
+            eq(importRuns.id, runId),
+            eq(importRuns.kind, 'PRODUCT'),
+            eq(importRuns.status, 'PREVIEWED'),
+          ),
         )
         .returning({ id: importRuns.id }),
     options.db,
@@ -466,7 +522,17 @@ export interface ImportRunProgress {
   toProcess: number
   /** İşlenmiş satır (sonucu yazılmış). İlerleme çubuğunun payı. */
   processed: number
-  rows: { created: number; updated: number; invalid: number; failed: number; conflict: number; uncertain: number; pending: number }
+  rows: {
+    created: number
+    updated: number
+    invalid: number
+    failed: number
+    conflict: number
+    uncertain: number
+    pending: number
+    /** Envanter: önizlemede işlenmeyeceği belli satırlar (değişiklik yok, depoya atama bekliyor). */
+    skipped: number
+  }
   openings: Record<'written' | 'skipped' | 'failed', number>
   cancelRequested: boolean
 }
@@ -479,10 +545,14 @@ export async function getImportRunProgress(
 ): Promise<ImportRunProgress> {
   requireImport(actor)
   const runId = runIdOf(runIdRaw)
-  return withTenant(actor.tenantId, (tx) => progressOf(tx, actor.tenantId, runId), options.db)
+  return progressIn(actor, runId, 'PRODUCT', options.db)
 }
 
-async function progressOf(tx: Tx, tenantId: string, runId: string): Promise<ImportRunProgress> {
+function progressIn(actor: Actor, runId: string, kind: ImportRunKind, db?: Db): Promise<ImportRunProgress> {
+  return withTenant(actor.tenantId, (tx) => progressOf(tx, actor.tenantId, runId, kind), db)
+}
+
+async function progressOf(tx: Tx, tenantId: string, runId: string, kind: ImportRunKind): Promise<ImportRunProgress> {
   const [run] = await tx
     .select({
       status: importRuns.status,
@@ -491,7 +561,7 @@ async function progressOf(tx: Tx, tenantId: string, runId: string): Promise<Impo
       cancelRequestedAt: importRuns.cancelRequestedAt,
     })
     .from(importRuns)
-    .where(and(eq(importRuns.tenantId, tenantId), eq(importRuns.id, runId)))
+    .where(and(eq(importRuns.tenantId, tenantId), eq(importRuns.id, runId), eq(importRuns.kind, kind)))
   if (!run) throw notFound(runId)
 
   const groups = await tx
@@ -505,7 +575,7 @@ async function progressOf(tx: Tx, tenantId: string, runId: string): Promise<Impo
     .where(and(eq(importRunRows.tenantId, tenantId), eq(importRunRows.runId, runId)))
     .groupBy(importRunRows.status, importRunRows.action, importRunRows.openingOutcome)
 
-  const rows = { created: 0, updated: 0, invalid: 0, failed: 0, conflict: 0, uncertain: 0, pending: 0 }
+  const rows = { created: 0, updated: 0, invalid: 0, failed: 0, conflict: 0, uncertain: 0, pending: 0, skipped: 0 }
   const openings = { written: 0, skipped: 0, failed: 0 }
   for (const g of groups) {
     const status = g.status as ImportRowStatus
@@ -514,11 +584,12 @@ async function progressOf(tx: Tx, tenantId: string, runId: string): Promise<Impo
     else if (status === 'FAILED') rows.failed += g.n
     else if (status === 'CONFLICT') rows.conflict += g.n
     else if (status === 'UNCERTAIN') rows.uncertain += g.n
+    else if (status === 'SKIPPED') rows.skipped += g.n
     else rows.pending += g.n // PENDING ve IN_PROGRESS: henüz sonucu yok
     const opening = g.opening as ImportOpeningOutcome | null
     if (opening) openings[opening === 'WRITTEN' ? 'written' : opening === 'SKIPPED' ? 'skipped' : 'failed'] += g.n
   }
-  const toProcess = run.totalRows - rows.invalid
+  const toProcess = run.totalRows - rows.invalid - rows.skipped
   return {
     runId,
     status: run.status as ImportRunStatus,
@@ -551,6 +622,33 @@ export async function processImportChunk(
 ): Promise<ImportRunProgress> {
   requireImport(actor)
   const runId = runIdOf(runIdRaw)
+  return runChunk(
+    actor,
+    runId,
+    'PRODUCT',
+    {
+      apply: (row) => applyRow(actor, previewRowOf(row), { db: options.db, checkVersion: true }),
+      verify: verifyRow,
+    },
+    options,
+  )
+}
+
+type RunRow = typeof importRunRows.$inferSelect
+
+/** Bir aktarım türünün satır işi: uygula ve kesintide doğrula. Kira, iptal ve sonuç yazımı ortak. */
+interface RowEngine {
+  apply(row: RunRow): Promise<RowOutcome>
+  verify(tx: Tx, tenantId: string, row: RunRow): Promise<RowVerdict>
+}
+
+async function runChunk(
+  actor: Actor,
+  runId: string,
+  kind: ImportRunKind,
+  engine: RowEngine,
+  options: ImportChunkOptions,
+): Promise<ImportRunProgress> {
   const db = options.db
   const budgetMs = options.budgetMs ?? IMPORT_CHUNK_BUDGET_MS
   const maxRows = options.maxRows ?? Number.POSITIVE_INFINITY
@@ -559,9 +657,9 @@ export async function processImportChunk(
   // İşlenmiş ama sonucu henüz yazılmamış satır: sonraki transaction'la birlikte yazılıyor.
   let unwritten: { rowNumber: number; outcome: RowOutcome } | null = null
 
-  const lease = await withTenant(actor.tenantId, (tx) => acquireLease(tx, actor.tenantId, runId, token), db)
+  const lease = await withTenant(actor.tenantId, (tx) => acquireLease(tx, actor.tenantId, runId, kind, token), db)
   if (!lease) {
-    const progress = await getImportRunProgress(actor, runId, options)
+    const progress = await progressIn(actor, runId, kind, db)
     if (progress.status === 'RUNNING') {
       throw new AppError('IMPORT_RUN_BUSY', `import run ${runId} is leased`, { runId })
     }
@@ -572,11 +670,11 @@ export async function processImportChunk(
 
   try {
     // Önceki bir işleyici satırın ortasında düştüyse o satır IN_PROGRESS kaldı.
-    await resolveInterruptedRows(actor, runId, db)
+    await resolveInterruptedRows(actor, runId, engine.verify, db)
 
     if (lease.cancelRequested) {
       await withTenant(actor.tenantId, (tx) => finishRun(tx, actor.tenantId, runId, token, 'CANCELLED'), db)
-      return await getImportRunProgress(actor, runId, options)
+      return await progressIn(actor, runId, kind, db)
     }
 
     let done = 0
@@ -649,7 +747,7 @@ export async function processImportChunk(
         }
         if (claim === 'skip') continue
 
-        unwritten = { rowNumber: row.rowNumber, outcome: await applyRow(actor, previewRowOf(row), { db, checkVersion: true }) }
+        unwritten = { rowNumber: row.rowNumber, outcome: await engine.apply(row) }
         done += 1
       }
     }
@@ -673,7 +771,7 @@ export async function processImportChunk(
     )
   }
 
-  return getImportRunProgress(actor, runId, options)
+  return progressIn(actor, runId, kind, db)
 
   /**
    * Henüz yazılmamış satır sonucunu verilen transaction'da yazar. Çağıran,
@@ -715,6 +813,7 @@ async function acquireLease(
   tx: Tx,
   tenantId: string,
   runId: string,
+  kind: ImportRunKind,
   token: string,
 ): Promise<{ cancelRequested: boolean } | null> {
   const [row] = await tx
@@ -724,6 +823,8 @@ async function acquireLease(
       and(
         eq(importRuns.tenantId, tenantId),
         eq(importRuns.id, runId),
+        // Tür şartı: ürün işleyicisi envanter satırını ürün diye uygulayamasın.
+        eq(importRuns.kind, kind),
         eq(importRuns.status, 'RUNNING'),
         or(isNull(importRuns.leaseUntil), lt(importRuns.leaseUntil, sql`now()`)),
       ),
@@ -797,10 +898,11 @@ async function finishIfSettled(tx: Tx, tenantId: string, runId: string, token: s
   if (!open) await finishRun(tx, tenantId, runId, token, 'DONE')
 }
 
-function previewRowOf(row: typeof importRunRows.$inferSelect): PreviewRow {
+function previewRowOf(row: RunRow): PreviewRow {
   return {
     rowNumber: row.rowNumber,
-    action: row.action as ImportRowAction,
+    // Ürün kaydında karar yalnız create/update/error (tür şartı `acquireLease`'te).
+    action: row.action as RowAction,
     sku: row.sku ?? '',
     name: row.name ?? '',
     issues: [],
@@ -826,8 +928,16 @@ function previewRowOf(row: typeof importRunRows.$inferSelect): PreviewRow {
  *
  * Yalnız `IMPORT_STALE_CLAIM_SECONDS`'tan eski satırlar: daha yeni bir satırın
  * işleyicisi hâlâ çalışıyor olabilir (bkz. sabit).
+ *
+ * Kararı türün doğrulayıcısı veriyor (`verify`); envanterde hareket anahtarı
+ * satıra bağlı olduğu için uygulandığı KANITLANAN satır DONE olabiliyor.
  */
-async function resolveInterruptedRows(actor: Actor, runId: string, db?: Db): Promise<void> {
+async function resolveInterruptedRows(
+  actor: Actor,
+  runId: string,
+  verify: RowEngine['verify'],
+  db?: Db,
+): Promise<void> {
   await withTenant(
     actor.tenantId,
     async (tx) => {
@@ -843,15 +953,15 @@ async function resolveInterruptedRows(actor: Actor, runId: string, db?: Db): Pro
           ),
         )
       for (const row of stuck) {
-        const verdict = await verifyRow(tx, actor.tenantId, row)
+        const verdict = await verify(tx, actor.tenantId, row)
         await tx
           .update(importRunRows)
           .set(
             verdict.retry
               ? { status: 'PENDING', claimedAt: null, claimToken: null }
               : {
-                  status: 'UNCERTAIN',
-                  message: verdict.message,
+                  status: verdict.status ?? 'UNCERTAIN',
+                  message: verdict.message ?? null,
                   ...(verdict.productId ? { productId: verdict.productId } : {}),
                   processedAt: sql`now()`,
                 },
@@ -870,11 +980,7 @@ async function resolveInterruptedRows(actor: Actor, runId: string, db?: Db): Pro
   )
 }
 
-async function verifyRow(
-  tx: Tx,
-  tenantId: string,
-  row: typeof importRunRows.$inferSelect,
-): Promise<{ retry: true } | { retry: false; message: string; productId?: string }> {
+async function verifyRow(tx: Tx, tenantId: string, row: RunRow): Promise<RowVerdict> {
   const [product] = await tx
     .select({ id: products.id, version: PRODUCT_VERSION })
     .from(products)
@@ -929,7 +1035,16 @@ export async function cancelImportRun(
   options: ImportRunOptions = {},
 ): Promise<ImportRunProgress> {
   requireImport(actor)
-  const runId = runIdOf(runIdRaw)
+  return cancelRun(actor, runIdOf(runIdRaw), 'PRODUCT', verifyRow, options.db)
+}
+
+async function cancelRun(
+  actor: Actor,
+  runId: string,
+  kind: ImportRunKind,
+  verify: RowEngine['verify'],
+  db?: Db,
+): Promise<ImportRunProgress> {
   // İşleyici yok: aktarım çalışmıyor ya da kira boş/süresi bitmiş.
   const idle = sql`(${importRuns.status} <> 'RUNNING' OR ${importRuns.leaseUntil} IS NULL OR ${importRuns.leaseUntil} < now())`
   const closed = await withTenant(
@@ -948,17 +1063,18 @@ export async function cancelImportRun(
           and(
             eq(importRuns.tenantId, actor.tenantId),
             eq(importRuns.id, runId),
+            eq(importRuns.kind, kind),
             inArray(importRuns.status, ['UPLOADING', 'PREVIEWED', 'RUNNING']),
           ),
         )
         .returning({ status: importRuns.status })
       return row?.status === 'CANCELLED'
     },
-    options.db,
+    db,
   )
   // Kapanan aktarımda düşmüş bir işleyiciden kalan satır olabilir.
-  if (closed) await resolveInterruptedRows(actor, runId, options.db)
-  return getImportRunProgress(actor, runId, options)
+  if (closed) await resolveInterruptedRows(actor, runId, verify, db)
+  return progressIn(actor, runId, kind, db)
 }
 
 // ---------------------------------------------------------------------------
@@ -1003,14 +1119,27 @@ export async function importRunReport(
   options: ImportRunOptions & { limit?: number } = {},
 ): Promise<ImportRunReportRow[]> {
   requireImport(actor)
-  const runId = runIdOf(runIdRaw)
+  return reportOf(actor, runIdOf(runIdRaw), 'PRODUCT', options)
+}
+
+/**
+ * İki türün raporu aynı sorgu: envanterde ek olarak "depoya atama bekliyor"
+ * satırları (SKIPPED, `unassigned`) çıkıyor; "değişiklik yok" satırı
+ * düzeltilecek ya da bilinecek bir şey taşımadığı için raporda yok.
+ */
+async function reportOf(
+  actor: Actor,
+  runId: string,
+  kind: ImportRunKind,
+  options: ImportRunOptions & { limit?: number },
+): Promise<ImportRunReportRow[]> {
   return withTenant(
     actor.tenantId,
     async (tx) => {
       const [run] = await tx
         .select({ status: importRuns.status })
         .from(importRuns)
-        .where(and(eq(importRuns.tenantId, actor.tenantId), eq(importRuns.id, runId)))
+        .where(and(eq(importRuns.tenantId, actor.tenantId), eq(importRuns.id, runId), eq(importRuns.kind, kind)))
       if (!run) throw notFound(runId)
       // Aktarım sürerken bekleyen satır "işlenmedi" değil; yalnız kapanmış aktarımda.
       const closed = run.status === 'DONE' || run.status === 'CANCELLED'
@@ -1035,6 +1164,7 @@ export async function importRunReport(
               inArray(importRunRows.status, ['INVALID', 'FAILED', 'CONFLICT', 'UNCERTAIN', 'IN_PROGRESS']),
               closed ? eq(importRunRows.status, 'PENDING') : undefined,
               inArray(importRunRows.openingOutcome, ['SKIPPED', 'FAILED']),
+              and(eq(importRunRows.status, 'SKIPPED'), eq(importRunRows.action, 'unassigned')),
             ),
           ),
         )
@@ -1060,4 +1190,415 @@ export async function importRunReport(
     },
     options.db,
   )
+}
+
+// ---------------------------------------------------------------------------
+// ENVANTER DOSYASI (T218, PRD-18)
+//
+// Aynı kayıt ve parça işleyici; satır işi `inventory-import.ts`'te. Akış:
+//   startInventoryRun → appendInventoryRows → finalizeInventoryPreview
+//   → beginInventoryRun (depolar burada açılıyor) → processInventoryChunk …
+// ---------------------------------------------------------------------------
+
+/**
+ * Envanter aktarımının yetkisi: stoğu dosyadaki sayıya çeken sayım onayı
+ * (yalnız yönetici). Dosyada yeni ürün varsa onayda ayrıca `product:create`.
+ */
+function requireInventory(actor: Actor): void {
+  requirePermission(actor, 'count:approve')
+}
+
+const inventoryStartSchema = z
+  .object({
+    fileName: z.string().trim().min(1).max(255),
+    fileBytes: z.number().int().nonnegative().max(IMPORT_FILE_BYTES_LIMIT),
+    totalRows: z.number().int().min(1).max(IMPORT_ROW_LIMIT),
+    columns: z
+      .array(z.enum(INVENTORY_FIELDS as [InventoryField, ...InventoryField[]]))
+      .max(INVENTORY_FIELDS.length),
+    unreadColumns: z
+      .array(z.string().trim().max(INVENTORY_HEADER_LIMIT))
+      .max(INVENTORY_UNREAD_COLUMNS_LIMIT)
+      .default([]),
+  })
+  .refine((v) => INVENTORY_REQUIRED_FIELDS.every((f) => v.columns.includes(f)), {
+    message: 'Malzeme Kodu, Envanter Miktarı ve Ambar sütunları gerekli',
+    path: ['columns'],
+  })
+
+/**
+ * Dosya düzeyi bilgiler. Dosyada olmayan ürünün değişmediği AÇIKÇA
+ * söyleniyor (CEO-7): kullanıcı "dosyada yoksa sıfırlanır" sanıp stoğu sıfır
+ * olan ürünleri dosyadan çıkarmış olabilir.
+ */
+function inventoryNotices(unreadColumns: string[]): string[] {
+  const notices = ['Dosyada olmayan ürünlerin ve depoların stoğu değişmez.']
+  if (unreadColumns.length > 0) {
+    notices.push(
+      `Okunmayan sütunlar: ${unreadColumns.join(', ')}. Fiyat ve tutar sütunları envanter güncellemesinde kullanılmaz.`,
+    )
+  }
+  return notices
+}
+
+export async function startInventoryRun(
+  actor: Actor,
+  raw: unknown,
+  options: ImportRunOptions = {},
+): Promise<{ runId: string }> {
+  requireInventory(actor)
+  const input = parseOrThrow(inventoryStartSchema, raw)
+  const runId = await withTenant(
+    actor.tenantId,
+    async (tx) => {
+      await pruneImportRuns(tx, actor.tenantId)
+      const [row] = await tx
+        .insert(importRuns)
+        .values({
+          tenantId: actor.tenantId,
+          createdBy: actor.userId,
+          kind: 'INVENTORY',
+          fileName: input.fileName,
+          fileBytes: input.fileBytes,
+          totalRows: input.totalRows,
+          columns: input.columns,
+          notices: inventoryNotices(input.unreadColumns),
+        })
+        .returning({ id: importRuns.id })
+      return row!.id
+    },
+    options.db,
+  )
+  return { runId }
+}
+
+const inventoryAppendSchema = z.object({
+  rows: z.array(rawInventoryRowSchema).min(1).max(IMPORT_APPEND_MAX_ROWS),
+})
+
+export async function appendInventoryRows(
+  actor: Actor,
+  runIdRaw: string,
+  raw: unknown,
+  options: ImportRunOptions = {},
+): Promise<{ received: number; total: number }> {
+  requireInventory(actor)
+  const runId = runIdOf(runIdRaw)
+  const input = parseOrThrow(inventoryAppendSchema, raw)
+  return appendRows(actor, runId, 'INVENTORY', input.rows, options)
+}
+
+/** Son uygulanan (başlamış) envanter dosyası (K3, CEO-5): ad ve tarih. */
+export interface LastInventoryFile {
+  fileName: string
+  startedAt: Date
+  finishedAt: Date | null
+  status: ImportRunStatus
+}
+
+export interface InventoryRunPreview {
+  runId: string
+  counts: {
+    create: number
+    newProducts: number
+    update: number
+    unchanged: number
+    unassigned: number
+    error: number
+    ambiguous: number
+  }
+  /** Geçerli satırların depoları; `isNew` onayda açılacak. */
+  depots: { name: string; isNew: boolean }[]
+  notices: string[]
+  /** İlk `IMPORT_SAMPLE_SIZE` hatalı satır; tamamı raporda. */
+  errors: { rowNumber: number; sku: string; name: string; issues: { column: string; message: string }[] }[]
+  /** Depoya atama bekleyen satırlar (ilk `IMPORT_SAMPLE_SIZE`). */
+  unassigned: { rowNumber: number; sku: string; name: string; message: string }[]
+  /** Aynı içerik daha önce uygulandıysa o dosya: onay "yeni sayım" onayı ister. */
+  repeatOf: { fileName: string; startedAt: Date } | null
+  lastFile: LastInventoryFile | null
+}
+
+/**
+ * Bütün satırlar geldikten sonra önizlemeyi BİR KEZ hesaplar, satır
+ * kararlarını ve içerik parmak izini kayda yazar. Ürün, depo ve stok
+ * verisine HİÇBİR ŞEY yazılmıyor.
+ */
+export async function finalizeInventoryPreview(
+  actor: Actor,
+  runIdRaw: string,
+  options: ImportRunOptions = {},
+): Promise<InventoryRunPreview> {
+  requireInventory(actor)
+  const runId = runIdOf(runIdRaw)
+  const db = options.db
+
+  const { run, rows } = await withTenant(
+    actor.tenantId,
+    async (tx) => {
+      const [run] = await tx
+        .select({ status: importRuns.status, totalRows: importRuns.totalRows, notices: importRuns.notices })
+        .from(importRuns)
+        .where(and(eq(importRuns.tenantId, actor.tenantId), eq(importRuns.id, runId), eq(importRuns.kind, 'INVENTORY')))
+      if (!run) throw notFound(runId)
+      if (run.status !== 'UPLOADING') throw wrongState(runId, run.status)
+      const rows = await tx
+        .select({ rowNumber: importRunRows.rowNumber, cells: importRunRows.cells })
+        .from(importRunRows)
+        .where(and(eq(importRunRows.tenantId, actor.tenantId), eq(importRunRows.runId, runId)))
+        .orderBy(asc(importRunRows.rowNumber))
+      return { run, rows }
+    },
+    db,
+  )
+  if (rows.length !== run.totalRows) throw wrongState(runId, 'INCOMPLETE')
+
+  const preview = await previewInventory(actor, rows as RawInventoryRow[], { db })
+
+  const { repeatOf, lastFile } = await withTenant(
+    actor.tenantId,
+    async (tx) => {
+      const [locked] = await tx
+        .select({ status: importRuns.status })
+        .from(importRuns)
+        .where(and(eq(importRuns.tenantId, actor.tenantId), eq(importRuns.id, runId)))
+        .for('update')
+      if (locked?.status !== 'UPLOADING') throw wrongState(runId, locked?.status ?? 'GONE')
+
+      for (let i = 0; i < preview.rows.length; i += 1_000) {
+        const batch = preview.rows.slice(i, i + 1_000).map((r) => ({
+          row_number: r.rowNumber,
+          action: r.action,
+          sku: r.sku,
+          name: r.name,
+          issues: r.issues,
+          data: r.data ?? null,
+          product_id: r.productId ?? null,
+          message: r.message ?? null,
+        }))
+        await tx.execute(sql`
+          UPDATE import_run_rows AS r
+             SET action = x.action, sku = x.sku, name = x.name, issues = x.issues, data = x.data,
+                 product_id = x.product_id, message = x.message,
+                 status = CASE WHEN x.action = 'error' THEN 'INVALID'
+                               WHEN x.action IN ('unchanged', 'unassigned') THEN 'SKIPPED'
+                               ELSE 'PENDING' END
+            FROM jsonb_to_recordset(${JSON.stringify(batch)}::jsonb) AS x(
+                 row_number int, action text, sku text, name text, issues jsonb, data jsonb,
+                 product_id uuid, message text)
+           WHERE r.tenant_id = ${actor.tenantId}::uuid AND r.run_id = ${runId}::uuid
+             AND r.row_number = x.row_number
+        `)
+      }
+      await tx
+        .update(importRuns)
+        .set({ status: 'PREVIEWED', previewedAt: sql`now()`, contentHash: preview.contentHash })
+        .where(and(eq(importRuns.tenantId, actor.tenantId), eq(importRuns.id, runId)))
+      return {
+        repeatOf: await repeatOfRun(tx, actor.tenantId, runId, preview.contentHash),
+        lastFile: await lastInventoryFileIn(tx, actor.tenantId),
+      }
+    },
+    db,
+  )
+
+  const errorRows = preview.rows.filter((r) => r.action === 'error')
+  const unassignedRows = preview.rows.filter((r) => r.action === 'unassigned')
+  return {
+    runId,
+    counts: preview.counts,
+    depots: preview.depots,
+    notices: run.notices,
+    errors: errorRows
+      .slice(0, IMPORT_SAMPLE_SIZE)
+      .map((r) => ({ rowNumber: r.rowNumber, sku: r.sku, name: r.name, issues: r.issues })),
+    unassigned: unassignedRows
+      .slice(0, IMPORT_SAMPLE_SIZE)
+      .map((r) => ({ rowNumber: r.rowNumber, sku: r.sku, name: r.name, message: r.message ?? '' })),
+    repeatOf,
+    lastFile,
+  }
+}
+
+/**
+ * Aynı içerikle başlamış önceki envanter aktarımı (K3). Başlamamış (yalnız
+ * önizlenmiş) dosya sayılmıyor: stoğa hiç dokunmadı.
+ */
+async function repeatOfRun(
+  tx: Tx,
+  tenantId: string,
+  runId: string,
+  contentHash: string | null,
+): Promise<{ fileName: string; startedAt: Date } | null> {
+  if (!contentHash) return null
+  const [prev] = await tx
+    .select({ fileName: importRuns.fileName, startedAt: importRuns.startedAt })
+    .from(importRuns)
+    .where(
+      and(
+        eq(importRuns.tenantId, tenantId),
+        eq(importRuns.kind, 'INVENTORY'),
+        eq(importRuns.contentHash, contentHash),
+        ne(importRuns.id, runId),
+        isNotNull(importRuns.startedAt),
+      ),
+    )
+    .orderBy(desc(importRuns.startedAt))
+    .limit(1)
+  return prev ? { fileName: prev.fileName, startedAt: prev.startedAt! } : null
+}
+
+async function lastInventoryFileIn(tx: Tx, tenantId: string): Promise<LastInventoryFile | null> {
+  const [last] = await tx
+    .select({
+      fileName: importRuns.fileName,
+      startedAt: importRuns.startedAt,
+      finishedAt: importRuns.finishedAt,
+      status: importRuns.status,
+    })
+    .from(importRuns)
+    .where(and(eq(importRuns.tenantId, tenantId), eq(importRuns.kind, 'INVENTORY'), isNotNull(importRuns.startedAt)))
+    .orderBy(desc(importRuns.startedAt))
+    .limit(1)
+  return last
+    ? { fileName: last.fileName, startedAt: last.startedAt!, finishedAt: last.finishedAt, status: last.status as ImportRunStatus }
+    : null
+}
+
+/** Son uygulanan envanter dosyasının adı ve tarihi; ekranın üstünde gösteriliyor. */
+export async function getLastInventoryFile(
+  actor: Actor,
+  options: ImportRunOptions = {},
+): Promise<LastInventoryFile | null> {
+  requireInventory(actor)
+  return withTenant(actor.tenantId, (tx) => lastInventoryFileIn(tx, actor.tenantId), options.db)
+}
+
+const beginInventorySchema = z.object({ confirmNewCount: z.boolean().default(false) })
+
+/**
+ * Kullanıcı önizlemeyi onayladı. Tek transaction'da: aynı içerik kontrolü,
+ * yeni depoların açılması ve aktarımın başlaması. Depo ancak burada açılıyor:
+ * önizleme ya da onaylanmamış dosya hiçbir depo bırakmıyor.
+ *
+ * AYNI İÇERİK (K3): daha önce uygulanmış içerik `confirmNewCount` olmadan
+ * başlamıyor. Kontrol SUNUCUDA: yalnız ekranda olsaydı istek doğrudan
+ * gönderilerek atlanabilirdi. Aynı aktarımın yeniden onayı (ilk yanıt
+ * kaybolduysa) hata değil, ilerlemeyi döndürüyor.
+ */
+export async function beginInventoryRun(
+  actor: Actor,
+  runIdRaw: string,
+  raw: unknown = {},
+  options: ImportRunOptions = {},
+): Promise<ImportRunProgress> {
+  requireInventory(actor)
+  const runId = runIdOf(runIdRaw)
+  const input = parseOrThrow(beginInventorySchema, raw)
+  const db = options.db
+
+  const begun = await withTenant(
+    actor.tenantId,
+    async (tx) => {
+      const [run] = await tx
+        .select({ status: importRuns.status, contentHash: importRuns.contentHash })
+        .from(importRuns)
+        .where(and(eq(importRuns.tenantId, actor.tenantId), eq(importRuns.id, runId), eq(importRuns.kind, 'INVENTORY')))
+        .for('update')
+      if (!run) throw notFound(runId)
+      if (run.status !== 'PREVIEWED') return false
+
+      const [creates] = await tx
+        .select({ rowNumber: importRunRows.rowNumber })
+        .from(importRunRows)
+        .where(
+          and(
+            eq(importRunRows.tenantId, actor.tenantId),
+            eq(importRunRows.runId, runId),
+            eq(importRunRows.action, 'create'),
+            eq(importRunRows.status, 'PENDING'),
+          ),
+        )
+        .limit(1)
+      if (creates) requirePermission(actor, 'product:create')
+
+      if (!input.confirmNewCount) {
+        const repeat = await repeatOfRun(tx, actor.tenantId, runId, run.contentHash)
+        if (repeat) {
+          throw new AppError('IMPORT_REPEAT_UNCONFIRMED', `content already applied by ${repeat.fileName}`, {
+            fileName: repeat.fileName,
+            startedAt: repeat.startedAt.toISOString(),
+          })
+        }
+      }
+
+      await resolveRunDepots(tx, actor.tenantId, runId)
+      await tx
+        .update(importRuns)
+        .set({ status: 'RUNNING', startedAt: sql`now()` })
+        .where(and(eq(importRuns.tenantId, actor.tenantId), eq(importRuns.id, runId)))
+      return true
+    },
+    db,
+  )
+  const progress = await progressIn(actor, runId, 'INVENTORY', db)
+  if (!begun && progress.status !== 'RUNNING') throw wrongState(runId, progress.status)
+  return progress
+}
+
+/** Bir sonraki envanter satır grubunu işler (bkz. `processImportChunk`). */
+export async function processInventoryChunk(
+  actor: Actor,
+  runIdRaw: string,
+  options: ImportChunkOptions = {},
+): Promise<ImportRunProgress> {
+  requireInventory(actor)
+  const runId = runIdOf(runIdRaw)
+  const [run] = await withTenant(
+    actor.tenantId,
+    (tx) =>
+      tx
+        .select({ fileName: importRuns.fileName })
+        .from(importRuns)
+        .where(and(eq(importRuns.tenantId, actor.tenantId), eq(importRuns.id, runId), eq(importRuns.kind, 'INVENTORY'))),
+    options.db,
+  )
+  if (!run) throw notFound(runId)
+  return runChunk(
+    actor,
+    runId,
+    'INVENTORY',
+    {
+      apply: (row) => applyInventoryRow(actor, { id: runId, fileName: run.fileName }, row, { db: options.db }),
+      verify: verifyInventoryRow,
+    },
+    options,
+  )
+}
+
+export async function getInventoryRunProgress(
+  actor: Actor,
+  runIdRaw: string,
+  options: ImportRunOptions = {},
+): Promise<ImportRunProgress> {
+  requireInventory(actor)
+  return progressIn(actor, runIdOf(runIdRaw), 'INVENTORY', options.db)
+}
+
+export async function cancelInventoryRun(
+  actor: Actor,
+  runIdRaw: string,
+  options: ImportRunOptions = {},
+): Promise<ImportRunProgress> {
+  requireInventory(actor)
+  return cancelRun(actor, runIdOf(runIdRaw), 'INVENTORY', verifyInventoryRow, options.db)
+}
+
+export async function inventoryRunReport(
+  actor: Actor,
+  runIdRaw: string,
+  options: ImportRunOptions & { limit?: number } = {},
+): Promise<ImportRunReportRow[]> {
+  requireInventory(actor)
+  return reportOf(actor, runIdOf(runIdRaw), 'INVENTORY', options)
 }

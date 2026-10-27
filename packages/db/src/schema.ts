@@ -4,6 +4,7 @@ import {
   importOpeningOutcomeCheckConstraint,
   importRowActionCheckConstraint,
   importRowStatusCheckConstraint,
+  importRunKindCheckConstraint,
   importRunStatusCheckConstraint,
   jobKindsCheckConstraint,
   jobStatusesCheckConstraint,
@@ -775,6 +776,14 @@ export const importRuns = pgTable(
     fileName: text('file_name').notNull(),
     /** Tarayıcının bildirdiği dosya boyutu; yalnız gösterim için, dosya sunucuya gelmiyor. */
     fileBytes: integer('file_bytes').notNull(),
+    /** Ürün kataloğu mu envanter dosyası mı (`IMPORT_RUN_KINDS`); işlevler türe göre arıyor. */
+    kind: text('kind').notNull().default('PRODUCT'),
+    /**
+     * Envanter dosyasının içerik parmak izi (T218, K3): SUNUCUDA, kaydedilen
+     * satırlardan hesaplanıyor; istemcinin hesabına güvenilmiyor. Aynı içerik
+     * daha önce uygulandıysa yeni sayım açıkça onaylanmadan başlamıyor.
+     */
+    contentHash: text('content_hash'),
     status: text('status').notNull().default('UPLOADING'),
     /** Tarayıcının beyan ettiği veri satırı sayısı; önizleme bu kadar satır gelmeden başlamaz. */
     totalRows: integer('total_rows').notNull(),
@@ -808,6 +817,7 @@ export const importRuns = pgTable(
     // çift sütunlu tekillik, başka kiracının aktarımına bağlanmayı
     // veritabanında imkânsız kılmak için var.
     uniqueIndex('import_runs_tenant_id_uq').on(t.tenantId, t.id),
+    check('import_runs_kind_ck', sql.raw(importRunKindCheckConstraint('kind'))),
     check('import_runs_status_ck', sql.raw(importRunStatusCheckConstraint('status'))),
     check('import_runs_total_rows_ck', sql`total_rows >= 0`),
   ],

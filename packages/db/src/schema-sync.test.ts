@@ -6,6 +6,7 @@ import {
   IMPORT_OPENING_OUTCOME_VALUES,
   IMPORT_ROW_ACTION_VALUES,
   IMPORT_ROW_STATUS_VALUES,
+  IMPORT_RUN_KIND_VALUES,
   IMPORT_RUN_STATUS_VALUES,
   JOB_KIND_VALUES,
   JOB_STATUS_VALUES,
@@ -147,6 +148,7 @@ describe('DB CHECK constraint kod ile senkron', () => {
     // Yeni bir satır durumu koda eklenip migration üretilmezse aktarım
     // ortasında 23514 ile patlar: satır işlenir ama sonucu yazılamaz.
     const expected: [string, readonly string[]][] = [
+      ['import_runs_kind_ck', IMPORT_RUN_KIND_VALUES],
       ['import_runs_status_ck', IMPORT_RUN_STATUS_VALUES],
       ['import_run_rows_status_ck', IMPORT_ROW_STATUS_VALUES],
       ['import_run_rows_action_ck', IMPORT_ROW_ACTION_VALUES],

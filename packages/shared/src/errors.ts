@@ -285,6 +285,24 @@ export const ERROR_CODES = {
     // Aynı aktarım başka bir sekmede ya da ikinci bir istekle işleniyor (T171, T5).
     tr: () => 'Bu aktarım şu anda işleniyor. Birkaç saniye sonra tekrar deneyin.',
   },
+  INVENTORY_MISSING_COLUMN: {
+    http: 400,
+    retryable: false,
+    // T218: kod, miktar ya da depo sütunu olmadan hiçbir satır anlamlandırılamaz.
+    // Sütun sessizce yok sayılsaydı "Ambar"sız dosya bütün miktarları
+    // depoya atanmamış stok sanardı.
+    tr: (d) =>
+      `Envanter dosyasında "Malzeme Kodu", "Envanter Miktarı" ve "Ambar" sütunları olmalı. Eksik: ${d.missing ?? '—'}. Bulunanlar: ${d.found ?? '—'}`,
+  },
+  IMPORT_REPEAT_UNCONFIRMED: {
+    http: 409,
+    retryable: false,
+    // K3: aynı içerik daha önce uygulandı. Eski dosyayı yeniden uygulamak arada
+    // girilen satışları ve mal kabullerini geri alır; meşru yeni sayım da
+    // olabilir, bu yüzden engel değil, açık onay.
+    tr: (d) =>
+      `Bu dosyanın içeriği daha önce uygulandı ("${d.fileName ?? '—'}"). Bu yeni bir sayımsa onaylayarak devam edin.`,
+  },
   PRODUCT_CHANGED: {
     http: 409,
     retryable: false,

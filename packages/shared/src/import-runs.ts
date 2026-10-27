@@ -10,6 +10,25 @@
  */
 
 /**
+ * Aktarımın türü. Aynı kayıt ve parça işleyici iki dosyayı da taşıyor; tür,
+ * satırların nasıl okunup uygulanacağını ve hangi yetkinin gerektiğini seçiyor.
+ *
+ *   PRODUCT    ürün kataloğu (T171): ürün ekle/güncelle, açılış stoğu
+ *   INVENTORY  envanter dosyası (T218, PRD-18): dosyadaki miktar deponun yeni
+ *              toplamı, fark kadar sayım düzeltmesi
+ *
+ * Her işlev kendi türündeki kaydı arıyor: envanter kaydına ürün satırı
+ * eklenemiyor, ürün işleyicisi envanter satırını ürün diye uygulayamıyor.
+ */
+export const IMPORT_RUN_KINDS = {
+  PRODUCT: { tr: 'Ürün aktarımı' },
+  INVENTORY: { tr: 'Envanter güncelleme' },
+} as const
+
+export type ImportRunKind = keyof typeof IMPORT_RUN_KINDS
+export const IMPORT_RUN_KIND_VALUES = Object.keys(IMPORT_RUN_KINDS) as ImportRunKind[]
+
+/**
  * Aktarımın yaşam döngüsü:
  *
  *   UPLOADING  satırlar tarayıcıdan parça parça geliyor
@@ -19,7 +38,8 @@
  *   CANCELLED  kullanıcı iptal etti; işlenen satırlar korunur, kalanlar işlenmez
  *
  * Duraklat/devam yok (ürün kapsamı dışı); sekme kapanırsa aktarım RUNNING
- * kalır ve 30 günlük temizlikle silinir.
+ * kalır. Ürün aktarımı 30 günlük temizlikle silinir; başlamış envanter
+ * aktarımının başlığı kalır (aynı içerik uyarısı ve son dosya bilgisi için).
  */
 export const IMPORT_RUN_STATUSES = {
   UPLOADING: { tr: 'Yükleniyor' },
@@ -42,9 +62,13 @@ export const IMPORT_RUN_STATUS_VALUES = Object.keys(IMPORT_RUN_STATUSES) as Impo
  *   FAILED       yazımda hata (barkod başka ürünün, şema)
  *   CONFLICT     önizlemeden sonra başka biri değiştirdi; dosyadaki değer YAZILMADI
  *   UNCERTAIN    kesinti: ürünün yazılıp yazılmadığı doğrulanamadı
+ *   SKIPPED      önizlemede işlenmeyeceği belli: hata değil, yazılacak bir şey
+ *                yok (envanter: değişiklik yok ya da depoya atama bekliyor)
  *
  * UNCERTAIN ayrı çünkü kesintide "başarılı" ya da "başarısız" demek ikisi de
  * yanlış olabilir; kullanıcı ürünü kontrol etmeli (T171, güvence 5).
+ * SKIPPED ayrı çünkü INVALID "dosyayı düzelt" demek; "depoya atama bekliyor"
+ * satırında dosyada düzeltilecek bir şey yok.
  */
 export const IMPORT_ROW_STATUSES = {
   PENDING: { tr: 'İşlenmedi' },
@@ -54,16 +78,23 @@ export const IMPORT_ROW_STATUSES = {
   FAILED: { tr: 'Yazılamadı' },
   CONFLICT: { tr: 'Çakışma' },
   UNCERTAIN: { tr: 'Belirsiz' },
+  SKIPPED: { tr: 'Atlandı' },
 } as const
 
 export type ImportRowStatus = keyof typeof IMPORT_ROW_STATUSES
 export const IMPORT_ROW_STATUS_VALUES = Object.keys(IMPORT_ROW_STATUSES) as ImportRowStatus[]
 
-/** Önizlemenin satır kararı. */
+/**
+ * Önizlemenin satır kararı. Envanter aktarımında `create` yeni ürün (ve
+ * stoğu), `update` depo miktarı değişecek mevcut ürün; `unchanged` ve
+ * `unassigned` yalnız envanterde ve SKIPPED durumunda.
+ */
 export const IMPORT_ROW_ACTIONS = {
   create: { tr: 'Yeni ürün' },
   update: { tr: 'Güncelleme' },
   error: { tr: 'Hatalı' },
+  unchanged: { tr: 'Değişiklik yok' },
+  unassigned: { tr: 'Depoya atama bekliyor' },
 } as const
 
 export type ImportRowAction = keyof typeof IMPORT_ROW_ACTIONS
@@ -83,6 +114,10 @@ export const IMPORT_OPENING_OUTCOME_VALUES = Object.keys(
 
 function inList(column: string, values: readonly string[]): string {
   return `${column} IN (${values.map((v) => `'${v}'`).join(', ')})`
+}
+
+export function importRunKindCheckConstraint(column = 'kind'): string {
+  return inList(column, IMPORT_RUN_KIND_VALUES)
 }
 
 export function importRunStatusCheckConstraint(column = 'status'): string {

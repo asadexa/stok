@@ -12,13 +12,19 @@ export interface UnitMeta {
   decimals: 0 | 3
   /** Arayüzde miktar gösterimi: "12 adet", "3,5 kg" */
   short: string
+  /**
+   * Dosyalarda görülen kısaltmalar (ERP envanter raporu "AD", "LT", "MT"
+   * yazıyor). Yalnız açık ve tek anlamlı kısaltmalar: tanınmayan birim satır
+   * hatası, tahmin edilmiyor; yanlış birim miktarı yanlış ölçüyle yazardı.
+   */
+  aliases: readonly string[]
 }
 
 export const UNITS = {
-  ADET: { tr: 'Adet', decimals: 0, short: 'adet' },
-  KG: { tr: 'Kilogram', decimals: 3, short: 'kg' },
-  METRE: { tr: 'Metre', decimals: 3, short: 'm' },
-  LITRE: { tr: 'Litre', decimals: 3, short: 'L' },
+  ADET: { tr: 'Adet', decimals: 0, short: 'adet', aliases: ['AD'] },
+  KG: { tr: 'Kilogram', decimals: 3, short: 'kg', aliases: [] },
+  METRE: { tr: 'Metre', decimals: 3, short: 'm', aliases: ['MT'] },
+  LITRE: { tr: 'Litre', decimals: 3, short: 'L', aliases: ['LT'] },
 } as const satisfies Record<string, UnitMeta>
 
 export type Unit = keyof typeof UNITS
