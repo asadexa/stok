@@ -59,6 +59,7 @@ Dosyalar: `Dockerfile` (hedefler `runtime` ve `tools`), `compose.production.yml`
 | `web` | `mem_limit: 1g`, `cpus: 1.5`, V8 yığını 640 MB | Ölçülen (S1, yerel konteyner): boşta 108 MiB, 400 `/giris` isteğinden sonra 126 MiB. Referans: 20.000 satırlık devirli aktarımda ölçüm sürecinin tepe belleği 417 MiB (T171, 2026-10-23; konteyner değil, core doğrudan). Yığın sınırı konteyner sınırının altında: aşılırsa açık "heap out of memory" hatası verir; konteyner sınırı aşılırsa çekirdek süreci iz bırakmadan öldürür |
 | `db` | `mem_limit: 768m`, `cpus: 1.0` | Ölçülen: boşta 45 MiB. Varsayılan `shared_buffers` 128 MB ve en çok 10 uygulama bağlantısı (`DB_POOL_MAX` varsayılanı); ayar değiştirilmedi |
 | `tools` | `mem_limit: 1g` | Yalnız bakım sırasında kısa süre çalışır |
+| Loglar (üçü de) | `json-file`, `max-size: 10m`, `max-file: 3` | Docker'ın varsayılanı sınırsız büyür; servis başına en çok ~30 MB. Dosya Sistemi ve Caddy de aynı değerleri kullanıyor (S4.0). Eski kayıtlar dönünce silinir: uzun saklama gerekiyorsa logları ayrıca dışarı al |
 
 Bütçe (tahmin, sunucuda ölçülmedi): Stok 1,75 GiB + Dosya Sistemi (S2) ~1,25 GiB +
 Caddy ~0,1 GiB + işletim sistemi ~0,6 GiB ≈ 3,7 GiB. Sunucuda **2 GB swap** açılması
@@ -147,14 +148,22 @@ stokc up -d web
 
 ### L.4 Henüz yok (sonraki işler)
 
-- Caddy ve HTTPS (S4): `citech-proxy` ağı üzerinden `stok-web:3000`'e ters vekil. Servis
-  adı `web` değil takma ad kullanılır: ortak ağda başka bir projenin `web` servisi olursa
-  `web` iki konteynere çözülür. Diğer projeler de bu ağda benzersiz bir takma ad
-  kullanmalı (ör. Dosya Sistemi için `dosya-api`). Dışarıdan
-  yalnız 80/443. Caddy güvenmediği istemcinin `X-Forwarded-For` başlığını eziyor; giriş
-  sayacı bu başlığın ilk değerine bakıyor (`giris/page.tsx`). Bu yüzden `web`'in portu
-  hiçbir zaman dışarı yayınlanmaz. Gövde sınırı: Server Action sınırı 4 MiB
-  (`MAX_UPLOAD_BYTES`). Caddy'nin sınırı bundan küçük olmamalı.
+- Caddy ve HTTPS (S4): yapılandırma bu repoda değil, ortak `citech-infra` dizininde
+  (`proxy/`, sunucuda `/opt/citech/proxy`; kurulum, doğrulama ve geri alma onun
+  README'sinde). S4.1'de yerelde hazırlandı ve doğrulandı; sunucuya kurulmadı. Stok
+  açısından sözleşme:
+  - Caddy `citech-proxy` ağı üzerinden `stok-web:3000`'e gider. Servis adı `web`
+    kullanılmaz: ortak ağda başka projenin `web` servisi olursa `web` başka konteynere
+    çözülür (S4.1'de ölçüldü: Caddy'den `web` Dosya'ya çözüldü).
+  - Dışarıdan yalnız Caddy'nin 80/443'ü. `web`'in portu hiçbir zaman yayınlanmaz.
+  - X-Forwarded-For: Caddy'de `trusted_proxies` yok; Caddy sahte başlığı gerçek bağlantı
+    adresiyle eziyor, giriş sayacı (`giris/page.tsx`) gerçek adresi görüyor. S4.1'de
+    ölçüldü: sahte `203.0.113.77` ile hatalı girişte `auth_attempts` LOGIN_IP gerçek
+    adresi gösterdi; `trusted_proxies` eklenince sahte adresi gösterdi (koruma kaldırılınca
+    kırmızı). Sunucuda yeniden doğrulanmalı: dış istemcinin gerçek IP'si görünmeli.
+  - Gövde: Caddy 8 MiB, uygulamanın Server Action sınırı 4 MiB (`MAX_UPLOAD_BYTES`).
+  - Caddy arkasında gerçek tarayıcıyla giriş, ürün ve alış/satış çalıştı; protokol `h2`,
+    çerezler `Secure` (`APP_URL=https://stok.citech.com.tr`).
 - Cron (T112): saatlik `POST /api/cron`, `CRON_SECRET` ile (§5'teki `curl` örneği),
   Caddy kurulduktan sonra host crontab'ından.
 - Zamanlanmış ve sunucu dışına kopyalanan yedek ve geri yükleme tatbikatı (S6, T129).

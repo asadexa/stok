@@ -213,6 +213,9 @@ işler ve güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
   - İlerleme (2026-10-28): AWS Lightsail adayı için S1 (Docker imajı ve production compose)
     yerelde boş volume'le doğrulandı; komutlar runbook "L" bölümünde. Sunucuya dağıtılmadı.
     Kalan: Caddy/HTTPS (S4), cron (T112), yedek ve tatbikat (S6, T129), `OPS-01` kararı.
+  - İlerleme (2026-10-28): S4.0 (log döndürme) ve S4.1 (`citech-infra` Caddy yapılandırması,
+    yerelde doğrulandı) tamam; sunucuya kurulmadı. Kalan: genel DNS delegasyonunun düzelmesi,
+    sunucuda Caddy kurulumu ve XFF'in sunucuda yeniden doğrulanması (runbook L.4).
   - Kaynak: eski P2 kaydı ("Staging ortamı yok"); ekip kararıyla P1, 2026-10-17.
 - [ ] **T201 (P1)** - entegrasyon - **B2B harici API kaynağı: yetkili veri çekme, gizli bilgi ve hata yönetimi**
   - Neden: V1 örnek API verisiyle doğrulanacak, gerçek API sağlayıcı seçilince bağlanacak. Her

@@ -27,6 +27,15 @@ boş bir test volume'üyle yapıldı:
 - Sunucuya dağıtılmadı. Caddy/HTTPS, cron ve yedek henüz yok.
 
 Barındırma kararı `OPS-01` hâlâ Open. Derleme Google Fonts'a bağımlı (T230).
+S1 `4472fa5` olarak commit edildi; CI #94 yeşil (üç iş).
+
+**Caddy/HTTPS hazırlığı (S4.0 + S4.1, 2026-10-28, yerel):**
+- S4.0: production compose'a log döndürme eklendi (servis başına 3 × 10 MB).
+- S4.1: ortak Caddy yapılandırması bu reponun dışında, `citech-infra` dizininde (sürüm
+  denetimi altında değil). Caddy
+  arkasında Stok girişi ve hareketi çalıştı. X-Forwarded-For koruması koruma
+  kaldırılarak sınandı; ayrıntı runbook L.4'te.
+- Sunucuya kurulmadı. Genel DNS delegasyonu doğrulanmadı.
 
 ## Doğrulanmış baseline — 2026-10-10, WS-C-lite (`dcf46d1`), Windows 11, Node 24.20
 
@@ -107,7 +116,8 @@ sınırından geçti). Önizleme yanıtı blob'u tarayıcıya taşıyor (uzun: 3
 görünüyor. 4 MiB − 2 KB dosya eyleme ulaştı; tam 4 MiB dosya istemci denetimini geçip Next'in
 gövde sınırına çarptı (500, genel hata ekranı; T208); 4 MiB + 1 B istemcide durdu.
 
-GitHub CI: son koşu #88 (`50b6dd9`, çok depo Dilim 1, 2026-10-27) yeşil, üç iş de geçti; öncesinde
+GitHub CI: son koşu #94 (`4472fa5`, S1 Docker, 2026-10-28) yeşil, üç iş de geçti (CI Docker imajını
+derlemiyor). Öncesinde #88 (`50b6dd9`, çok depo Dilim 1, 2026-10-27) yeşil, üç iş de geçti; öncesinde
 #87 (`3db7d81`, T171, 2026-10-23) yeşil. #84 (`667512a`, T200 1b, 2026-10-20) yeşil; üç iş de adım adım geçti (Linux
 test işinde lint, drift, testler ve derleme; demo işinde temiz kurulum ve Playwright duman testi;
 Windows'ta temiz checkout'ta lint, typecheck ve derleme). Öncesinde #83 (`9d4bc8c`, T200 1a,
