@@ -1,0 +1,30 @@
+# Üretim imajının derleme bağlamı (Dockerfile, S1).
+#
+# `.env` ve türevleri BİLEREK dışarıda: imaja giren her dosya imajı alan
+# herkese gider. Gizli değerler imaja değil, çalışma anında ortama verilir
+# (compose.production.yml).
+.env
+.env.*
+!.env.example
+!.env.production.example
+
+# Yerel derleme ve bağımlılık çıktıları: imaj kendi temiz kurulumunu yapar.
+# Yerel `.next/dev` önbelleği silinmiş rotalara işaret edip derlemeyi
+# kırabiliyor (CURRENT_STATE, Dilim 1 kapıları); bağlama hiç girmemeli.
+**/node_modules
+**/.next
+**/coverage
+**/*.tsbuildinfo
+.pnpm-store
+
+# Uygulamanın çalışmasıyla ilgisi olmayan klasörler.
+.git
+.github
+.claude
+.gstack
+docs
+design
+**/test-results
+**/playwright-report
+**/blob-report
+*.log

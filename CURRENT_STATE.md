@@ -13,6 +13,21 @@ kararlar → `DECISIONS.md`, model → `PROJECT_BRAIN.md`.
 ya da release kaydı yok. Kod tarafı hazırlığı (vercel.json, `/api/v1/health`,
 runbook) var; önkoşullar TODOS T42.
 
+**Docker staging hazırlığı (S1, 2026-10-28, commit edilmedi):** AWS Lightsail staging
+(T144) için `Dockerfile`, `compose.production.yml` ve `.env.production.example` hazır.
+Komutlar runbook "L" bölümünde. Doğrulama yerelde, Docker 29.9 linux/amd64 üzerinde,
+boş bir test volume'üyle yapıldı:
+- 16 migration uygulandı; 15 tablonun 15'inde RLS ve FORCE açık.
+- `stok_app` rolünün superuser ve BYPASSRLS bayrakları false. Geliştirme parolası ağdan reddedildi.
+- `/api/v1/health` 200 döndü.
+- Gerçek tarayıcıda giriş, ürün, alış 10 ve satış 3 çalıştı: defter toplamı 7, projeksiyon 7.
+- Kiracı bağlamı olmadan 0 satır görünüyor. Defterde UPDATE ve DELETE reddedildi.
+- `APP_URL` https iken çerezler Secure. Örnek `AUTH_SECRET` ile açılış reddedildi.
+- Portlar yayınlanmıyor. Veritabanının internete çıkışı yok.
+- Sunucuya dağıtılmadı. Caddy/HTTPS, cron ve yedek henüz yok.
+
+Barındırma kararı `OPS-01` hâlâ Open. Derleme Google Fonts'a bağımlı (T230).
+
 ## Doğrulanmış baseline — 2026-10-10, WS-C-lite (`dcf46d1`), Windows 11, Node 24.20
 
 | Kontrol | Sonuç |

@@ -10,7 +10,10 @@ coverage/
 .env
 .env.local
 .env.*.local
+# Üretim/staging gizli değerleri (compose.production.yml); şablonu commit edilir.
+.env.production
 !.env.example
+!.env.production.example
 
 .expo/
 .expo-shared/

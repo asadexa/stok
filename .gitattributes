@@ -2,3 +2,6 @@
 # goto/etiket araması bozulabiliyor. core.autocrlf=false olan bir checkout da
 # çalışan dosyayı alsın.
 *.bat text eol=crlf
+# Konteyner içinde (Linux) koşan kabuk betikleri LF olmalı: CRLF'li bir
+# initdb betiği `sh` altında `\r` yüzünden düşer ve veri dizini yarım kalır.
+*.sh text eol=lf

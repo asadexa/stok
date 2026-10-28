@@ -1,0 +1,132 @@
+# ============================================================================
+# Stok — üretim/staging yığını (S1). Komutlar: docs/uretim-runbook.md,
+# "Lightsail + Docker Compose" bölümü. Gizli değerler `.env.production`'da
+# (şablon: .env.production.example); her komut `--env-file .env.production`
+# ile çalışır.
+#
+# Geliştirme yığını (docker-compose.yml) bundan AYRI ve etkilenmez: proje adı
+# `stok-prod`, yani volume `stok-prod_pgdata`. Ad `stok` olsaydı volume adı
+# geliştirme volume'üyle (`stok_stok_pgdata`) çakışabilirdi. Sabit
+# `container_name` bu yüzden yok.
+#
+# DIŞARIYA HİÇBİR PORT AÇILMIYOR. Veritabanı yalnız `internal` ağında
+# (internete çıkışı da yok); uygulamaya ortak Caddy `citech-proxy` ağından
+# `stok-web:3000` adresiyle ulaşır (S4). Bu ağ dışarıda bir kez yaratılır:
+#   docker network create citech-proxy
+#
+# KAYNAK SINIRLARI 4 GB / 2 vCPU'lu, Dosya Sistemi ve Caddy ile paylaşılan
+# sunucu için. Gerekçe ve ölçümler runbook'ta.
+# ============================================================================
+name: stok-prod
+
+services:
+  db:
+    image: postgres:17.11-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD tanımlı değil (.env.production)}
+      POSTGRES_DB: stok
+      # Geliştirme yığınıyla aynı: sıralama davranışı ortamlar arasında ayrışmasın.
+      LANG: tr_TR.utf8
+      # Yalnız ilk kurulumda 005-app-role.sh okur.
+      STOK_APP_DB_PASSWORD: ${STOK_APP_DB_PASSWORD:?STOK_APP_DB_PASSWORD tanımlı değil (.env.production)}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Tek tek bağlanıyor: initdb alfabetik sırayla koşturuyor ve rol
+      # dosyası 01-roles.sql'den önce gelmeli (bkz. 005-app-role.sh).
+      - ./db/init/00-extensions.sql:/docker-entrypoint-initdb.d/00-extensions.sql:ro
+      - ./db/production/005-app-role.sh:/docker-entrypoint-initdb.d/005-app-role.sh:ro
+      - ./db/init/01-roles.sql:/docker-entrypoint-initdb.d/01-roles.sql:ro
+    networks: [internal]
+    healthcheck:
+      # `-h 127.0.0.1`: ilk kurulumda imajın geçici init sunucusu yalnız unix
+      # soketinde dinliyor; soket üzerinden sorulsa "hazır" deyip `web`'i
+      # init betikleri bitmeden başlatırdı (aynı sınıf: T195). TCP'yi yalnız
+      # gerçek sunucu açar.
+      test: ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -U postgres -d stok']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    # Varsayılan 10 sn'de SIGKILL, kapanışta kurtarma (crash recovery) demek.
+    stop_grace_period: 60s
+    mem_limit: 768m
+    cpus: 1.0
+
+  web:
+    build:
+      context: .
+      target: runtime
+    image: stok-web:${STOK_IMAGE_TAG:-local}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # stok_app: RLS'e tabi rol. Sahip rolünün parolası bu servise VERİLMEZ
+      # (MIGRATION_DATABASE_URL yalnız `tools`'ta).
+      DATABASE_URL: postgresql://stok_app:${STOK_APP_DB_PASSWORD:?STOK_APP_DB_PASSWORD tanımlı değil}@db:5432/stok
+      AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET tanımlı değil (.env.production)}
+      APP_URL: ${APP_URL:?APP_URL tanımlı değil (.env.production)}
+      CRON_SECRET: ${CRON_SECRET:-}
+      SMTP_URL: ${SMTP_URL:-}
+      REPORT_FROM_EMAIL: ${REPORT_FROM_EMAIL:-}
+      MIN_CLIENT_VERSION: ${MIN_CLIENT_VERSION:-1.0.0}
+      # Bilerek sabit: /tara girişsiz açılıyor (T167, ARC-14). Açmak compose
+      # değişikliği ister, .env'deki bir satırla sessizce açılamaz.
+      ENABLE_PHONE_SCANNER: 'false'
+      # Yığın sınırı konteyner sınırının altında: V8 sınırı aşarsa açık bir
+      # "heap out of memory" hatası verir; konteyner sınırı aşılırsa çekirdek
+      # süreci iz bırakmadan öldürür.
+      NODE_OPTIONS: --max-old-space-size=640
+    networks:
+      internal: {}
+      proxy:
+        # Caddy bu adla bağlanır (`stok-web:3000`). Compose servis adını (`web`)
+        # bağlandığı her ağda DNS adı olarak da kaydediyor; ortak ağda başka bir
+        # projenin `web` servisi olursa `web` iki konteynere çözülür ve istekler
+        # yanlış uygulamaya gidebilir. Benzersiz ad bunu önler.
+        aliases: [stok-web]
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/api/v1/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    stop_grace_period: 20s
+    mem_limit: 1g
+    cpus: 1.5
+
+  # Tek seferlik yönetim komutları; `up` ile BAŞLAMAZ (profil). Örnek:
+  #   docker compose -f compose.production.yml --env-file .env.production \
+  #     run --rm tools pnpm --filter @stok/db run migrate
+  tools:
+    build:
+      context: .
+      target: tools
+    image: stok-tools:${STOK_IMAGE_TAG:-local}
+    profiles: [tools]
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # Sahip rolü: RLS'i atlar. Yalnız migration, init ve tenant:create.
+      MIGRATION_DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD tanımlı değil}@db:5432/stok
+      APP_URL: ${APP_URL:-}
+    networks: [internal]
+    mem_limit: 1g
+
+networks:
+  internal:
+    internal: true
+  proxy:
+    name: citech-proxy
+    external: true
+
+volumes:
+  pgdata:

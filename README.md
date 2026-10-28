@@ -322,5 +322,6 @@ Tam liste ve açıklamalar `.env.example`'da.
 - [`docs/SECURITY_MODEL.md`](docs/SECURITY_MODEL.md): tehdit modeli ve korumalar
 - [`docs/designs/`](docs/designs/): henüz uygulanmamış özelliklerin aktif tasarımları
 - [`TODOS.md`](TODOS.md): backlog
-- [`docs/uretim-runbook.md`](docs/uretim-runbook.md): üretime alma (Vercel + Supabase)
+- [`docs/uretim-runbook.md`](docs/uretim-runbook.md): üretime alma (Vercel + Supabase) ve
+  kendi sunucuda Docker Compose staging (bölüm L; `compose.production.yml`, `.env.production.example`)
 - [`docs/archive/`](docs/archive/): tarihsel plan ve inceleme kayıtları

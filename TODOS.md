@@ -210,6 +210,9 @@ işler ve güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
     `docs/TEKNIK_SARTNAME.md` F-13.
   - Doğrula: alan adından HTTPS ile giriş, ürün aktarma ve stok hareketi; `/api/v1/health`
     200; uygulama bağlantısı `stok_app` (superuser değil) ve RLS açık.
+  - İlerleme (2026-10-28): AWS Lightsail adayı için S1 (Docker imajı ve production compose)
+    yerelde boş volume'le doğrulandı; komutlar runbook "L" bölümünde. Sunucuya dağıtılmadı.
+    Kalan: Caddy/HTTPS (S4), cron (T112), yedek ve tatbikat (S6, T129), `OPS-01` kararı.
   - Kaynak: eski P2 kaydı ("Staging ortamı yok"); ekip kararıyla P1, 2026-10-17.
 - [ ] **T201 (P1)** - entegrasyon - **B2B harici API kaynağı: yetkili veri çekme, gizli bilgi ve hata yönetimi**
   - Neden: V1 örnek API verisiyle doğrulanacak, gerçek API sağlayıcı seçilince bağlanacak. Her
@@ -355,6 +358,21 @@ işler ve güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
     T90'dan önce yapılmalı.
 
 ## P2
+
+- [ ] **T230 (P2)** - altyapı - **`next build` derleme anında Google Fonts'a bağımlı; ağ aksarsa derleme düşüyor**
+  - Neden: `apps/web/src/app/layout.tsx` yazı tiplerini `next/font/google` ile alıyor; Next
+    derlemede dosyaları fonts.gstatic.com'dan indiriyor. İndirme aksayınca Turbopack yanıltıcı
+    bir hata veriyor: `Can't resolve '@vercel/turbopack-next/internal/font/google/font'`, 24 hata.
+    Ağ kısıtlı bir sunucuda derleme hiç geçmeyebilir.
+  - Kanıt: S1 Docker derlemesi (2026-10-28, Linux konteyneri): aynı bağlamla ilk derleme geçti,
+    ikinci derleme bu hatayla düştü, üçüncü derleme geçti. Kaynak değişmemişti. CI #68
+    (`581f291`) aynı hatayla bir kez kırmızıydı; kök nedeni de büyük olasılıkla bu, kanıtı yok.
+  - Yapılacak: seçenekleri değerlendir: yazı tiplerini depoya alıp `next/font/local` kullanmak
+    (ağ bağımlılığı kalkar, görünüm aynı kalmalı) ya da derlemeyi yeniden denemek. Görsel
+    değişiklik olduğu için tarayıcıyla kontrol gerekir.
+  - Bağlı: T144, S1 (runbook L.2 "Sunucuda derleme yerine").
+  - Doğrula: ağsız bir derleme ortamında `next build` geçiyor; sayfalarda yazı tipleri aynı.
+  - Kaynak: S1 doğrulaması, 2026-10-28.
 
 - [ ] **T223 (P2)** - core - **Çok depo Dilim 7: deposu bilinmeyen eski stoğun depolara atanması**
   - Neden: bir işletmede depo açılınca eski stok "atanmamış" kalır (`DAT-21`); depoya atama ve
