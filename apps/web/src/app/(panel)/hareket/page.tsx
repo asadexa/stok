@@ -8,7 +8,7 @@ import {
   reasonLabel,
   selectableReasons,
 } from '@stok/shared'
-import { createMovement, lookupBarcode } from '@stok/core'
+import { createMovement, getProductDepotStock, listDepots, lookupMovementCode, lookupProduct } from '@stok/core'
 import { appDb } from '@stok/db'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
@@ -62,11 +62,27 @@ import { PhoneScanPanel } from './phone-scan-panel'
  * değil. Barkod çözümlendiğinde üretilip gizli alanda taşınıyor; kullanıcı
  * "Kaydet"e iki kez basarsa aynı anahtar gider ve ikinci istek sessizce
  * yutulur. Gönderim anında üretilseydi çift kayıt oluşurdu.
+ *
+ * BARKODSUZ ÜRÜN (T220, PRD-19): alan barkoda ve TAM stok koduna bakıyor;
+ * ürün sayfasındaki "Hareket gir" `?urunId=` ile açıyor. Değer bir ürünün
+ * barkodu, başka bir ürünün stok kodu ise hiçbiri seçilmiyor, kullanıcı
+ * seçiyor (`lookupMovementCode`).
+ *
+ * DEPO (T220, PRD-17): işletmede depo varsa depo soruluyor; tek depo önceden
+ * seçili, birden çok depoda kullanıcı seçiyor (sunucu tahmin etmiyor,
+ * DAT-23). Üründe deposu bilinmeyen eski stok varsa "Atanmamış Stok"
+ * seçeneği yalnız çıkış için çıkıyor (A1); gerçek bir depo değil.
  * ============================================================================
  */
 
 interface HareketParams extends FormParams {
   barkod?: string
+  /** Barkodsuz ürün: ürün sayfasından ya da stok koduyla (T220, PRD-19). */
+  urunId?: string
+  /** Seçilen depo kimliği ya da `atanmamis` (A1). */
+  depo?: string
+  /** `barkod`: çakışma ekranında barkodlu ürün seçildi; değer yalnız barkod. */
+  kaynak?: string
   /** Hata sonrası geri doldurulan alanlar — kullanıcı baştan yazmasın. */
   fiyat?: string
   sebep?: string
@@ -94,9 +110,28 @@ export default async function MovementEntryPage({
   const message = messageFrom(params)
   const soundEnabled = await readSoundEnabled()
   const barcode = params.barkod?.trim()
+  const productIdParam = params.urunId?.trim()
 
   const db = appDb()
-  const found = barcode ? await lookupBarcode(actor, barcode, { db }).catch(() => null) : null
+  // Barkod ile başka bir ürünün stok kodu çakışırsa hiçbiri seçilmiyor;
+  // kullanıcı aşağıdaki iki seçenekten birini açıyor (`lookupMovementCode`).
+  const byCode = !productIdParam && barcode
+    ? await lookupMovementCode(actor, barcode, { db, barcodeOnly: params.kaynak === 'barkod' })
+    : null
+  const ambiguous = byCode?.kind === 'ambiguous' ? byCode : null
+  const found = productIdParam
+    ? await lookupProduct(actor, { productId: productIdParam }, { db }).catch(() => null)
+    : byCode?.kind === 'found'
+      ? byCode.product
+      : null
+
+  // Depo yoksa ikisi de boş kalıyor ve form bugünkü gibi depo sormuyor.
+  const depotList = found ? await listDepots(actor, { db }) : []
+  const productDepots = found && depotList.length > 0 ? await getProductDepotStock(actor, found.productId, { db }) : null
+  const depotQty = new Map(productDepots?.depots.map((d) => [d.depotId, d.qty]) ?? [])
+  const unassignedQty = productDepots?.unassigned ?? 0
+  // Hata dönüşünde seçim korunuyor; yoksa tek depo önceden seçili.
+  const selectedDepot = params.depo ?? (depotList.length === 1 ? depotList[0]!.id : undefined)
 
   // Anahtar HER ÇÖZÜMLEMEDE yeniden üretiliyor, yani her okutma kendi
   // anahtarını alıyor. Aynı sayfayı yenilemek yeni anahtar üretir ve bu
@@ -108,7 +143,9 @@ export default async function MovementEntryPage({
     const owner = await currentActor()
     if (!owner) redirect('/giris')
 
-    const scanned = text(form, 'barkod')
+    const scanned = optionalText(form, 'barkod')
+    const productId = optionalText(form, 'urunId')
+    const depot = optionalText(form, 'depo')
     const reason = text(form, 'sebep')
     const unitPrice = optionalNumber(form, 'fiyat')
     const overrideReason = optionalText(form, 'sapma')
@@ -118,7 +155,12 @@ export default async function MovementEntryPage({
         owner,
         {
           idempotencyKey: text(form, 'anahtar'),
-          barcode: scanned,
+          // Barkodla bulunan ürün barkoduyla gidiyor (koli çarpanı barkodda);
+          // barkodsuz seçilen ürün kimliğiyle. Kapı ikisinden tam birini istiyor.
+          ...(scanned ? { barcode: scanned } : { productId }),
+          // Depo kararı sunucuda (DAT-23): boşsa depo yok ya da tek depo;
+          // "atanmamis" yalnız çıkışta geçerli (A1, UNASSIGNED_OUT_ONLY).
+          ...(depot === 'atanmamis' ? { fromUnassigned: true } : depot ? { depotId: depot } : {}),
           qty: numberOr(form, 'miktar', 0),
           reason,
           ...(optionalText(form, 'not') ? { note: optionalText(form, 'not') } : {}),
@@ -161,9 +203,11 @@ export default async function MovementEntryPage({
         form,
         // Formdaki KULLANICI GİRDİSİ olan her alan. Listeden bir ad
         // düşerse o alan sessizce sıfırlanır — bkz. `preserveFields`.
-        ['miktar', 'sebep', 'not', 'fiyat', 'sapma', 'fiyatTarihi'],
+        ['miktar', 'sebep', 'not', 'fiyat', 'sapma', 'fiyatTarihi', 'depo'],
         {
-          barkod: scanned,
+          // Form barkodla çözülmüş ürünü taşıyorsa dönüşte de yalnız barkod:
+          // çakışmalı değerde seçim ekranına geri düşüp girdiyi kaybettirmesin.
+          ...(scanned ? { barkod: scanned, kaynak: 'barkod' } : { urunId: productId }),
           // Onay kutusu işaretsizken FormData'da hiç bulunmuyor; taşınacak
           // değer de "on" değil, sayfanın beklediği "1".
           tahmini: form.get('tahmini') === 'on' ? '1' : undefined,
@@ -236,7 +280,7 @@ export default async function MovementEntryPage({
       {/* 1. ADIM — BARKOD. Salt okunur, GET. */}
       <form method="get" action="/hareket" className="mb-6 max-w-xl">
         <label className="block">
-          <span className="text-sm font-medium">Barkod</span>
+          <span className="text-sm font-medium">Barkod veya stok kodu</span>
           <input
             // `key` HER DURUM DEĞİŞİMİNDE farklı: React alanı yeniden
             // kuruyor ve `autoFocus` tekrar çalışıyor.
@@ -247,7 +291,7 @@ export default async function MovementEntryPage({
             // odak hiçbir yerde kalıyor ve kullanıcı her okutmadan önce
             // alana tıklamak zorunda. Depoda eldivenli elle bu, akışı
             // bitiren bir sürtünme. (Tarayıcı testinde yakalandı.)
-            key={params.yeni ?? params.barkod ?? params.hata ?? 'bos'}
+            key={params.yeni ?? params.barkod ?? params.urunId ?? params.hata ?? 'bos'}
             name="barkod"
             type="text"
             required
@@ -264,12 +308,40 @@ export default async function MovementEntryPage({
       {phoneScannerEnabled() ? <PhoneScanPanel /> : null}
 
       {/* 2. ADIM — ÜRÜN GÖRÜNÜR, MİKTAR VE YÖN SEÇİLİR. */}
-      {barcode && !found ? (
+      {productIdParam && !found ? (
+        <div className="mb-4 max-w-xl">
+          <Alert>Ürün bulunamadı.</Alert>
+        </div>
+      ) : null}
+
+      {ambiguous ? (
+        <div role="alert" className="mb-4 max-w-xl rounded-card border border-warn bg-warn-soft p-4 text-warn-soft-ink">
+          <p className="font-medium">
+            ⚠ <span className="tabular">{barcode}</span> iki farklı ürünü gösteriyor. Hangisi?
+          </p>
+          <ul className="mt-2 space-y-2 text-sm">
+            <li>
+              <a href={`/hareket?barkod=${encodeURIComponent(barcode!)}&kaynak=barkod`} className="underline">
+                {ambiguous.byBarcode.productName}
+              </a>{' '}
+              — barkodu bu ({ambiguous.byBarcode.sku})
+            </li>
+            <li>
+              <a href={`/hareket?urunId=${ambiguous.bySku.productId}`} className="underline">
+                {ambiguous.bySku.productName}
+              </a>{' '}
+              — stok kodu bu
+            </li>
+          </ul>
+        </div>
+      ) : null}
+
+      {barcode && !productIdParam && !found && !ambiguous ? (
         <div className="max-w-xl rounded-card border border-kritik bg-kritik-bg p-4">
           <p className="flex gap-2 text-kritik">
             <span aria-hidden>⚠</span>
             <span>
-              <span className="tabular font-medium">{barcode}</span> barkodu tanımlı değil.
+              <span className="tabular font-medium">{barcode}</span> barkodu ya da stok kodu tanımlı değil.
             </span>
           </p>
           {actor.role === 'ADMIN' ? (
@@ -284,7 +356,11 @@ export default async function MovementEntryPage({
 
       {found ? (
         <form action={save} className="max-w-xl space-y-5 rounded-card border border-line bg-surface shadow-card p-5">
-          <input type="hidden" name="barkod" value={found.barcode} />
+          {found.barcode === null ? (
+            <input type="hidden" name="urunId" value={found.productId} />
+          ) : (
+            <input type="hidden" name="barkod" value={found.barcode} />
+          )}
           <input type="hidden" name="anahtar" value={idempotencyKey} />
 
           <div>
@@ -349,6 +425,58 @@ export default async function MovementEntryPage({
                   />
                 </div>
               </fieldset>
+
+              {/* DEPO (T220). Her seçeneğin yanında o depodaki miktar: "depoda
+                  yetmiyor" hatasını kaydetmeden önce görmek mümkün. Atanmamış
+                  Stok yalnız üründe öyle bir miktar varsa ve yalnız çıkış için
+                  (A1); girişte sunucu reddediyor (UNASSIGNED_OUT_ONLY). */}
+              {depotList.length > 0 ? (
+                <fieldset>
+                  <legend className="text-sm font-medium">Depo</legend>
+                  <div className="mt-2 space-y-1 rounded-card border border-line p-3">
+                    {depotList.map((d) => (
+                      <label key={d.id} className="flex min-h-[2.75rem] items-center gap-2">
+                        <input
+                          type="radio"
+                          name="depo"
+                          value={d.id}
+                          required
+                          defaultChecked={selectedDepot === d.id}
+                          className="size-5 shrink-0"
+                        />
+                        <span>{d.name}</span>
+                        <span className="tabular ml-auto text-sm text-ink-2">
+                          {formatQty(depotQty.get(d.id) ?? 0, found.unit as Unit)}
+                        </span>
+                      </label>
+                    ))}
+                    {unassignedQty > 0 ? (
+                      <label className="flex min-h-[2.75rem] items-center gap-2 border-t border-line pt-1">
+                        <input
+                          type="radio"
+                          name="depo"
+                          value="atanmamis"
+                          required
+                          defaultChecked={selectedDepot === 'atanmamis'}
+                          className="size-5 shrink-0"
+                        />
+                        <span>
+                          Atanmamış Stok{' '}
+                          <span className="text-sm text-ink-2">(yalnız çıkış; deposu bilinmeyen eski stok)</span>
+                        </span>
+                        <span className="tabular ml-auto text-sm text-ink-2">
+                          {formatQty(unassignedQty, found.unit as Unit)}
+                        </span>
+                      </label>
+                    ) : null}
+                  </div>
+                  {depotList.length > 1 ? (
+                    <p className="mt-1 text-sm text-ink-2">
+                      Yalnız seçilen deponun stoğu değişir; diğer depolar etkilenmez.
+                    </p>
+                  ) : null}
+                </fieldset>
+              ) : null}
 
               {/*
                 ── KASA AÇIĞI KONTROLÜ (T88) ────────────────────────────

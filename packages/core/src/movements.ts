@@ -29,6 +29,7 @@ import {
   withTenant,
 } from '@stok/db'
 import { and, desc, eq, gte, isNull, lte, sql } from 'drizzle-orm'
+import { z } from 'zod'
 import { type LogFields, logged } from './observability'
 import {
   type Actor,
@@ -66,8 +67,9 @@ import {
  *   4. barkod ya da kimlik → ürün → BARCODE_UNKNOWN / NOT_FOUND
  *   5. arşiv kontrolü        → PRODUCT_ARCHIVED
  *   5a. depo çözümü          → NOT_FOUND / DEPOT_REQUIRED
+ *       (Atanmamış Stok seçildiyse depo yok; girişte UNASSIGNED_OUT_ONLY)
  *   5b. birim hassasiyeti    → INVALID_QUANTITY (efektif miktar, T130)
- *   6. SATIR KİLİDİ + kontrol→ INSUFFICIENT_STOCK (toplam, sonra depo)
+ *   6. SATIR KİLİDİ + kontrol→ INSUFFICIENT_STOCK (atanmamış, toplam, sonra depo)
  *      (+ istenirse ilk hareket → PRODUCT_HAS_MOVEMENTS, T128)
  *      (+ envanterde depo miktarı ve atanmamış stok → STOCK_CHANGED)
  *   7. ledger insert         → trigger projeksiyonu günceller
@@ -322,6 +324,7 @@ function parseInventoryInput(raw: unknown): {
       clientCreatedAt: adj.clientCreatedAt,
       priceEstimated: false,
       allowNegative: false,
+      fromUnassigned: false,
     },
     inventory: { depotId: adj.depotId, expected, target },
   }
@@ -356,10 +359,20 @@ async function writeMovement(
 
   if (input.locationId) await assertLocationExists(tx, actor.tenantId, input.locationId)
 
-  const depot = await resolveDepot(tx, actor.tenantId, input.depotId)
+  // Atanmamış Stok (A1) bir depo değil: seçildiyse hareket depoya atanmamış
+  // kovadan düşüyor, depo çözümü hiç yapılmıyor.
+  const depot = input.fromUnassigned ? null : await resolveDepot(tx, actor.tenantId, input.depotId)
 
   const effectiveQty = effectiveQuantity(input.qty, target.qtyMultiplier, target.unit as Unit)
   const delta = toDelta(1, input.reason) === 1 ? effectiveQty : -effectiveQty
+
+  // Atanmamış kova yalnız küçülüyor (PRD-17): mal kabulü buraya yazılsaydı
+  // yeni stoğun deposu da bilinmez olurdu. Mal kabulü gerçek bir depoya.
+  if (input.fromUnassigned && delta > 0n) {
+    throw new AppError('UNASSIGNED_OUT_ONLY', 'unassigned stock can only be reduced', {
+      reason: input.reason,
+    })
+  }
 
   // Fark tam sayı olsa bile HEDEF ürünün biriminde olmalı: adetli üründe
   // 0,5'ten 2,5'e çıkan bir sayım farkı (2) geçerdi ama depoya 2,5 adet yazardı.
@@ -434,7 +447,30 @@ async function writeMovement(
     }
     // Envanterde yetersiz stok kontrolü YOK: hedef negatif olamaz ve depo
     // kilit altında tam beklenen değerde, yani depo tam hedefe iniyor.
-  } else if (delta < 0n && !input.allowNegative) {
+  }
+
+  // ATANMAMIŞ STOKTAN ÇIKIŞ yalnız mevcut atanmamış miktardan, kilit altında.
+  // `allowNegative` bunu AŞAMIYOR: atanmamış kova eksiye düşseydi deposu
+  // bilinmeyen "eksi stok" doğardı; hiçbir sayım onu bir depoya bağlayamaz
+  // ve toplam, depoların toplamından sessizce ayrışırdı.
+  if (input.fromUnassigned) {
+    const unassigned = await sumDelta(tx, actor.tenantId, target.productId, null)
+    if (unassigned + delta < 0n) {
+      throw new AppError(
+        'INSUFFICIENT_STOCK',
+        `requested ${formatScaled(-delta)} > unassigned ${formatScaled(unassigned)}`,
+        {
+          productId: target.productId,
+          name: target.productName,
+          source: 'UNASSIGNED',
+          available: scaledToNumber(unassigned),
+          requested: scaledToNumber(-delta),
+        },
+      )
+    }
+  }
+
+  if (!flags.inventory && delta < 0n && !input.allowNegative) {
     // Kontrol SADECE çıkışlara uygulanıyor. `expected < 0` tek başına
     // yetmez: stok zaten -5 iken +3'lük bir MAL KABULÜ de -2'de kalır ve
     // reddedilirdi. O zaman negatife düşmüş bir ürünü mal girişiyle
@@ -841,26 +877,135 @@ export async function lookupBarcode(
         throw new AppError('BARCODE_UNKNOWN', `barcode ${trimmed} not found`, { barcode: trimmed })
       }
 
-      const lookup: BarcodeLookup = {
+      return {
+        ...lookupOf(actor, row),
         barcode: trimmed,
-        productId: row.productId,
-        productName: row.productName,
-        sku: row.sku,
-        unit: row.unit as Unit,
         qtyMultiplier: scaledToNumber(parseScaled(row.qtyMultiplier)),
-        // Hiç hareketi olmayan ürünün projeksiyon satırı yok; 0 göstermeli,
-        // boş değil. Boş hücre "bilinmiyor" der, oysa cevap "sıfır".
-        qty: row.qty === null ? 0 : scaledToNumber(parseScaled(row.qty)),
-        salePrice: money(row.salePrice),
-        archivedAt: row.archivedAt,
       }
-      // Alan YALNIZCA yetkiliye ekleniyor; `null` atayıp geçmek "alış
-      // fiyatı girilmemiş" gibi okunur ve ekran ikisini ayıramaz.
-      if (canSeePrices(actor.role)) lookup.purchasePrice = money(row.purchasePrice)
-      return lookup
     },
     options.db,
   )
+}
+
+/** Barkodsuz seçim (PRD-19): ürün kimliğiyle ya da tam stok koduyla. Çarpan 1. */
+export interface ProductLookup extends Omit<BarcodeLookup, 'barcode' | 'qtyMultiplier'> {
+  barcode: null
+  qtyMultiplier: 1
+}
+
+/**
+ * Ürünü kimliğiyle ya da stok koduyla bulur (T220): barkodsuz ürün de
+ * elle harekete katılıyor, sahte barkod üretilmiyor. Stok kodu TAM eşleşme
+ * (kiracı içinde tekil): "içeren" arama yanlış ürüne hareket yazdırırdı.
+ * Yazma kapısı aynı ürünü yine kendisi çözüyor; bu yalnız ekranın okuması.
+ */
+export async function lookupProduct(
+  actor: Actor,
+  ref: { productId: string } | { sku: string },
+  options: CreateMovementOptions = {},
+): Promise<ProductLookup> {
+  requirePermission(actor, 'stock:read')
+  const byId = 'productId' in ref
+  const key = byId ? ref.productId : ref.sku.trim()
+  // Bozuk kimlik NOT_FOUND: PostgreSQL'e gitseydi 22P02 olarak patlardı.
+  if (key === '' || (byId && !z.string().uuid().safeParse(key).success)) {
+    throw new AppError('NOT_FOUND', 'product not found', {})
+  }
+
+  return withTenant(
+    actor.tenantId,
+    async (tx) => {
+      const [row] = await tx
+        .select({
+          productId: products.id,
+          productName: products.name,
+          sku: products.sku,
+          unit: products.unit,
+          archivedAt: products.archivedAt,
+          purchasePrice: products.purchasePrice,
+          salePrice: products.salePrice,
+          qty: currentStock.qty,
+        })
+        .from(products)
+        .leftJoin(
+          currentStock,
+          and(eq(currentStock.tenantId, products.tenantId), eq(currentStock.productId, products.id)),
+        )
+        .where(and(eq(products.tenantId, actor.tenantId), byId ? eq(products.id, key) : eq(products.sku, key)))
+        .limit(1)
+      if (!row) throw new AppError('NOT_FOUND', 'product not found', {})
+      return { ...lookupOf(actor, row), barcode: null, qtyMultiplier: 1 }
+    },
+    options.db,
+  )
+}
+
+export type MovementCodeLookup =
+  | { kind: 'found'; product: BarcodeLookup | ProductLookup }
+  | { kind: 'ambiguous'; byBarcode: BarcodeLookup; bySku: ProductLookup }
+  | { kind: 'none' }
+
+/**
+ * Giriş / Çıkış alanına yazılan değeri çözer: barkod ya da TAM stok kodu.
+ *
+ * ÇAKIŞMA SEÇİLMİYOR. Barkod ve stok kodu ayrı ayrı tekil ama birbirinden
+ * bağımsız: A'nın barkodu B'nin stok koduna eşit olabilir. Barkod sessizce
+ * kazansaydı B'yi arayan kullanıcı A'ya hareket yazardı ve bu ancak sayımda
+ * görülürdü. İki farklı ürün eşleşirse ekran ikisini gösterip seçtiriyor.
+ *
+ * `barcodeOnly`: kullanıcı çakışma ekranında barkodlu ürünü seçti; değer
+ * barkod olarak çözülüyor (koli çarpanı barkodda).
+ */
+export async function lookupMovementCode(
+  actor: Actor,
+  code: string,
+  options: CreateMovementOptions & { barcodeOnly?: boolean } = {},
+): Promise<MovementCodeLookup> {
+  const byBarcode = await lookupBarcode(actor, code, options).catch(notFoundAsNull)
+  if (options.barcodeOnly) return byBarcode ? { kind: 'found', product: byBarcode } : { kind: 'none' }
+  const bySku = await lookupProduct(actor, { sku: code }, options).catch(notFoundAsNull)
+  if (byBarcode && bySku && byBarcode.productId !== bySku.productId) {
+    return { kind: 'ambiguous', byBarcode, bySku }
+  }
+  const product = byBarcode ?? bySku
+  return product ? { kind: 'found', product } : { kind: 'none' }
+}
+
+/** Yalnız "bulunamadı" null; yetki ve diğer hatalar yukarı çıkıyor. */
+function notFoundAsNull(err: unknown): null {
+  if (err instanceof AppError && (err.code === 'NOT_FOUND' || err.code === 'BARCODE_UNKNOWN')) return null
+  throw err
+}
+
+/** İki aramanın ortak kısmı; alış fiyatı gizleme (S7) tek yerde. */
+function lookupOf(
+  actor: Actor,
+  row: {
+    productId: string
+    productName: string
+    sku: string
+    unit: string
+    archivedAt: Date | null
+    purchasePrice: string | null
+    salePrice: string | null
+    qty: string | null
+  },
+): Omit<BarcodeLookup, 'barcode' | 'qtyMultiplier'> {
+  const lookup: Omit<BarcodeLookup, 'barcode' | 'qtyMultiplier'> = {
+    productId: row.productId,
+    productName: row.productName,
+    sku: row.sku,
+    unit: row.unit as Unit,
+    // Hiç hareketi olmayan ürünün projeksiyon satırı yok; 0 göstermeli,
+    // boş değil. Boş hücre "bilinmiyor" der, oysa cevap "sıfır".
+    qty: row.qty === null ? 0 : scaledToNumber(parseScaled(row.qty)),
+    salePrice: money(row.salePrice),
+    archivedAt: row.archivedAt,
+  }
+  // Alan YALNIZCA yetkiliye ekleniyor; `null` atayıp geçmek "alış
+  // fiyatı girilmemiş" gibi okunur ve ekran ikisini ayıramaz.
+  if (canSeePrices(actor.role)) lookup.purchasePrice = money(row.purchasePrice)
+  return lookup
 }
 
 async function resolveBarcode(tx: Tx, tenantId: string, barcode: string) {

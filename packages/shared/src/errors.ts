@@ -77,7 +77,12 @@ export const ERROR_CODES = {
     // stok yetiyorken "elde 0 var" demek kullanıcıyı şaşırtır; malın bir kısmı
     // henüz hiçbir depoya atanmamış olabilir.
     tr: (d) => {
-      const where = typeof d.depotName === 'string' ? `${d.depotName} deposunda ` : 'Elde '
+      const where =
+        d.source === 'UNASSIGNED'
+          ? 'Atanmamış Stokta '
+          : typeof d.depotName === 'string'
+            ? `${d.depotName} deposunda `
+            : 'Elde '
       const base = `${where}${d.available} adet var, ${d.requested} adet çıkışı yapılamaz`
       const unassigned = typeof d.unassigned === 'number' && d.unassigned > 0 ? d.unassigned : 0
       return unassigned > 0 ? `${base} (${unassigned} adet depoya atama bekliyor)` : base
@@ -89,6 +94,13 @@ export const ERROR_CODES = {
     // Birden çok depo varken hangisinden çıkıldığını sunucu tahmin edemez;
     // tahmin etseydi stok yanlış depodan düşerdi.
     tr: () => 'Bu işletmede birden fazla depo var; hareket için depo seçilmeli',
+  },
+  UNASSIGNED_OUT_ONLY: {
+    http: 400,
+    retryable: false,
+    // A1: atanmamış kova eski stoğu tutuyor ve yalnız küçülüyor; girişi
+    // kabul etseydi yeni malın deposu da bilinmez olurdu.
+    tr: () => 'Atanmamış Stok yalnız çıkışta seçilebilir; mal kabulü için bir depo seçin',
   },
   STOCK_CHANGED: {
     http: 409,
@@ -196,13 +208,6 @@ export const ERROR_CODES = {
         : 'Satış ve müşteri iadesinde fiyat tarihi bugünden eski olamaz',
   },
 
-  LAST_BARCODE: {
-    http: 409,
-    retryable: false,
-    // Barkodsuz ürün depoda OKUTULAMAZ, yani pratikte kaybolur. Kullanıcı
-    // bunu ancak eline terminali alıp raf başında fark eder.
-    tr: () => 'Ürünün son barkodu kaldırılamaz. Önce yenisini ekleyin.',
-  },
 
   // --- Kullanıcı yönetimi (T24) ---
   EMAIL_EXISTS: {

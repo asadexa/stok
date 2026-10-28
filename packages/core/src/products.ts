@@ -457,9 +457,8 @@ export async function addBarcode(
 /**
  * Barkodu kaldırır — arşivleyerek.
  *
- * SON AKTİF BARKOD KALDIRILAMAZ. Barkodsuz ürün depoda okutulamaz, yani
- * pratikte yok olur; kullanıcı bunu ancak eline terminali alıp raf başında
- * fark eder. Önce yenisini eklemek zorunda.
+ * Son aktif barkod da kaldırılabiliyor (PRD-19): barkodsuz ürün
+ * okutulamıyor ama kimliğiyle ya da stok koduyla harekete katılıyor.
  *
  * Geçmiş etkilenmiyor: hareketler `barcode_id` ile bu satıra bağlı kalıyor
  * ve "koli mu birim mi okutuldu" bilgisi denetimde okunabilir durumda.
@@ -489,19 +488,10 @@ export async function archiveBarcode(
       // ikinci tıklamanın hata göstermesi için bir sebep yok.
       if (target.archivedAt !== null) return target.productId
 
-      const [active] = await tx.execute<{ n: string }>(sql`
-        SELECT count(*)::text AS n
-          FROM product_barcodes
-         WHERE product_id = ${target.productId}
-           AND archived_at IS NULL
-      `)
-
-      if (Number(active?.n ?? 0) <= 1) {
-        throw new AppError('LAST_BARCODE', `barcode ${barcodeId} is the last active one`, {
-          productId: target.productId,
-        })
-      }
-
+      // SON BARKOD DA KALDIRILABİLİYOR (PRD-19, T220). Barkod isteğe bağlı:
+      // ürün barkodsuz da oluşturulabiliyor ve kimliğiyle ya da stok koduyla
+      // harekete katılıyor. Eski kural yanlış girilmiş tek barkodu düzeltmeyi
+      // imkânsız kılıyordu (ancak başka bir barkod eklenerek).
       await tx
         .update(productBarcodes)
         .set({ archivedAt: new Date() })

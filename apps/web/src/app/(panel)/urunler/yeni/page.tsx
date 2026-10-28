@@ -79,7 +79,9 @@ export default async function NewProductPage({
           salePrice: optionalNumber(form, 'satis'),
           minStock: numberOr(form, 'minStok', 0),
           locationId: optionalText(form, 'konum'),
-          barcodes: [{ barcode: text(form, 'barkod'), kind: 'UNIT' }],
+          // Barkod isteğe bağlı (PRD-19): boşsa ürün barkodsuz açılıyor;
+          // sahte ya da iç barkod üretilmiyor. Hareket ürün kimliğiyle.
+          barcodes: optionalText(form, 'barkod') ? [{ barcode: text(form, 'barkod'), kind: 'UNIT' }] : [],
         },
         { db: appDb() },
       )
@@ -108,11 +110,10 @@ export default async function NewProductPage({
 
         <TextField
           name="barkod"
-          label="Barkod"
-          required
+          label="Barkod (isteğe bağlı)"
           autoFocus
           placeholder="Okutun veya elle yazın"
-          hint="Ürünün kendi barkodu. Koli barkodunu ürünü kaydettikten sonra ekleyebilirsiniz."
+          hint="Ürünün kendi barkodu. Barkodu yoksa boş bırakın; hareket stok koduyla girilir. Koli barkodunu ürünü kaydettikten sonra ekleyebilirsiniz."
         />
 
         <div className="grid gap-5 sm:grid-cols-2">

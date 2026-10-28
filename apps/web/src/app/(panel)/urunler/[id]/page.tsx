@@ -186,6 +186,12 @@ export default async function ProductPage({
       <div className="mb-4 flex flex-wrap items-baseline gap-3">
         <h1 className="text-xl font-semibold">{product.name}</h1>
         <span className="tabular text-sm text-ink-3">{product.sku}</span>
+        {/* Barkodsuz ürün okutulamıyor; elle hareket buradan, kimlikle (T220). */}
+        {product.archivedAt ? null : (
+          <Link href={`/hareket?urunId=${product.productId}`} className="text-sm font-medium underline">
+            Hareket gir
+          </Link>
+        )}
         <Link href={`/hareketler?urun=${product.productId}`} className="text-sm underline">
           Hareketleri
         </Link>
@@ -358,6 +364,13 @@ export default async function ProductPage({
       >
         <h2 className="border-b border-line px-4 py-3 font-semibold">Barkodlar</h2>
 
+        {activeBarcodes.length === 0 ? (
+          <p className="border-b border-line px-4 py-3 text-sm text-ink-2">
+            Bu ürünün barkodu yok; okutulamaz. Hareketi “Hareket gir” bağlantısıyla ya da Giriş / Çıkış ekranında
+            stok koduyla girin.
+          </p>
+        ) : null}
+
         <ul>
           {product.barcodes.map((b) => (
             <li
@@ -389,13 +402,9 @@ export default async function ProductPage({
                     // "Sil" demiyor: barkod arşivleniyor, geçmişteki
                     // hareketler hangi barkodun okutulduğunu göstermeye
                     // devam ediyor.
+                    // Son barkod da kaldırılabiliyor (PRD-19): ürün barkodsuz
+                    // kalır, kimliğiyle ya da stok koduyla harekete katılır.
                     className="rounded-control border border-line-control px-3 py-2 text-sm hover:bg-surface-2"
-                    disabled={activeBarcodes.length <= 1}
-                    title={
-                      activeBarcodes.length <= 1
-                        ? 'Son barkod kaldırılamaz. Önce yenisini ekleyin.'
-                        : undefined
-                    }
                   >
                     Kaldır
                   </button>

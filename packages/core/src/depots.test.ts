@@ -4,8 +4,16 @@ import { type TestTenant, seedTestTenant, testAdminDb, testAppDb } from '@stok/d
 import { depots, withTenant } from '@stok/db'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { Actor } from './authz'
-import { checkStockInvariant, createMovement, getStockQty, listMovements } from './movements'
+import {
+  checkStockInvariant,
+  createMovement,
+  getStockQty,
+  listMovements,
+  lookupMovementCode,
+  lookupProduct,
+} from './movements'
 import { createProduct } from './products'
+import { listDepots } from './stock'
 import { TEST_DB_NAME } from './test/db-name'
 
 /**
@@ -23,6 +31,8 @@ import { TEST_DB_NAME } from './test/db-name'
  *   - önizleme sonrası değişen depo ve atanmamış stok → STOCK_CHANGED
  *   - barkodsuz ürün: ürün kimliğiyle hareket, sahte barkod yok
  *   - kiracı izolasyonu: başka kiracının depo, ürün ve aktarım kimliği
+ *   - T220: Atanmamış Stok'tan açık çıkış (A1), ürün kimliği / stok koduyla
+ *     arama, depo listesi
  * ============================================================================
  */
 
@@ -528,6 +538,150 @@ describe('depo adı ve kiracı izolasyonu', () => {
         VALUES (${multi.tenantId}, ${p.id}, ${multi.adminUserId}, 1, 'COUNT_ADJUST_UP', ${randomUUID()}, ${run!.id})
       `,
     ).rejects.toMatchObject({ code: '23503' })
+  })
+})
+
+describe('Atanmamış Stok (A1, T220)', () => {
+  /** Depolardan ÖNCE yazılmış eski hareket: deposu NULL (projeksiyon trigger'la güncelleniyor). */
+  async function legacyStock(productId: string, qty: number) {
+    await admin.client`
+      INSERT INTO stock_movements (tenant_id, product_id, user_id, delta, reason, idempotency_key)
+      VALUES (${multi.tenantId}, ${productId}, ${multi.adminUserId}, ${qty}, 'PURCHASE', ${randomUUID()})
+    `
+  }
+
+  it('açık seçimle çıkış yalnız atanmamış miktarı azaltıyor; depolar ve toplam doğru', async () => {
+    const p = fresh()
+    await legacyStock(p.id, 6)
+    await createMovement(boss, move({ barcode: p.barcode }, 'PURCHASE', 5, { depotId: d1 }), opts)
+
+    await createMovement(staff, move({ barcode: p.barcode }, 'SALE', 4, { fromUnassigned: true }), opts)
+
+    expect(await depotQty(p.id, null)).toBe(2)
+    expect(await depotQty(p.id, d1)).toBe(5)
+    expect(await depotQty(p.id, d2)).toBe(0)
+    expect(await getStockQty(boss, p.id, opts)).toBe(7)
+    expect((await ledger(p.id)).at(-1)).toMatchObject({ reason: 'SALE', delta: '-4.000', depot_id: null })
+  })
+
+  it('atanmamış miktarı aşan çıkış reddediliyor; yönetici allowNegative ile de aşamıyor', async () => {
+    const p = fresh()
+    await legacyStock(p.id, 3)
+    await createMovement(boss, move({ barcode: p.barcode }, 'PURCHASE', 10, { depotId: d1 }), opts)
+    const before = (await ledger(p.id)).length
+
+    const err = await errorOf(
+      createMovement(staff, move({ barcode: p.barcode }, 'SALE', 4, { fromUnassigned: true }), opts),
+    )
+    expect(err.code).toBe('INSUFFICIENT_STOCK')
+    expect(err.details).toMatchObject({ source: 'UNASSIGNED', available: 3, requested: 4 })
+    expect(errorText(err.code, err.details)).toBe('Atanmamış Stokta 3 adet var, 4 adet çıkışı yapılamaz')
+
+    // Toplam (13) yetiyor ve yönetici eksiye izin veriyor: atanmamış kova yine eksiye düşmüyor.
+    expect(
+      await codeOf(
+        createMovement(
+          boss,
+          move({ barcode: p.barcode }, 'SALE', 4, { fromUnassigned: true, allowNegative: true }),
+          opts,
+        ),
+      ),
+    ).toBe('INSUFFICIENT_STOCK')
+    expect(await ledger(p.id)).toHaveLength(before)
+    expect(await depotQty(p.id, null)).toBe(3)
+  })
+
+  it('girişte seçilemiyor; depo ile birlikte verilemiyor', async () => {
+    const p = fresh()
+    await legacyStock(p.id, 2)
+    const inErr = await errorOf(
+      createMovement(boss, move({ barcode: p.barcode }, 'PURCHASE', 1, { fromUnassigned: true }), opts),
+    )
+    expect(inErr.code).toBe('UNASSIGNED_OUT_ONLY')
+    expect(errorText(inErr.code, inErr.details)).toBe(
+      'Atanmamış Stok yalnız çıkışta seçilebilir; mal kabulü için bir depo seçin',
+    )
+    expect(
+      await codeOf(
+        createMovement(
+          boss,
+          move({ barcode: p.barcode }, 'SALE', 1, { fromUnassigned: true, depotId: d1 }),
+          opts,
+        ),
+      ),
+    ).toBe('VALIDATION_FAILED')
+    expect(await ledger(p.id)).toHaveLength(1)
+  })
+
+  it('seçilmeden yapılan depo çıkışı atanmamış stoğa dokunmuyor (sessiz taşıma yok)', async () => {
+    const p = fresh()
+    await legacyStock(p.id, 5)
+    await createMovement(boss, move({ barcode: p.barcode }, 'PURCHASE', 2, { depotId: d1 }), opts)
+
+    const err = await errorOf(
+      createMovement(staff, move({ barcode: p.barcode }, 'SALE', 3, { depotId: d1 }), opts),
+    )
+    expect(errorText(err.code, err.details)).toBe(
+      'Depo 1 deposunda 2 adet var, 3 adet çıkışı yapılamaz (5 adet depoya atama bekliyor)',
+    )
+    expect(await depotQty(p.id, null)).toBe(5)
+  })
+})
+
+describe('barkodsuz seçim ve depo listesi (T220)', () => {
+  it('ürün kimliğiyle ve TAM stok koduyla bulunuyor; barkod yok, çarpan 1', async () => {
+    const sku = `KOD-${randomUUID().slice(0, 8)}`
+    const created = await createProduct(boss, { sku, name: 'Kodla Seçilen', barcodes: [] }, opts)
+    await createMovement(boss, move({ productId: created.productId }, 'PURCHASE', 2, { depotId: d1 }), opts)
+
+    const byId = await lookupProduct(boss, { productId: created.productId }, opts)
+    expect(byId).toMatchObject({ productId: created.productId, sku, barcode: null, qtyMultiplier: 1, qty: 2 })
+    expect((await lookupProduct(boss, { sku: ` ${sku} ` }, opts)).productId).toBe(created.productId)
+    // "İçeren" ya da büyük/küçük harf farkıyla eşleşme yok: yanlış ürüne hareket yazdırırdı.
+    expect(await codeOf(lookupProduct(boss, { sku: sku.toLowerCase() }, opts))).toBe('NOT_FOUND')
+    expect(await codeOf(lookupProduct(boss, { sku: sku.slice(0, -1) }, opts))).toBe('NOT_FOUND')
+  })
+
+  it('başka kiracının ürünü ve bozuk kimlik NOT_FOUND; çalışana alış fiyatı alanı konmuyor', async () => {
+    const foreign = other.products['DP-00']!
+    expect(await codeOf(lookupProduct(boss, { productId: foreign.id }, opts))).toBe('NOT_FOUND')
+    // Aynı stok kodu kendi kiracısında da var: kendi ürününü buluyor, yabancıyı değil.
+    expect((await lookupProduct(boss, { sku: 'DP-00' }, opts)).productId).not.toBe(foreign.id)
+    expect(await codeOf(lookupProduct(boss, { productId: 'bozuk' }, opts))).toBe('NOT_FOUND')
+
+    const seen = await lookupProduct(staff, { sku: 'DP-00' }, opts)
+    expect('purchasePrice' in seen).toBe(false)
+  })
+
+  it('A ürününün barkodu B ürününün stok koduna eşitse hiçbiri seçilmiyor (yanlış ürüne hareket yok)', async () => {
+    const value = `CAKISMA-${randomUUID().slice(0, 8)}`
+    const a = await createProduct(boss, { sku: `A-${value}`, name: 'Barkodu Çakışan', barcodes: [{ barcode: value }] }, opts)
+    const b = await createProduct(boss, { sku: value, name: 'Stok Kodu Çakışan', barcodes: [] }, opts)
+
+    const result = await lookupMovementCode(boss, value, opts)
+    expect(result.kind).toBe('ambiguous')
+    if (result.kind !== 'ambiguous') return
+    expect(result.byBarcode.productId).toBe(a.productId)
+    expect(result.bySku.productId).toBe(b.productId)
+
+    // Kullanıcı barkodlu ürünü seçti: değer yalnız barkod olarak çözülüyor.
+    const chosen = await lookupMovementCode(boss, value, { ...opts, barcodeOnly: true })
+    expect(chosen).toMatchObject({ kind: 'found', product: { productId: a.productId, barcode: value } })
+
+    // Çakışmasız değerler doğrudan bulunuyor; ürünün kendi barkodu = kendi stok kodu çakışma değil.
+    expect(await lookupMovementCode(boss, `A-${value}`, opts)).toMatchObject({ kind: 'found', product: { productId: a.productId } })
+    const same = `AYNI-${randomUUID().slice(0, 8)}`
+    const c = await createProduct(boss, { sku: same, name: 'Kendi Barkodu', barcodes: [{ barcode: same }] }, opts)
+    expect(await lookupMovementCode(boss, same, opts)).toMatchObject({ kind: 'found', product: { productId: c.productId } })
+    expect(await lookupMovementCode(boss, `YOK-${value}`, opts)).toEqual({ kind: 'none' })
+  })
+
+  it('depo listesi yalnız kendi kiracısının depoları; deposuz işletmede boş', async () => {
+    expect(await listDepots(boss, opts)).toEqual([
+      { id: d1, name: 'Depo 1' },
+      { id: d2, name: 'Depo 2' },
+    ])
+    expect(await listDepots(plainBoss, opts)).toEqual([])
   })
 })
 

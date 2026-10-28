@@ -144,6 +144,13 @@ export const createMovementSchema = z.object({
    * depo varsa o depo, birden çok depo varsa `DEPOT_REQUIRED`.
    */
   depotId: z.string().uuid().optional(),
+  /**
+   * Çıkış deposu bilinmeyen eski stoktan (A1, PRD-17): gerçek bir depo
+   * değil, depo kullanılmadan önce girilmiş stok. Yalnız çıkışta ve açık
+   * seçimle; `depotId` ile birlikte verilemez. Sunucu varsayılan olarak bu
+   * kovayı hiç seçmiyor: seçseydi yeni hareket depoya atanmamış kalırdı.
+   */
+  fromUnassigned: z.boolean().default(false),
   qty: qtySchema,
   reason: reasonEnum.refine((r) => MOVEMENT_REASONS[r].userSelectable, {
     message: 'Bu sebep elle seçilemez',
@@ -211,6 +218,10 @@ export const createMovementSchema = z.object({
   .refine((m) => (m.barcode === undefined) !== (m.productId === undefined), {
     message: 'Ürün barkodla ya da ürün seçilerek belirtilmeli (ikisi birden değil)',
     path: ['barcode'],
+  })
+  .refine((m) => !(m.fromUnassigned && m.depotId !== undefined), {
+    message: 'Depo ya da Atanmamış Stok seçilmeli (ikisi birden değil)',
+    path: ['depotId'],
   })
 
 export type CreateMovementInput = z.infer<typeof createMovementSchema>

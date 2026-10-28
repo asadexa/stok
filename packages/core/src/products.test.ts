@@ -275,13 +275,26 @@ describe('çoklu barkod', () => {
     ).rejects.toMatchObject({ code: 'BARCODE_EXISTS' })
   })
 
-  it('son aktif barkod kaldırılamıyor', async () => {
-    // Barkodsuz ürün depoda okutulamaz, yani pratikte yok olur.
+  it('son aktif barkod da kaldırılabiliyor; ürün kimliğiyle harekete katılmaya devam ediyor (PRD-19)', async () => {
+    // Barkod isteğe bağlı: yanlış girilmiş tek barkod düzeltilebilmeli.
     const product = await createProduct(boss, draft(), opts)
 
-    await expect(
-      archiveBarcode(boss, product.barcodes[0]!.id, opts),
-    ).rejects.toMatchObject({ code: 'LAST_BARCODE' })
+    const after = await archiveBarcode(boss, product.barcodes[0]!.id, opts)
+    expect(after.filter((b) => b.archivedAt === null)).toHaveLength(0)
+
+    const written = await createMovement(
+      boss,
+      {
+        idempotencyKey: randomUUID(),
+        productId: product.productId,
+        qty: 3,
+        reason: 'PURCHASE',
+        unitPrice: 1,
+        clientCreatedAt: new Date().toISOString(),
+      },
+      opts,
+    )
+    expect(written.newQty).toBe(3)
   })
 
   it('ikinci barkod eklendikten sonra ilki kaldırılabiliyor', async () => {

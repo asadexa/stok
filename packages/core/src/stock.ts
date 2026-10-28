@@ -738,6 +738,27 @@ export async function getProduct(
   return row
 }
 
+/**
+ * İşletmenin depoları, ada göre (T220, hareket formundaki depo seçimi). Depo
+ * yoksa boş: form bugünkü gibi depo sormuyor.
+ */
+export async function listDepots(
+  actor: Actor,
+  options: StockOptions = {},
+): Promise<{ id: string; name: string }[]> {
+  requirePermission(actor, 'stock:read')
+  return withTenant(
+    actor.tenantId,
+    (tx) =>
+      tx
+        .select({ id: depots.id, name: depots.name })
+        .from(depots)
+        .where(eq(depots.tenantId, actor.tenantId))
+        .orderBy(asc(depots.name)),
+    options.db,
+  )
+}
+
 export interface ProductDepotStock {
   /** Ürünün hareket gördüğü depolar, ada göre; miktar 0 olan da (sayımla sıfırlanmış) dahil. */
   depots: { depotId: string; name: string; qty: number }[]
