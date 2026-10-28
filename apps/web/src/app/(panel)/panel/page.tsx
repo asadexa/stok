@@ -172,7 +172,18 @@ export default async function DashboardPage() {
             label="Stoktaki değer"
             value={`${formatMoney(summary.stockValue)} ₺`}
             tone="warn"
-            foot="Adet × alış fiyatı · bugünkü durum"
+            // Fiyatsız stoklu ürün varsa toplam EKSİK (PRC-12): alt satır bunu
+            // söylemeseydi kullanıcı bu sayıyı stoğun tamamının değeri sanardı.
+            foot={
+              summary.unpricedStockCount ? (
+                <span className="font-medium text-warn">
+                  Yalnız alış fiyatı bilinen ürünler · {numFmt.format(summary.unpricedStockCount)} stoklu ürünün
+                  alış fiyatı yok, toplama dahil değil
+                </span>
+              ) : (
+                'Adet × alış fiyatı · bugünkü durum'
+              )
+            }
             icon={
               <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M12 2v20" />

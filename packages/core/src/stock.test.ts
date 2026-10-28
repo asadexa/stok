@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { AppError } from '@stok/shared'
-import { type TestTenant, seedTestTenant, testAdminDb, testAppDb } from '@stok/db/testing'
+import { type TestTenant, seedOpeningStock, seedTestTenant, testAdminDb, testAppDb } from '@stok/db/testing'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { Actor } from './authz'
 import { createMovement } from './movements'
@@ -643,5 +643,67 @@ describe('T85 - birleşik arama', () => {
     const result = await searchAll(boss, yabanci.products['Y-9']!.barcode, opts)
     expect(result.barcode).toBeNull()
     expect(result.products.map((p) => p.sku)).not.toContain('Y-9')
+  })
+})
+
+describe('stok değeri yalnız alış fiyatı bilinen ürünlerden (PRC-12, T221)', () => {
+  // Dosyadan fiyatsız açılan ürünler (T218) değere 0 ₺ olarak girseydi toplam
+  // eksiksiz görünürdü. Fiyatsız stoklu ürün sayılıyor; stoğu olmayan
+  // sayılmıyor; açıkça 0 girilmiş fiyat bilinen fiyat.
+  let deger: TestTenant
+  let degerBoss: Actor
+  let degerStaff: Actor
+
+  beforeAll(async () => {
+    deger = await seedTestTenant(admin.db, 'deger', [
+      { sku: 'FY-1', name: 'Fiyatlı Stoklu', category: 'Hırdavat', purchasePrice: '4.00' },
+      { sku: 'FY-2', name: 'Fiyatlı Stoksuz', category: 'Hırdavat', purchasePrice: '2.50' },
+      { sku: 'FS-1', name: 'Fiyatsız Stoklu', category: 'Hırdavat' },
+      { sku: 'FS-2', name: 'Fiyatsız Stoksuz', category: 'Boya' },
+      { sku: 'FS-3', name: 'Fiyatsız Stoklu Boya', category: 'Boya' },
+      { sku: 'SF-1', name: 'Sıfır Fiyatlı', category: 'Boya', purchasePrice: '0.00' },
+      { sku: 'FS-ARS', name: 'Arşivli Fiyatsız', category: 'Boya', archived: true },
+    ])
+    degerBoss = { tenantId: deger.tenantId, userId: deger.adminUserId, role: 'ADMIN' }
+    degerStaff = { tenantId: deger.tenantId, userId: deger.staffUserId, role: 'STAFF' }
+    for (const [sku, qty] of [
+      ['FY-1', '10'],
+      ['FS-1', '5'],
+      ['FS-3', '3'],
+      ['SF-1', '7'],
+      ['FS-ARS', '9'],
+    ] as const) {
+      await seedOpeningStock(admin.db, deger, deger.products[sku]!.id, qty)
+    }
+  })
+
+  it('panel: değer yalnız fiyatı bilinenlerden; fiyatsız stoklu ürün ayrıca sayılıyor', async () => {
+    const summary = await dashboardSummary(degerBoss, new Date(0), opts)
+    // 10 × 4,00; FY-2 stoksuz, SF-1 fiyatı bilinen 0, arşivli dışarıda.
+    expect(summary.stockValue).toBe(40)
+    // FS-1 ve FS-3; stoksuz FS-2 ve arşivli FS-ARS sayılmıyor.
+    expect(summary.unpricedStockCount).toBe(2)
+  })
+
+  it('kategori: aynı kural kategori başına; toplamlar panelle tutuyor', async () => {
+    const rows = await categorySummary(degerBoss, opts)
+    expect(rows.find((r) => r.name === 'Hırdavat')).toMatchObject({ stockValue: 40, unpricedCount: 1 })
+    expect(rows.find((r) => r.name === 'Boya')).toMatchObject({ stockValue: 0, unpricedCount: 1 })
+
+    const summary = await dashboardSummary(degerBoss, new Date(0), opts)
+    expect(rows.reduce((n, r) => n + (r.stockValue ?? 0), 0)).toBe(summary.stockValue)
+    expect(rows.reduce((n, r) => n + (r.unpricedCount ?? 0), 0)).toBe(summary.unpricedStockCount)
+  })
+
+  it('çalışana ne değer ne fiyatsız ürün sayısı konuyor (INV-10)', async () => {
+    // Hangi ürünün alış fiyatı olmadığı da alış fiyatından türeyen bilgi.
+    const summary = await dashboardSummary(degerStaff, new Date(0), opts)
+    expect('stockValue' in summary).toBe(false)
+    expect('unpricedStockCount' in summary).toBe(false)
+
+    for (const row of await categorySummary(degerStaff, opts)) {
+      expect('stockValue' in row).toBe(false)
+      expect('unpricedCount' in row).toBe(false)
+    }
   })
 })

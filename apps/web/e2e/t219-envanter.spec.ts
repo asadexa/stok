@@ -9,7 +9,9 @@ import { type Locator, type Page, expect, test } from '@playwright/test'
  * dosyadaki depo değişiyor (Depo 1 = 10, Depo 2 = 20 → Depo 1 = 5, toplam
  * 25), aynı içerik "yeni sayım" onayı istiyor, önizlemeden sonra değişen
  * stok Çakışma olarak görünüyor, çalışan ekrana ve rapora giremiyor.
- * Satır kurallarının ayrıntısı core'da (`inventory-runs.test.ts`).
+ * T221: dosyadan fiyatsız açılan ürünler sonrası panel ve kategoriler stok
+ * değerinin eksik olduğunu söylüyor; çalışan ne değeri ne bu notu görüyor.
+ * Satır kurallarının ayrıntısı core'da (`inventory-runs.test.ts`, `stock.test.ts`).
  *
  * DEPO AÇIYOR. Bir işletmede ikinci depo açılınca o işletmede el ile hareket
  * depo seçimi gelene kadar reddediliyor (DEPOT_REQUIRED, T220). Bu yüzden:
@@ -204,6 +206,21 @@ test('önizlemeden sonra değişen stok Çakışma olarak gösteriliyor, üzerin
   expect(await satirDegeri(dagilim, depo)).toBe('3 adet')
 })
 
+test('dosyadan fiyatsız açılan stoklu ürün stok değerini eksiksiz göstermiyor (T221, PRC-12)', async ({ page }) => {
+  const n = ek()
+  await girisYap(page, YONETICI)
+  await onizle(page, `fiyatsiz-${n}.csv`, [satir(`FYT-${n}`, 'Fiyatsız Kelepçe', `Değer Deposu ${n}`, '12')])
+  await uygula(page)
+
+  await page.goto('/panel')
+  await expect(page.getByText('Stoktaki değer')).toBeVisible()
+  await expect(page.getByText(/Yalnız alış fiyatı bilinen ürünler · [\d.]+ stoklu ürünün alış fiyatı yok/)).toBeVisible()
+
+  await page.goto('/kategoriler')
+  await expect(page.getByText(/Stok değeri yalnız alış fiyatı bilinen ürünleri içerir/)).toBeVisible()
+  await expect(page.getByText(/ürün fiyatsız, dahil değil/).first()).toBeVisible()
+})
+
 test('çalışan envanter ekranını, bağlantısını ve raporunu göremiyor', async ({ page }) => {
   await girisYap(page, CALISAN)
   await page.goto('/stok')
@@ -214,4 +231,11 @@ test('çalışan envanter ekranını, bağlantısını ve raporunu göremiyor', 
 
   const rapor = await page.request.get(`/api/rapor/aktarim?kayit=${crypto.randomUUID()}&tur=envanter`)
   expect(rapor.status()).toBe(403)
+
+  // T221: fiyatsız ürün sayısı da alış fiyatından türeyen bilgi (INV-10).
+  await page.goto('/panel')
+  await expect(page.getByText('Stoktaki değer')).toHaveCount(0)
+  await expect(page.getByText(/alış fiyatı/)).toHaveCount(0)
+  await page.goto('/kategoriler')
+  await expect(page.getByText(/alış fiyatı|fiyatsız/)).toHaveCount(0)
 })

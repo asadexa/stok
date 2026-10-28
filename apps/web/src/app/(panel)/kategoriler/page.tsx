@@ -39,6 +39,7 @@ export default async function CategoriesPage() {
   const rows = await categorySummary(actor, { db: appDb() })
   const showValue = rows.some((r) => r.stockValue !== undefined)
   const totalProducts = rows.reduce((n, r) => n + r.productCount, 0)
+  const totalUnpriced = rows.reduce((n, r) => n + (r.unpricedCount ?? 0), 0)
 
   return (
     <section aria-label="Kategoriler" className="rounded-card border border-line bg-surface shadow-card">
@@ -58,6 +59,14 @@ export default async function CategoriesPage() {
             <span className="text-[12.5px] text-ink-3">
               {numFmt.format(totalProducts)} ürün · arşiv hariç
             </span>
+            {/* PRC-12: fiyatsız stoklu ürün değere 0 olarak girmiyor; sütunun
+                eksik olduğunu başlık söylemeseydi toplam tam sanılırdı. */}
+            {showValue && totalUnpriced > 0 ? (
+              <span className="text-[12.5px] font-medium text-warn">
+                Stok değeri yalnız alış fiyatı bilinen ürünleri içerir; {numFmt.format(totalUnpriced)} stoklu ürünün
+                alış fiyatı yok.
+              </span>
+            ) : null}
           </div>
 
           <div className="overflow-x-auto">
@@ -113,6 +122,11 @@ export default async function CategoriesPage() {
                           {row.stockValue === undefined
                             ? '—'
                             : `${formatMoney(row.stockValue)} ₺`}
+                          {row.unpricedCount ? (
+                            <span className="block text-[12px] font-medium text-warn">
+                              {numFmt.format(row.unpricedCount)} ürün fiyatsız, dahil değil
+                            </span>
+                          ) : null}
                         </td>
                       ) : null}
                       <td className="px-4 py-2.5 text-right whitespace-nowrap">

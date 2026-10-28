@@ -370,6 +370,25 @@ export async function alertSummary(
 }
 
 // ---------------------------------------------------------------------------
+// STOK DEĞERİ (PRC-12, T221)
+//
+// Değer = mevcut stok × GÜNCEL ALIŞ FİYATI, yalnız fiyatı bilinen ürünlerde.
+// Fiyatı bilinmeyen (NULL) ürün değere 0 olarak GİRMİYOR ve ayrıca sayılıyor:
+// toplamı sessizce "eksiksiz" göstermek, dosyadan fiyatsız açılan yüzlerce
+// ürünün değerini 0 ₺ saymak olurdu. Açıkça 0 girilmiş fiyat bilinen fiyattır.
+// Stoğu 0 ya da eksi olan fiyatsız ürün sayılmıyor: değerinin eksikliği
+// toplamı değiştirmez. Ortalama maliyet (dosyadaki "Ortalama Değer") burada
+// yok; o ayrı bir kavram (PRC-12).
+//
+// İkisi de `products p LEFT JOIN current_stock cs` üzerinde toplama ifadesi.
+// ---------------------------------------------------------------------------
+
+const VALUE_SQL = sql.raw(
+  'COALESCE(SUM(COALESCE(cs.qty, 0) * p.purchase_price) FILTER (WHERE p.purchase_price IS NOT NULL), 0)',
+)
+const UNPRICED_SQL = sql.raw('count(*) FILTER (WHERE p.purchase_price IS NULL AND COALESCE(cs.qty, 0) > 0)')
+
+// ---------------------------------------------------------------------------
 // KATEGORİ ÖZETİ (T73)
 // ---------------------------------------------------------------------------
 
@@ -381,8 +400,13 @@ export interface CategoryRow {
   productCount: number
   criticalCount: number
   totalQty: number
-  /** `price:read` yoksa alan HİÇ KONULMUYOR (dashboardSummary ile aynı kalıp). */
+  /**
+   * Yalnız alış fiyatı BİLİNEN ürünlerin değeri (PRC-12). `price:read` yoksa
+   * alan HİÇ KONULMUYOR (dashboardSummary ile aynı kalıp).
+   */
   stockValue?: number
+  /** Stoğu olup alış fiyatı bilinmeyen, değere girmeyen ürün sayısı. `stockValue` ile aynı yetki. */
+  unpricedCount?: number
 }
 
 /**
@@ -407,12 +431,16 @@ export async function categorySummary(
   return withTenant(
     actor.tenantId,
     async (tx) => {
+      // Değer ve fiyatsız sayı panelle AYNI ifadelerden (VALUE_SQL,
+      // UNPRICED_SQL): ikisi ayrı yazılsaydı kategori toplamı panel toplamını
+      // tutmazdı.
       const rows = await tx.execute<{
         value: string | null
         products: string
         critical: string
         qty: string
-        value_sum: string | null
+        value_sum: string
+        unpriced: string
       }>(sql`
         SELECT NULLIF(btrim(p.category), '')                          AS value,
                count(*)::text                                          AS products,
@@ -420,8 +448,8 @@ export async function categorySummary(
                  WHERE COALESCE(cs.qty, 0) <= p.min_stock
                )::text                                                 AS critical,
                COALESCE(SUM(COALESCE(cs.qty, 0)), 0)::text             AS qty,
-               COALESCE(SUM(COALESCE(cs.qty, 0) * COALESCE(p.purchase_price, 0)), 0)::text
-                                                                       AS value_sum
+               ${VALUE_SQL}::text                                      AS value_sum,
+               ${UNPRICED_SQL}::text                                   AS unpriced
           FROM products p
           LEFT JOIN current_stock cs
                  ON cs.tenant_id = p.tenant_id AND cs.product_id = p.id
@@ -438,7 +466,10 @@ export async function categorySummary(
           criticalCount: Number(r.critical),
           totalQty: Number(r.qty),
         }
-        if (seesPrices) row.stockValue = Number(r.value_sum ?? 0)
+        if (seesPrices) {
+          row.stockValue = Number(r.value_sum)
+          row.unpricedCount = Number(r.unpriced)
+        }
         return row
       })
     },
@@ -482,7 +513,8 @@ export interface DashboardSummary {
   inStockCount: number
 
   /**
-   * Stoktaki toplam değer (adet × alış fiyatı).
+   * Stoktaki toplam değer (adet × alış fiyatı), YALNIZ alış fiyatı bilinen
+   * ürünlerden (PRC-12). Eksik kısmın büyüklüğü `unpricedStockCount`'ta.
    *
    * `price:read` yetkisi yoksa alan HİÇ KONULMUYOR — `failedJobCount` ve
    * `redactPrices` ile aynı kalıp. `0` döndürmek "stok değersiz" demek
@@ -494,6 +526,13 @@ export interface DashboardSummary {
    * olur. Bu yüzden panelde değerin ZAMAN SERİSİ yok.
    */
   stockValue?: number
+
+  /**
+   * Stoğu olup alış fiyatı bilinmeyen, `stockValue`'ya girmeyen ürün sayısı.
+   * `stockValue` ile AYNI yetki: hangi ürünlerin fiyatı olduğu da alış
+   * fiyatından türeyen bilgi (INV-10).
+   */
+  unpricedStockCount?: number
 
   /**
    * Kategori dağılımı, çoktan aza. Beşten fazlası "Diğer"de toplanıyor:
@@ -592,11 +631,13 @@ export async function dashboardSummary(
       const [counts] = await tx.execute<{
         products: string
         in_stock: string
-        value: string | null
+        value: string
+        unpriced: string
       }>(sql`
         SELECT count(*)::text                                        AS products,
                count(*) FILTER (WHERE COALESCE(cs.qty, 0) > 0)::text AS in_stock,
-               SUM(COALESCE(cs.qty, 0) * COALESCE(p.purchase_price, 0))::text AS value
+               ${VALUE_SQL}::text                                    AS value,
+               ${UNPRICED_SQL}::text                                 AS unpriced
           FROM products p
           LEFT JOIN current_stock cs
                  ON cs.tenant_id = p.tenant_id AND cs.product_id = p.id
@@ -669,7 +710,10 @@ export async function dashboardSummary(
       }
       if (failedJobCount !== undefined) summary.failedJobCount = failedJobCount
       // Fiyat yetkisi yoksa alan hiç konulmuyor (bkz. tip yorumu).
-      if (actorCan(actor, 'price:read')) summary.stockValue = Number(counts?.value ?? 0)
+      if (actorCan(actor, 'price:read')) {
+        summary.stockValue = Number(counts?.value ?? 0)
+        summary.unpricedStockCount = Number(counts?.unpriced ?? 0)
+      }
       return summary
     },
     options.db,
