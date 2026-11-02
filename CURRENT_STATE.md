@@ -4,15 +4,20 @@ Yalnız BUGÜNÜN gerçeği. Her merge'te ya da durum değiştiğinde güncellen
 satırlar silinir (tarihçe git'te). Ayrıntı yazılmaz: işler → `TODOS.md`,
 kararlar → `DECISIONS.md`, model → `PROJECT_BRAIN.md`.
 
-**Tarih:** 2026-11-02 · **Çalışma branch'i:** `development` (`f64e716`) · **Stabil referans:** `master`
-(`master` = `dac05ff`, devralma öncesi son kod; geliştirme `development`'ta yapılır; dal modeli
-`OPS-13`: `master` ileride `main` olarak yeniden adlandırılacak)
+**Tarih:** 2026-11-03 · **Çalışma branch'i:** `development` (`311c39d`) · **Stabil referans:** `master`
+(`master` = `dac05ff`, devralma öncesi son kod; geliştirme `development`'ta yapılır). Dal modeli
+`OPS-13`: `master` → `main` geçişi **henüz yapılmadı**; `master` fast-forward ile `development`'a
+ilerletilip GitHub'da yeniden adlandırılacak. Yedek dallar `backup/master-pre-migration`
+(`dac05ff`) ve `backup/development-pre-migration` (`5199069`).
 
 ## Deploy
 
-**AWS Lightsail staging (kullanıcı bildirimi, 2026-11-02):** uygulama Lightsail'de çalışıyor.
-Sunucuda çalışan commit **doğrulanmadı**; bu repoda dağıtım kaydı, sürüm etiketi ya da deploy iş
-akışı yok. Otomatik şifreli S3 yedeği üzerinde çalışma sürüyor, tamamlanmadı. Üretim (gerçek
+**AWS Lightsail staging/demo (kullanıcı bildirimi, 2026-11-03; `OPS-14`):** uygulama Lightsail'de
+çalışıyor; müşteri üretim ortamı değil. Sunucuda Git HEAD `f64e716`, yerel `development` dalında,
+`origin/development`'ı izliyor; detached değil (kullanıcının sunucu terminalinden doğrulaması).
+Çalışan Docker imajının kaynak commit'i **kanıtlanmadı** (imajda commit etiketi yok); sunucuda
+otomatik çekme ya da dağıtım olmadığı **kanıtlanmadı**. Kalan sunucu doğrulamaları GitHub
+geçişinden sonra. Bu repoda dağıtım kaydı, sürüm etiketi ya da deploy iş akışı yok. Otomatik şifreli S3 yedeği üzerinde çalışma sürüyor, tamamlanmadı. Üretim (gerçek
 müşteri verisi) yok; önkoşullar TODOS T42. Vercel/Supabase hesabı yok.
 
 **Docker staging hazırlığı (S1, 2026-10-28):** AWS Lightsail staging
@@ -119,7 +124,8 @@ sınırından geçti). Önizleme yanıtı blob'u tarayıcıya taşıyor (uzun: 3
 görünüyor. 4 MiB − 2 KB dosya eyleme ulaştı; tam 4 MiB dosya istemci denetimini geçip Next'in
 gövde sınırına çarptı (500, genel hata ekranı; T208); 4 MiB + 1 B istemcide durdu.
 
-GitHub CI: son koşu #95 (`f64e716`, log döndürme, 2026-10-28) yeşil. #90–#94 de yeşil: #90
+GitHub CI: son koşu #97 (`311c39d`, CI tetikleyicisi ve Dependabot hedefi, OPS-13, 2026-11-02)
+yeşil. #95 (`f64e716`, log döndürme, 2026-10-28) yeşil. #90–#94 de yeşil: #90
 `a09157d` (Dilim 2, ikinci denemede), #91 `f9a8bef` (Dilim 3), #92 `7fe8770` (T221), #93 `1b759a6`
 (Dilim 4), #94 `4472fa5` (S1 Docker; CI Docker imajını derlemiyor). Öncesinde #88 (`50b6dd9`, çok depo Dilim 1, 2026-10-27) yeşil, üç iş de geçti; öncesinde
 #87 (`3db7d81`, T171, 2026-10-23) yeşil. #84 (`667512a`, T200 1b, 2026-10-20) yeşil; üç iş de adım adım geçti (Linux
@@ -152,7 +158,8 @@ defter, kaba kuvvet kilidi, elle tetiklenen `/api/cron`, `/api/v1/health`,
 `pnpm demo` (Windows/macOS/Linux). Tedarikçi fiyat ve stok verisi, yalnız yönetici (F-12;
 Dilim 1, kullanıcı kabul testinde kabul edildi 2026-10-22; Dilim 2 ve gerçek API T201 açık). Pilot, varsayılan kapalı: telefon kamerasıyla
 okutup `/hareket`te açma (`ENABLE_PHONE_SCANNER`, `PRD-12`, `ARC-14`). Kodda, kabul testi
-bekleyen: çok depo ve Envanteri Güncelle (F-15; aşağıda "Kısmi / bozuk").
+bekleyen yok. Çok depo ve Envanteri Güncelle (F-15) manuel kabul testinde kabul edildi
+(2026-11-03); eksikleri aşağıda "Kısmi / bozuk".
 
 ## Kısmi / bozuk
 
@@ -163,12 +170,17 @@ bekleyen: çok depo ve Envanteri Güncelle (F-15; aşağıda "Kısmi / bozuk").
 - **Çok kiracıda aynı e-posta**: web'de giriş çıkmazı (T123).
 - **Sağlık alarmı**: bir kez FAILED olan iş kalıcı, alarm her saat tekrar eder (T126).
 - **Düzeltme / ters hareket**: akış yok (T127).
-- **İçe aktarma**: T171 (20.000 satır, 100 MB, ilerleme, iptal) geliştirme tamamlandı, manuel
-  UAT bekleniyor. 20.000 devirli satır bu makinede ~23 dk; sekme açık kalmalı. T171 çalışmasında
+- **İçe aktarma**: T171 (20.000 satır, 100 MB, ilerleme, iptal) manuel kabul testinde geçti
+  (kullanıcı bildirimi, 2026-11-03, yerel `stok_uat`): 2.000 satırda iptal ve yeniden yükleme
+  mükerrer devirsiz tamamlandı; 20.000 devirli satır ~25 dk, hatasız (çekirdekte ölçüm ~23 dk).
+  Sekme açık kalmalı; süre T235. Lightsail'de bellek ölçümü yok (T171 açık). Çok depolu işletmede
+  önizleme yazılamayacak devri yazılacak gibi gösteriyor (T234). T171 çalışmasında
   yerel demo veritabanına migration uygulanmadı; ekran için 0013 gerekir (`pnpm demo` uygular). Devirde geçmiş tarihli fiyat yok (T172); birim değişimi sonrası eski veri denetlenmiyor (T170).
 - **Kuyruğa alınan büyük dışa aktarma**: cron'da işleyicisi yok, çalışmıyor (T216, kod okumasıyla).
 - **Çok depo ve Envanteri Güncelle** (`PRD-17`, `PRD-18`, F-15): Dilim 1–4 ve değer dürüstlüğü
-  kodda, **manuel kabul testi bekliyor** (T218–T220, T222). Var: envanter dosyası (depo açan tek
+  kodda; manuel kabul testi U0–U12 geçti (T218–T220 kapandı; T222'de kalan test notu). UAT
+  bulguları: girişte görünen Atanmamış Stok seçeneği (T236, sunucu reddediyor), eski depo uyarısı
+  (T237). Var: envanter dosyası (depo açan tek
   yol), Envanteri Güncelle ekranı, ürün sayfasında depo dağılımı, harekette depo seçimi, Atanmamış
   Stok'tan çıkış, barkodsuz ürün formu ve ürün kimliğiyle hareket; panel ve kategori değeri fiyatı
   bilinmeyen ürünü 0 saymıyor, sayısını gösteriyor. Yok: deposu bilinmeyen eski stoğun depoya
@@ -214,7 +226,15 @@ işaretli (öne çıkanlar `DAT-15`, `DAT-16`, `SEC-14`, `OPS-01`, `OPS-02`, `UX
 
 ## Son tamamlanan workstream
 
-**Çok depo Dilim 2–4 ve değer dürüstlüğü** (2026-10-27…28; kod tamam, manuel kabul testi bekliyor):
+**Kararlı sürüm öncesi kabul testi** (2026-11-03; T222, T171): U0–U12, 13/13 geçti. Kanıt
+kullanıcının kendi testi ve ekran görüntüleri; testleri kullanıcı yaptı, Claude koşmadı. Ortam: yerel,
+izole `stok_uat` veritabanı, taze sentetik kiracı; demo ve geliştirme verisine yazılmadı. 2.000
+satırda 193 satırdan sonra iptal, yeniden yüklemede kalan 1.807 satır, 193 devir ikinci kez
+yazılmadı; 20.000 satırda 20.000 ürün ve devir, hatasız, ~25 dk; UAT sonunda 22.006 üründe hareket
+toplamı = projeksiyon, 0 tutarsızlık. Bulgular T234–T237. Test edilen kod `f64e716` ile `311c39d`
+arasında aynı.
+
+Öncesinde **Çok depo Dilim 2–4 ve değer dürüstlüğü** (2026-10-27…28; kabul 2026-11-03):
 Dilim 2 envanter dosyası çekirdeği `a09157d` (T218, migration 0015, CI #90); Dilim 3 Envanteri
 Güncelle ekranı ve depo dağılımı `f9a8bef` (T219, CI #91); değer dürüstlüğü `7fe8770` (T221'in
 değer kısmı, CI #92); Dilim 4 harekette depo seçimi, Atanmamış Stok ve barkodsuz ürün `1b759a6`
@@ -266,15 +286,23 @@ geçici kapsayıcıda izole inceleme, yalnız tanınan kümede silme. Geliştirm
 
 ## Sıradaki workstream
 
-**Sıradaki iş: Faz 0 (repo, backlog ve belge senkronu)**, ardından onaylanacak ilk ürün
-workstream'i. 30 Ekim ekip testinin doğrulanmış sonucu kayıtlı değil: T171 ve T218–T220 manuel
-kabul testi bekliyor (T222). Kullanıcı testinde bulunan eksikler T232 (tek ürün sayım
-düzeltmesi), T223 (eski stoğun depoya atanması) ve T233 (depolar arası transfer).
+**Sıradaki iş: Faz 0.3 `master` → `main` geçişi (`OPS-13`, `OPS-14`)**, ardından onaylanacak ilk
+ürün workstream'i. Geçiş öncesinde kalan engeller:
+- Bu belge senkronunun commit'i ve CI'ı (kararlı aday bu commit olur; uygulama kodu `311c39d` ile aynı).
+- `Protect migration backups` ruleset'i kimlik doğrulamasız API'de hiçbir dalı hedeflemiyor
+  görünüyor (`include` boş); GitHub arayüzünde doğrulanmadı.
+- GitHub yönetici yetkisi doğrulanmadı (adlandırma ve kurallar için gerekli).
+- 9 açık Dependabot PR'ı `master`'ı hedefliyor; kapatma ya da `development`'a yönlendirme kararı.
+- Bilinen sınırlar listesinin kullanıcı tarafından kabulü (kayıtlı değil): T221 rozeti, T223, T226, T227, T232, T233, T216, T208,
+  T234–T237.
+Geçişten sonra: Lightsail sunucu doğrulamaları (`OPS-14`, T171 bellek ölçümü), T222 test notu.
+Kullanıcı testinde bulunan eksikler T232 (tek ürün sayım düzeltmesi), T223 (eski stoğun depoya
+atanması) ve T233 (depolar arası transfer).
 
 **Yol haritası sırası** (kullanıcı kararı 2026-10-27; 2026-10-22 sırasının üstüne):
-1. **Çok depo ve Envanteri Güncelle**: Dilim 1–4 ve T221'in değer kısmı kodda; kabul testi
-   (T222) ve **T171 kabul testi**. T171 (20.000 satır) geliştirmesi tamam, manuel UAT bekleniyor
-   (`ARC-15`, ADR-007, `DAT-20`, S21, F-02); kabul testinden önce kapatılmaz.
+1. **Çok depo ve Envanteri Güncelle**: Dilim 1–4 ve T221'in değer kısmı kodda ve kabul testinde
+   geçti (2026-11-03). T171 (20.000 satır; `ARC-15`, ADR-007, `DAT-20`, S21, F-02) kabul testinde
+   geçti; kalan Lightsail ölçümü. Sıradaki çok depo işleri T232, T223, T233 ve T221 rozeti.
 2. **T201 gerçek tedarikçi API'si**: ilk hedef, erişimi sağlanabilen bir sağlayıcıyla uçtan uca.
    Sağlayıcı, kimlik doğrulama ve yaklaşım PLAN'da kanıtla seçilir; gerçek sağlayıcı seçilmeden genel
    entegrasyon iddia edilmez. Çok depo kritik yolunun dışında.
