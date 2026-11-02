@@ -7,7 +7,7 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
 **Kurallar**
 
 - ID `T<n>`. Arşivdeki görevler numaralarını korur. Yeni görev en büyük
-  numaradan devam eder — **sıradaki boş numara: T230**. Numara yeniden
+  numaradan devam eder — **sıradaki boş numara: T234**. Numara yeniden
   kullanılmaz.
 - Biçim: `- [ ] **T<n> (P0–P3)** - <alan> - **Başlık**`. Altında kısa
   **Neden / Kanıt / Bağlı / Doğrula / Kaynak** satırları.
@@ -37,11 +37,10 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
 
 Yol haritasının üstü (kullanıcı kararı 2026-10-27, A2 ve CEO-8; 2026-10-22 sırasının üstüne):
 (1) **çok depolu stok ve Envanteri Güncelle** (`PRD-17`, `PRD-18`; F-15): Dilim 1 bitti (T217);
-30 Ekim Cuma hedefi Dilim 2 (T218) ve Dilim 3 (T219), değer dürüstlüğü (T221'in değer kısmı, CEO-1)
-ile birlikte; T171 kabul testi aynı gün yapılabilir (T222). Perşembe 12:00 karar noktası: Dilim 2
-güvenilir biçimde bitmemişse Cuma'da yarım envanter akışı hazırmış gibi sunulmaz; T171 kabul testi
-ve çalışan özelliklerin demosu yapılır. Geliştirme Cuma'ya sıkıştırılmaz. (2) Temel akıştan sonra
-Dilim 4 (T220, manuel depo seçimi; önemli) ve Dilim 5'in kalanı (T221). (3) Bu kritik yolun dışında
+Dilim 2–4 (T218, T219, T220) ve T221'in değer kısmı kodda (2026-10-28), manuel kabul testi
+bekliyor; T171 kabul testi de bekliyor (T222). Doğrulanmış UAT sonucu kayıtlı değil (2026-11-02).
+(2) Kullanıcı testinde bulunan eksikler: tek ürün sayım düzeltmesi (T232), eski stoğun depoya
+atanması (T223) ve depolar arası transfer (T233); Dilim 5'in kalanı (T221 rozeti). (3) Bu kritik yolun dışında
 ve sıraları korunarak: T201 gerçek tedarikçi API'si, sonra T200 Dilim 2; UX iyileştirmeleri uygun
 ürün dilimlerinde (T212–T215, T210, T211), tek bir yeniden tasarım olarak değil. T200 PLAN ve
 Dilim 1 tamam; Dilim 1 kullanıcı kabul testinde kabul edildi (2026-10-22). HTTPS test ortamı (T144;
@@ -73,8 +72,11 @@ işler ve güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
     arası çakışma, atanmamış stoklu ürünün atlanması, yeni ürünün bir kez oluşması, boş miktar ve
     boş Ambar, sunucudaki aynı içerik onayı. Parçanın ortasında kesinti. Süre ölçümü (T171'den
     sonraki hat için ölçülmedi).
-  - Risk: Perşembe 12:00 karar noktası (yukarıda). İlk depo bu dilimle açılır: demo kiracısında
-    depo açılmamalı, Cuma testi taze kiracıda (`pnpm tenant:create`).
+  - Risk: ilk depo bu dilimle açılır: demo kiracısında depo açılmamalı, kabul testi taze kiracıda
+    (`pnpm tenant:create`).
+  - Durum (2026-11-02): kod tamam: `a09157d`, CI #90 yeşil (ikinci denemede); commit mesajına göre
+    1.305 test ve `dogrula` ile dokuz koruma. Manuel kabul testi bekliyor; UAT kanıtı olmadan
+    kapanmaz (T222).
   - Kaynak: depo bazlı envanter PLAN'ı, CEO ve Engineering Review, 2026-10-27.
 - [ ] **T219 (P1)** - web - **Çok depo Dilim 3: Envanteri Güncelle ekranı ve ürün sayfasında depo dağılımı**
   - Neden: T218 arayüzsüz; kullanıcı dosyayı yükleyemez ve bir deponun güncellenmesinden sonra
@@ -88,6 +90,8 @@ işler ve güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
     hareket Dilim 4'e kadar çalışmıyor.
   - Bağlı: T218 (önkoşul), T217, T150 (E2E demo veritabanına yazıyor).
   - Doğrula: Playwright, sentetik dosyayla, izole veritabanı ve portta; çalışan ekranı açamıyor.
+  - Durum (2026-11-02): kod tamam: `f9a8bef`, CI #91 yeşil; commit mesajına göre izole Playwright
+    33/33 (`t219-envanter`). Manuel kabul testi bekliyor; UAT kanıtı olmadan kapanmaz (T222).
   - Kaynak: depo bazlı envanter PLAN'ı ve CEO Review, 2026-10-27.
 - [ ] **T220 (P1)** - web - **Çok depo Dilim 4: manuel harekette depo seçimi, Atanmamış Stok ve barkodsuz ürün seçimi**
   - Neden: hareket formunda depo alanı yok. Bir işletmede birden çok depo açılınca manuel hareket
@@ -102,8 +106,10 @@ işler ve güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
   - Bağlı: T217 (önkoşul), T177, T218 (depo açan yol); `DAT-22`, `DAT-23`.
   - Doğrula: satış yalnız seçilen depoyu azaltıyor; depoda yetmeyen miktar açık mesajla
     reddediliyor; Atanmamış Stok'tan atanmamış miktarı aşan çıkış reddediliyor (`dogrula`).
-  - Öncelik: Cuma'nın kesin hedefi değil (A2); temel akıştan sonra ilk iş. Yetişmezse Cuma'da
-    birden çok depolu manuel hareketin çalışmadığı açıkça söylenir.
+  - Durum (2026-11-02): kod tamam: `1b759a6`, CI #93 yeşil; depo seçimi, Atanmamış Stok
+    (`fromUnassigned`), `?urunId=` ile hareket, ürün formunda isteğe bağlı barkod, `LAST_BARCODE`
+    kaldırıldı. Commit mesajına göre izole Playwright 38/38 (`t220-depo-hareket`). Manuel kabul
+    testi bekliyor; UAT kanıtı olmadan kapanmaz (T222).
   - Kaynak: depo bazlı envanter PLAN'ı, A1/A2 ve CEO-3, 2026-10-27.
 - [ ] **T221 (P1)** - core - **Çok depo Dilim 5: değer dürüstlüğü ve "Depoya atama bekliyor" rozeti**
   - Neden: panel ve kategori değeri `qty × COALESCE(alış fiyatı, 0)` (`stock.ts`); dosyadan
@@ -115,6 +121,8 @@ işler ve güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
   - Bağlı: `PRC-12`; rozet T217 ve T219'a bağlı. Fiyat gizliliği (INV-10) korunur.
   - Doğrula: fiyatsız stoklu ürün toplamı 0 yapmıyor ve sayıda görünüyor; çalışan alış fiyatı
     türevi bir değer görmüyor.
+  - Durum (2026-11-02): değer kısmı kodda: `7fe8770`, CI #92 yeşil. Kalan: ürün sayfasında
+    "Depoya atama bekliyor" rozeti.
   - Kaynak: K5, CEO-1, CEO-2, 2026-10-27.
 - [ ] **T222 (P1)** - doküman - **Çok depo Dilim 6: Cuma senaryosu, tam kapılar ve belge senkronu**
   - Kapsam: T171 kabul testiyle birlikte; taze sentetik kiracıda Cuma senaryosu (iki depolu
@@ -122,8 +130,24 @@ işler ve güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
     typecheck, test, drift, build, izole E2E); Cuma test notu (çalışmayanlar, yanlış dosya
     düzeltme yolu: yanlış depoya yazılan miktarlar o depo için 0 miktarlı dosyayla geri alınır;
     yanlış açılan depo silinemez, T226).
-  - Bağlı: T218, T219, T221, T171. Gerçek işletme verisi repoya ve fixture'a girmez.
+  - Bağlı: T218, T219, T220, T221, T171. Gerçek işletme verisi repoya ve fixture'a girmez.
+  - Durum (2026-11-02): senaryo otomatik olarak `t219-envanter`'de var (commit mesajı). Kalan:
+    manuel kabul testi (T171, T218–T220) ve Cuma test notu. Belge senkronu Faz 0.2'de yapıldı.
   - Kaynak: depo bazlı envanter PLAN'ı ve CEO-8, 2026-10-27.
+- [ ] **T232 (P1)** - web - **Ürün detayından manuel stok/sayım düzeltmesi yok; tek ürünün miktarı yalnız dosyayla düzeltilebiliyor**
+  - Neden: sayılan miktarı tek bir ürün için girmenin yolu yok. Sayım düzeltmesi (`COUNT_ADJUST`)
+    yalnız envanter dosyasından yazılıyor: `createMovement`'ın `inventory` seçeneğinin tek çağıranı
+    `packages/core/src/inventory-import.ts`. Kullanıcı ya dosya hazırlıyor ya da "Diğer giriş/çıkış"
+    kullanıyor; ikincisi sayım farkını sıradan harekete karıştırıyor.
+  - Kanıt: kod okuması 2026-10-31 (`movements.ts` `inventory` seçeneği, `reasons.ts` `COUNT_ADJUST_*`
+    elle seçilemiyor); kullanıcı testi bildirimi ("ürünün mevcut stok miktarı kolayca düzeltilemiyor").
+  - Yapılacak (onaylanmadı): ürün sayfasında depo bazında yeni miktar girişi; mevcut `inventory`
+    kapısı (`DAT-24`): beklenen miktar, hedef, `count:approve`, kilit altında `STOCK_CHANGED`.
+    Atanmamış stoklu üründe davranış T223 ile birlikte kararlaştırılır.
+  - Bağlı: `DAT-24`, `PRD-18`, T223, T233, T127, T155.
+  - Doğrula: fark kadar tek `COUNT_ADJUST` hareketi; fark 0'da hareket yok; önizlemeden sonra
+    değişen stokta red (`dogrula`); çalışan düzeltme yapamıyor; defter = projeksiyon.
+  - Kaynak: Faz 0 durum analizi ve kullanıcı testi, 2026-10-31.
 
 - [ ] **T171 (P1)** - import - **Büyük içe aktarma tek istekte uzun sürüyor (2.000 satır devirli 47 sn); kullanıcı hedefi 20.000 satır**
   - Neden: satırlar tek tek, her devir kendi `createMovement` transaction'ında yazılıyor
@@ -216,6 +240,28 @@ işler ve güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
   - İlerleme (2026-10-28): S4.0 (log döndürme) ve S4.1 (`citech-infra` Caddy yapılandırması,
     yerelde doğrulandı) tamam; sunucuya kurulmadı. Kalan: genel DNS delegasyonunun düzelmesi,
     sunucuda Caddy kurulumu ve XFF'in sunucuda yeniden doğrulanması (runbook L.4).
+  - Durum (2026-11-02, kullanıcı bildirimi): uygulama AWS Lightsail'de çalışıyor; sunucuda çalışan
+    commit doğrulanmadı. Otomatik şifreli S3 yedeği üzerinde çalışma sürüyor; tamamlanmadı.
+  - Kanıt (ölçüm, ortak Stok + Dosya Sistemi benchmarkı 2026-10-27; Linux container, ortak 2 vCPU,
+    `3db7d81`): Stok boşta app ~100–150 MB, PG ~50–130 MB; 3 kullanıcılı normal kullanımda app
+    ≤ 370 MB; 3 eşzamanlı Excel'de app kernel bellek tepesi 864 MB; aktarımda PG ≤ 407 MB. İki ürünün
+    ölçülen en yüksek eşzamanlı tüketimi 3.394 MB (3 eşzamanlı Excel + ağır OCR); 30 dk normal yükte
+    1.101 MB, CPU ortalaması 0,5 çekirdek, Stok'ta hata yok. Dosya Sistemi'nin tek fotoğraf OCR'ı
+    2,6 GB: aynı sunucuda çekirdek OOM'u Stok'un Next.js ya da PostgreSQL sürecini seçebilir. Rapor
+    ve ham veri repo dışında: `Desktop/Projeler/_benchmark-kanitlari/2026-10-27-ortak-yerel/FINAL_LOCAL_REPORT.md`.
+  - Açık risk: `compose.production.yml` bellek sınırları db 768m, web 1g; benchmark önerisi
+    stok-app 1,25 GB, stok-db 1 GB. Ölçülen app tepesine (864 MB) göre 1g'de ~%15 pay kalıyor;
+    Windows'taki Tur 1'de (2026-10-26) 3 eşzamanlı dışa aktarmada Next tepesi 1,31 GB. Sınırlar
+    AWS'de doğrulanmalı. Kalan güvenlik ve işletim önkoşulları kendi kayıtlarında: T112, T129,
+    T135, T137, T166, T167. Varsayılan `stok_app` parolası production kurulumda reddediliyor
+    (`db/production/005-app-role.sh`).
+  - Doğrulanmadı: AWS'de OS + Docker + reverse proxy ek yükü, Lightsail CPU kredisi davranışı,
+    gerçek ağ gecikmesi.
+  - Doğrula (ek, AWS'de kısa ölçüm): boşta RAM, 3 eşzamanlı Excel, 30 dk normal yük; container
+    sınırlarının `docker inspect` ile uygulandığı; PostgreSQL portunun dışarıdan kapalı olduğu;
+    sunucuda çalışan commit'in kaydı.
+  - Bağlı (ek): T231 (dışa aktarma blokajı). Önceki yerel kayıt "AWS tek sunucu planı" bu satırlara
+    taşındı (Faz 0.2, 2026-11-02).
   - Kaynak: eski P2 kaydı ("Staging ortamı yok"); ekip kararıyla P1, 2026-10-17.
 - [ ] **T201 (P1)** - entegrasyon - **B2B harici API kaynağı: yetkili veri çekme, gizli bilgi ve hata yönetimi**
   - Neden: V1 örnek API verisiyle doğrulanacak, gerçek API sağlayıcı seçilince bağlanacak. Her
@@ -386,10 +432,23 @@ işler ve güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
     değişmez (INV-1). Panelin günlük giriş/çıkış sayısı bu sebepleri dışlar (bayrak
     `reasons.ts`'te, INV-9). Kapının şekli (seçenek mi ayrı fonksiyon mu) ve INV-3 metni bu
     dilimin Engineering Review'unda.
-  - Bağlı: T217, T220; `PRD-17`.
+  - Bağlı: T217, T220, T232, T233 (tek çekirdekle tasarlanmalı); `PRD-17`. Kullanıcı testinde
+    görüldü: "depoya atanmamış eski stok depoya taşınamıyor" (2026-10-31).
   - Doğrula: atama sonrası `current_stock` aynı, depolar doğru; atanmamışı aşan atama reddi
     (`dogrula`); defter = projeksiyon.
   - Kaynak: depo bazlı envanter PLAN'ı (S2), 2026-10-27.
+- [ ] **T233 (P2)** - core - **Depolar arası stok transferi yok**
+  - Neden: malı bir depodan ötekine tek işlemde taşımanın yolu yok. Bugün iki ayrı hareket
+    gerekiyor (çıkış + giriş); aralarında toplam stok yanlış görünür ve iki satır birbirine bağlı
+    değil. Sebep listesinde transfer yok (`packages/shared/src/reasons.ts`).
+  - Kanıt: kod okuması 2026-10-31 (`movements.ts`, `reasons.ts`); kullanıcı testi bildirimi.
+  - Yapılacak (onaylanmadı): T223'ün onaylı deseni (tek transaction'da kaynaktan −q, hedefe +q;
+    elle seçilemeyen sebep çifti; toplam değişmez, INV-1). T223 ve T233 tek çekirdekle
+    tasarlanmalı: atama, atanmamıştan bir depoya transferdir. Belge/not alanı kullanıcı kararı.
+  - Bağlı: T223, T232, `PRD-17`, `DAT-21`, `DAT-23`, INV-9 (yeni sebepler tek kaynaktan).
+  - Doğrula: kaynak depo yetmezse red; toplam `current_stock` aynı, iki depo doğru; iki satır
+    aynı transfer kimliğiyle bağlı; yarıda kalan transfer yok (`dogrula`).
+  - Kaynak: Faz 0 durum analizi ve kullanıcı testi, 2026-10-31.
 - [ ] **T224 (P2)** - core - **Çok depo Dilim 8: fiyat geçmişi, ardından isteğe bağlı toplu satış fiyatı güncellemesi**
   - Neden: `PRC-13` onaylı ama ürün fiyatı yerinde güncelleniyor, geçmiş yok; geçmiş olmadan
     toplu değişiklik eski fiyatları geri dönülmez biçimde kaybettirir.
@@ -440,6 +499,25 @@ işler ve güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
   - Doğrula: kuyruğa giden bir stok raporu için `runCron` turundan sonra işin `DONE` olduğu ve
     e-postanın gönderildiği bir test (gerçek PostgreSQL, sahte posta taşıyıcısı).
   - Kaynak: T171 BUILD sırasında kod okuması, 2026-10-23.
+- [ ] **T231 (P2)** - export - **Excel dışa aktarma istek içinde üretiliyor: sürerken aynı süreçteki bütün istekler 1,5–5 sn bekliyor, eşzamanlı dışa aktarmalar sıraya giriyor**
+  - Neden: 20.000 satıra kadar rapor istekte üretiliyor (`INLINE_ROW_LIMIT`,
+    `packages/core/src/exports.ts:63`, `:340`). Tek `next start` sürecinde (VPS, T144) bir kullanıcı
+    rapor indirirken diğer kullanıcıların sayfa, arama ve stok hareketi istekleri de bekliyor; iki üç
+    eşzamanlı rapor her birinin süresini katlıyor. Kullanıcı bunu "sistem dondu" diye görür.
+  - Kanıt (ölçüm, 2026-10-27; bench DB 11.985 ürün / 17.936 hareket; stok raporu 482 KB, hareket
+    raporu 912 KB): tek dışa aktarma hareket 2,8 sn, stok 1,3 sn; bu sırada `/api/v1/health` p95
+    1,67 sn (2 vCPU) ve 1,48 sn (4 vCPU): çekirdek eklemek düzeltmiyor. 3 eşzamanlı dışa aktarmada
+    hareket 7,1 sn, stok 3,8 sn (tek başına sürenin ~2,6–2,9 katı), health en fazla 4,45 sn,
+    stok-app ~1,5 çekirdekte doyuyor, kernel bellek tepesi 864 MB. Aynı sunucuda ağır OCR ile
+    birlikte hareket 10,3–10,8 sn, health 4,8–5,1 sn.
+  - Olası neden (doğrulanmadı, profil alınmadı): exceljs çalışma kitabını Node ana iş parçacığında
+    senkron üretiyor.
+  - Bilerek yapılmayan: benchmark kapsamında düzeltme denenmedi.
+  - Bağlı: T216 (kuyruk yolu çalışmıyor; büyük rapor için alternatif yol), T138, T144.
+  - Doğrula: dışa aktarma sürerken health p95'in ve 3 eşzamanlı dışa aktarmada süre ile health'in
+    yeniden ölçülmesi (benchmark araçları repo dışında, T144'teki kanıt klasörü).
+  - Kaynak: ortak benchmark D1, D1 4 vCPU, E4a, E4c, 2026-10-27. Yerel kayıtta numarası T218'di;
+    çakışma yüzünden T231 oldu (Faz 0.2, 2026-11-02).
 - [ ] **T204 (P2)** - güvenlik - **Web eylemleri ham hatayı logluyor; Drizzle hata mesajı sorgu parametrelerini (fiyat, barkod) taşıyor**
   - Neden: beklenmeyen bir veritabanı hatasında Drizzle'ın hata mesajı `Failed query: …` ile
     birlikte `params: [...]` satırını da içeriyor. `console.error('[import action]', err)` gibi
@@ -972,8 +1050,9 @@ değil. Kayıtlarda "Ürün kararı" onaylı kapsamdır; "Teknik not" henüz ona
     hareket yolu; `DAT-18` devri, `PRD-12` köprüsü ve içe aktarma etkilenir.
   - Durum (2026-10-27): karar `PRD-19` (sahte/iç barkod yok). Yalnız çekirdek kısmı bitti:
     barkodsuz ürün oluşturuluyor ve ürün kimliğiyle hareket alıyor (Dilim 1, T217, `DAT-22`).
-    Kalan: ürün formu (T220), ürün aktarımı (T228), envanter dosyasından barkodsuz yeni ürün
-    (T218). Kalanlar bitince kapanır.
+  - Durum (2026-11-02): ürün formu ve elle hareket (T220, `1b759a6`) ile envanter dosyasından
+    barkodsuz yeni ürün (T218, `a09157d`) kodda; ikisinin de manuel kabul testi bekliyor. Kalan:
+    ürün aktarımı (T228). T228 bitince ve UAT sonrası kapanır.
   - Bağlı: T155, T175, T156.
 - [ ] **T178** - hareket - **Seri barkod okutma** (değerlendirilecek, 2026-10-13). Kayıttan sonra
   sebep sıfırlanıyor (`hareket/page.tsx:145-148`), mal kabulünde her kalemde yeniden seçiliyor.

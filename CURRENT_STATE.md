@@ -4,16 +4,18 @@ Yalnız BUGÜNÜN gerçeği. Her merge'te ya da durum değiştiğinde güncellen
 satırlar silinir (tarihçe git'te). Ayrıntı yazılmaz: işler → `TODOS.md`,
 kararlar → `DECISIONS.md`, model → `PROJECT_BRAIN.md`.
 
-**Tarih:** 2026-10-27 · **Çalışma branch'i:** `development` · **Stabil referans:** `master`
-(`master` = `dac05ff`, devralma öncesi son kod; geliştirme `development`'ta yapılır)
+**Tarih:** 2026-11-02 · **Çalışma branch'i:** `development` (`f64e716`) · **Stabil referans:** `master`
+(`master` = `dac05ff`, devralma öncesi son kod; geliştirme `development`'ta yapılır; dal modeli
+`OPS-13`: `master` ileride `main` olarak yeniden adlandırılacak)
 
 ## Deploy
 
-**Hiç yapılmadı.** Vercel/Supabase hesabı yok; GitHub'da deployment, environment
-ya da release kaydı yok. Kod tarafı hazırlığı (vercel.json, `/api/v1/health`,
-runbook) var; önkoşullar TODOS T42.
+**AWS Lightsail staging (kullanıcı bildirimi, 2026-11-02):** uygulama Lightsail'de çalışıyor.
+Sunucuda çalışan commit **doğrulanmadı**; bu repoda dağıtım kaydı, sürüm etiketi ya da deploy iş
+akışı yok. Otomatik şifreli S3 yedeği üzerinde çalışma sürüyor, tamamlanmadı. Üretim (gerçek
+müşteri verisi) yok; önkoşullar TODOS T42. Vercel/Supabase hesabı yok.
 
-**Docker staging hazırlığı (S1, 2026-10-28, commit edilmedi):** AWS Lightsail staging
+**Docker staging hazırlığı (S1, 2026-10-28):** AWS Lightsail staging
 (T144) için `Dockerfile`, `compose.production.yml` ve `.env.production.example` hazır.
 Komutlar runbook "L" bölümünde. Doğrulama yerelde, Docker 29.9 linux/amd64 üzerinde,
 boş bir test volume'üyle yapıldı:
@@ -24,10 +26,10 @@ boş bir test volume'üyle yapıldı:
 - Kiracı bağlamı olmadan 0 satır görünüyor. Defterde UPDATE ve DELETE reddedildi.
 - `APP_URL` https iken çerezler Secure. Örnek `AUTH_SECRET` ile açılış reddedildi.
 - Portlar yayınlanmıyor. Veritabanının internete çıkışı yok.
-- Sunucuya dağıtılmadı. Caddy/HTTPS, cron ve yedek henüz yok.
+- Bu doğrulama yereldi; sunucudaki kurulumun aynı adımlarla yapıldığı repodan doğrulanamıyor.
 
 Barındırma kararı `OPS-01` hâlâ Open. Derleme Google Fonts'a bağımlı (T230).
-S1 `4472fa5` olarak commit edildi; CI #94 yeşil (üç iş).
+S1 `4472fa5` olarak commit edildi; CI #94 yeşil (üç iş). Log döndürme `f64e716`, CI #95 yeşil.
 
 **Caddy/HTTPS hazırlığı (S4.0 + S4.1, 2026-10-28, yerel):**
 - S4.0: production compose'a log döndürme eklendi (servis başına 3 × 10 MB).
@@ -35,7 +37,8 @@ S1 `4472fa5` olarak commit edildi; CI #94 yeşil (üç iş).
   denetimi altında değil). Caddy
   arkasında Stok girişi ve hareketi çalıştı. X-Forwarded-For koruması koruma
   kaldırılarak sınandı; ayrıntı runbook L.4'te.
-- Sunucuya kurulmadı. Genel DNS delegasyonu doğrulanmadı.
+- 2026-10-28 itibarıyla sunucuya kurulmamıştı; bugünkü sunucu yapılandırması repodan
+  doğrulanamıyor (yukarıda). Genel DNS delegasyonu doğrulanmadı.
 
 ## Doğrulanmış baseline — 2026-10-10, WS-C-lite (`dcf46d1`), Windows 11, Node 24.20
 
@@ -116,8 +119,9 @@ sınırından geçti). Önizleme yanıtı blob'u tarayıcıya taşıyor (uzun: 3
 görünüyor. 4 MiB − 2 KB dosya eyleme ulaştı; tam 4 MiB dosya istemci denetimini geçip Next'in
 gövde sınırına çarptı (500, genel hata ekranı; T208); 4 MiB + 1 B istemcide durdu.
 
-GitHub CI: son koşu #94 (`4472fa5`, S1 Docker, 2026-10-28) yeşil, üç iş de geçti (CI Docker imajını
-derlemiyor). Öncesinde #88 (`50b6dd9`, çok depo Dilim 1, 2026-10-27) yeşil, üç iş de geçti; öncesinde
+GitHub CI: son koşu #95 (`f64e716`, log döndürme, 2026-10-28) yeşil. #90–#94 de yeşil: #90
+`a09157d` (Dilim 2, ikinci denemede), #91 `f9a8bef` (Dilim 3), #92 `7fe8770` (T221), #93 `1b759a6`
+(Dilim 4), #94 `4472fa5` (S1 Docker; CI Docker imajını derlemiyor). Öncesinde #88 (`50b6dd9`, çok depo Dilim 1, 2026-10-27) yeşil, üç iş de geçti; öncesinde
 #87 (`3db7d81`, T171, 2026-10-23) yeşil. #84 (`667512a`, T200 1b, 2026-10-20) yeşil; üç iş de adım adım geçti (Linux
 test işinde lint, drift, testler ve derleme; demo işinde temiz kurulum ve Playwright duman testi;
 Windows'ta temiz checkout'ta lint, typecheck ve derleme). Öncesinde #83 (`9d4bc8c`, T200 1a,
@@ -147,7 +151,8 @@ sağlığı · Ctrl+K · bildirim zili. RLS çok kiracılı veri katmanı, appen
 defter, kaba kuvvet kilidi, elle tetiklenen `/api/cron`, `/api/v1/health`,
 `pnpm demo` (Windows/macOS/Linux). Tedarikçi fiyat ve stok verisi, yalnız yönetici (F-12;
 Dilim 1, kullanıcı kabul testinde kabul edildi 2026-10-22; Dilim 2 ve gerçek API T201 açık). Pilot, varsayılan kapalı: telefon kamerasıyla
-okutup `/hareket`te açma (`ENABLE_PHONE_SCANNER`, `PRD-12`, `ARC-14`).
+okutup `/hareket`te açma (`ENABLE_PHONE_SCANNER`, `PRD-12`, `ARC-14`). Kodda, kabul testi
+bekleyen: çok depo ve Envanteri Güncelle (F-15; aşağıda "Kısmi / bozuk").
 
 ## Kısmi / bozuk
 
@@ -162,16 +167,15 @@ okutup `/hareket`te açma (`ENABLE_PHONE_SCANNER`, `PRD-12`, `ARC-14`).
   UAT bekleniyor. 20.000 devirli satır bu makinede ~23 dk; sekme açık kalmalı. T171 çalışmasında
   yerel demo veritabanına migration uygulanmadı; ekran için 0013 gerekir (`pnpm demo` uygular). Devirde geçmiş tarihli fiyat yok (T172); birim değişimi sonrası eski veri denetlenmiyor (T170).
 - **Kuyruğa alınan büyük dışa aktarma**: cron'da işleyicisi yok, çalışmıyor (T216, kod okumasıyla).
-- **Çok depo ve Envanteri Güncelle** (`PRD-17`, `PRD-18`, F-15): yalnız çekirdek var (Dilim 1,
-  `50b6dd9`): depo modeli, depo farkındalıklı hareket kapısı, sunucuya özel envanter düzeltmesi,
-  barkodsuz ürün ve ürün kimliğiyle hareket. **Kullanıcının göreceği bir şey yok:** depo açan yol,
-  envanter dosyası aktarımı (Dilim 2, T218), Envanteri Güncelle ekranı ve depo dağılımı (Dilim 3,
-  T219) yok; bugünkü kiracılarda depo olmadığı için davranış değişmedi. Depolar açılınca (Dilim 2):
-  birden çok depolu işletmede manuel hareket ve ürün aktarımının Açılış Stoğu `DEPOT_REQUIRED` ile
-  reddedilir (hareket formunda depo seçimi Dilim 4, T220); tek depolu işletmede de deposu bilinmeyen
-  eski stoktan çıkış yapılamaz (Atanmamış Stok T220, depoya atama T223). Ürün formu ve ürün
-  aktarımı hâlâ barkod istiyor (T220, T228). Panel değeri fiyatı bilinmeyeni 0 sayıyor (`PRC-12`,
-  T221). Fiyat geçmişi ve toplu satış fiyatı (T224), toplu mal kabulü (T225) yok.
+- **Çok depo ve Envanteri Güncelle** (`PRD-17`, `PRD-18`, F-15): Dilim 1–4 ve değer dürüstlüğü
+  kodda, **manuel kabul testi bekliyor** (T218–T220, T222). Var: envanter dosyası (depo açan tek
+  yol), Envanteri Güncelle ekranı, ürün sayfasında depo dağılımı, harekette depo seçimi, Atanmamış
+  Stok'tan çıkış, barkodsuz ürün formu ve ürün kimliğiyle hareket; panel ve kategori değeri fiyatı
+  bilinmeyen ürünü 0 saymıyor, sayısını gösteriyor. Yok: deposu bilinmeyen eski stoğun depoya
+  atanması (T223; envanter dosyası da böyle bir ürünün satırını atlıyor), tek ürün sayım
+  düzeltmesi (T232), depolar arası transfer (T233), "Depoya atama bekliyor" rozeti (T221), elle
+  depo açma/arşivleme (T226), ürün aktarımında barkodsuz satır (T228), fiyat geçmişi ve toplu
+  satış fiyatı (T224), toplu mal kabulü (T225).
 - **Ürün görseli**: yalnız URL; yükleme yok (T136).
 - **Kritik stok**: yalnız e-posta, push yok.
 - **Konum yönetimi**: arayüz yok.
@@ -179,8 +183,11 @@ okutup `/hareket`te açma (`ENABLE_PHONE_SCANNER`, `PRD-12`, `ARC-14`).
 - **Telefonla okutma pilotu**: oturum süreç belleğinde (yeniden başlatmada düşer,
   yalnız tek süreçli `next start`, `ARC-14`); tünel açıkken bütün uygulama dışarıda
   (T167); UPC-A 12/13 hane ölçülmedi (T168).
-- **Ağ açıklığı**: veritabanı portu yalnız `127.0.0.1` (WS-1.1, S19), ama parolalar repodaki
-  varsayılanlar; uygulama sunucusu (`next start`) yerel ağda HTTP ile açık (T183).
+- **Ağ açıklığı**: geliştirme compose'unda veritabanı portu yalnız `127.0.0.1` (WS-1.1, S19), ama
+  parolalar repodaki varsayılanlar; uygulama sunucusu (`next start`) yerel ağda HTTP ile açık
+  (T183). Production compose port yayınlamıyor ve geliştirme parolasını reddediyor (S1).
+- **Excel dışa aktarma**: rapor istek içinde üretiliyor; sürerken diğer istekler 1,5–5 sn
+  bekliyor (T231, ölçüm 2026-10-27).
 - **Yedek / geri yükleme**: yerel yedek var (`pnpm db:backup`, WS-1.3a, `OPS-10`): içindekiler +
   tam okuma + SHA-256 ile doğrulanmış döküm, son 14 tanesi saklanıyor, `--status` durumu
   gösteriyor. Geri yükleme tatbikatı (WS-1.4) ve zamanlama (WS-1.3b) yok; dökümün geri
@@ -207,7 +214,15 @@ işaretli (öne çıkanlar `DAT-15`, `DAT-16`, `SEC-14`, `OPS-01`, `OPS-02`, `UX
 
 ## Son tamamlanan workstream
 
-**Çok depo Dilim 1 — depo modeli ve hareket kapısı** (T217, 2026-10-27; `DAT-21`–`DAT-25`, ADR-008):
+**Çok depo Dilim 2–4 ve değer dürüstlüğü** (2026-10-27…28; kod tamam, manuel kabul testi bekliyor):
+Dilim 2 envanter dosyası çekirdeği `a09157d` (T218, migration 0015, CI #90); Dilim 3 Envanteri
+Güncelle ekranı ve depo dağılımı `f9a8bef` (T219, CI #91); değer dürüstlüğü `7fe8770` (T221'in
+değer kısmı, CI #92); Dilim 4 harekette depo seçimi, Atanmamış Stok ve barkodsuz ürün `1b759a6`
+(T220, CI #93). Commit mesajlarına göre son yerel kapı 1.323 test ve izole Playwright 38/38; her
+dilimde korumalar `dogrula` ile kırmızıya düşürüldü. Ardından AWS staging hazırlığı `4472fa5` (S1)
+ve `f64e716` (log döndürme), CI #94–#95.
+
+Öncesinde **Çok depo Dilim 1 — depo modeli ve hareket kapısı** (T217, 2026-10-27; `DAT-21`–`DAT-25`, ADR-008):
 `50b6dd9`, CI #88 yeşil; 1.284 yerel test, `dogrula` ile sekiz koruma kırmızıya düşürüldü (T217
 kaydı). Uygulananlar: ayrı `depots` tablosu (FORCE RLS; `locations` raf olarak kaldı); defterde
 `depot_id` ve `import_run_id` (`count_session_id` sayıma ayrıldı); depo miktarı defterden türetiliyor,
@@ -251,25 +266,15 @@ geçici kapsayıcıda izole inceleme, yalnız tanınan kümede silme. Geliştirm
 
 ## Sıradaki workstream
 
-**Sıradaki iş: çok depo Dilim 2, envanter dosyası aktarımı** (T218; arayüz yok). Onay bekliyor.
-
-**30 Ekim 2026 Cuma ekip testi** (kullanıcı kararı 2026-10-27, A2 ve CEO-8):
-- **Hedef:** Dilim 2 (T218), Dilim 3 (T219: Envanteri Güncelle ekranı ve ürün sayfasında depo
-  dağılımı) ve değer dürüstlüğü (T221'in değer kısmı). Senaryo taze sentetik kiracıda: iki depolu
-  dosyayla ilk kurulum, yalnız Depo 1'i içeren ikinci dosya (Depo 2 ve toplam doğru), aynı dosya
-  yeniden yüklenince uyarı. T171 kabul testi aynı gün (T222).
-- **Risk:** tahmin, Cuma işinin kalan süreyi aştığını gösteriyor (Dilim 2 tek başına ~1,1 gün,
-  ölçüm değil). **Perşembe 12:00 karar noktası:** Dilim 2 güvenilir biçimde bitmemişse Cuma'da yarım
-  envanter akışı hazırmış gibi sunulmaz; T171 kabul testi ve çalışan özelliklerin demosu yapılır,
-  envanter UAT tarihi ekip uygunluğuna göre ayrıca belirlenir. Geliştirme Cuma'ya sıkıştırılmaz.
-- **Cuma'da çalışmayacaklar:** Dilim 4 (T220) yetişmezse birden çok depolu işletmede manuel hareket
-  (`DEPOT_REQUIRED`) ve barkodsuz ürüne manuel hareket; her durumda depoya atama (T223), toplu satış
-  fiyatı ve fiyat geçmişi (T224), toplu mal kabulü (T225), manuel sütun eşleştirme (T229).
+**Sıradaki iş: Faz 0 (repo, backlog ve belge senkronu)**, ardından onaylanacak ilk ürün
+workstream'i. 30 Ekim ekip testinin doğrulanmış sonucu kayıtlı değil: T171 ve T218–T220 manuel
+kabul testi bekliyor (T222). Kullanıcı testinde bulunan eksikler T232 (tek ürün sayım
+düzeltmesi), T223 (eski stoğun depoya atanması) ve T233 (depolar arası transfer).
 
 **Yol haritası sırası** (kullanıcı kararı 2026-10-27; 2026-10-22 sırasının üstüne):
-1. **Çok depo ve Envanteri Güncelle** (T218, T219, T221 değer kısmı; ardından T220 ve T221'in kalanı)
-   ve **T171 kabul testi**. T171 (20.000 satır) geliştirmesi tamam, manuel UAT bekleniyor (`ARC-15`,
-   ADR-007, `DAT-20`, S21, F-02); kabul testinden önce kapatılmaz.
+1. **Çok depo ve Envanteri Güncelle**: Dilim 1–4 ve T221'in değer kısmı kodda; kabul testi
+   (T222) ve **T171 kabul testi**. T171 (20.000 satır) geliştirmesi tamam, manuel UAT bekleniyor
+   (`ARC-15`, ADR-007, `DAT-20`, S21, F-02); kabul testinden önce kapatılmaz.
 2. **T201 gerçek tedarikçi API'si**: ilk hedef, erişimi sağlanabilen bir sağlayıcıyla uçtan uca.
    Sağlayıcı, kimlik doğrulama ve yaklaşım PLAN'da kanıtla seçilir; gerçek sağlayıcı seçilmeden genel
    entegrasyon iddia edilmez. Çok depo kritik yolunun dışında.

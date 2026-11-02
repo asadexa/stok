@@ -48,8 +48,8 @@ Katman kuralları `PROJECT_BRAIN` §5, ilkeler §12. Kayıtlarda yalnız özelli
 | F-11 | Yerel yedek ve güvenli veritabanı sıfırlama | Uygulandı |
 | F-14 | Windows tek tıkla başlatma (`BASLAT.bat`) | Uygulandı |
 | F-12 | B2B tedarikçi verisi V1 | **Geliştiriliyor** (Dilim 1 bitti, UAT kabul 2026-10-22; Dilim 2 T201'den sonra) |
-| F-13 | İnternetten erişilebilir test ortamı | **Planlandı** |
-| F-15 | Envanteri Güncelle: depo bazlı envanter dosyası ve tek dosyayla ilk kurulum | **Geliştiriliyor** (Dilim 1 çekirdeği bitti; dosya hattı ve ekran yok, kullanıma hazır değil) |
+| F-13 | İnternetten erişilebilir test ortamı | **Geliştiriliyor** (S1 imajı ve compose kodda; Lightsail'de çalışıyor (kullanıcı bildirimi), çalışan commit doğrulanmadı) |
+| F-15 | Envanteri Güncelle: depo bazlı envanter dosyası ve tek dosyayla ilk kurulum | **Geliştiriliyor** (Dilim 1–4 kodda; manuel kabul testi bekliyor) |
 
 ---
 
@@ -64,10 +64,10 @@ Katman kuralları `PROJECT_BRAIN` §5, ilkeler §12. Kayıtlarda yalnız özelli
 - **Kararlar:** `DAT-17` (birim hassasiyeti, koli çarpanı); `PRD-19` (barkod isteğe bağlı, sahte barkod yok);
   listeler tek kaynaktan (INV-9).
 - **Dosyalar:** `packages/core/src/products.ts`, `packages/db/src/schema.ts`, `apps/web/src/app/(panel)/urunler/`.
-- **Sınırlar:** barkodsuz ürün yalnız çekirdekte destekleniyor (`insertProduct` boş barkod listesini
-  kabul ediyor, Dilim 1); ürün formu (T220) ve ürün aktarımı (T228) yeni üründe hâlâ barkod istiyor;
-  "son barkod kaldırılamaz" kuralı gözden geçirilecek (T220). Görsel yalnız URL (T136); birim değişimi
-  sonrası eski veri denetlenmiyor (T170).
+- **Sınırlar:** ürün formu barkodsuz ürünü kabul ediyor ve son barkod da kaldırılabiliyor
+  (`LAST_BARCODE` kaldırıldı; T220, `1b759a6`, kabul testi bekliyor); ürün aktarımı yeni üründe hâlâ
+  barkod istiyor (T228). Stok listesi araması barkodu kapsamıyor (T211). Görsel yalnız URL (T136);
+  birim değişimi sonrası eski veri denetlenmiyor (T170).
 
 ### F-02 — Excel/CSV toplu ürün aktarma (Geliştiriliyor: T171 BUILD bitti, kullanıcı kabul testi bekliyor)
 - **İhtiyaç:** ilk kurulumda yüzlerce, büyük işletmede 20.000'e kadar ürünü tek tek girmemek.
@@ -129,6 +129,12 @@ Katman kuralları `PROJECT_BRAIN` §5, ilkeler §12. Kayıtlarda yalnız özelli
   kilit altında; sunucuya özel envanter seçeneği (`count:approve`; sebep ve işaret farktan,
   önizlemeden sonra değişen depo ya da atanmamış stok `STOCK_CHANGED`, `DAT-24`). Depo miktarı
   defterden türetilir, `current_stock` toplam kalır (`DAT-21`, ADR-008).
+- **Depo arayüzü (Dilim 4, `1b759a6`, T220; kabul testi bekliyor):** hareket formu depo soruyor
+  (depo yoksa eskisi gibi, tek depo önceden seçili, birden çok depoda zorunlu; seçenekte o depodaki
+  miktar). Çıkışta Atanmamış Stok kaynağı (`fromUnassigned`; yalnız çıkış, yalnız mevcut atanmamış
+  miktardan, `allowNegative` aşamaz). Barkodsuz ürün stok koduyla ya da ürün sayfasından
+  `?urunId=` ile harekete geçer. Depolar arası transfer (T233), eski stoğun depoya atanması (T223)
+  ve tek ürün sayım düzeltmesi (T232) yok.
 - **Neden böyle:** stok bir sayı değil, değiştirilemez defterin toplamı; geçmiş ancak böyle
   sorgulanabilir. Tek yazma kapısı ve DB tetikleyicisi defter ile stoğun ayrışmasını önler;
   satır kilidi eşzamanlı çıkışların stoğu yetkisiz eksiye düşürmesini engeller.
@@ -178,8 +184,9 @@ Katman kuralları `PROJECT_BRAIN` §5, ilkeler §12. Kayıtlarda yalnız özelli
 - **Neden böyle:** yönetici önce sorunu görmeli, sonra tabloyu; tasarım ilkeleri `PROJECT_BRAIN` §13.
 - **Dosyalar:** `apps/web/src/app/(panel)/panel/`, `stok/`, `apps/web/src/components/alert-bell.tsx`.
 - **Sınırlar:** push bildirimi yok; tükenme tahmini ertelendi (T179). Panel ve kategori değeri
-  alış fiyatı bilinmeyen ürünü 0 sayıyor, `PRC-12` ile çelişiyor (T221). Stok listesi yalnız toplamı
-  gösteriyor; depo dağılımı yok (T219).
+  yalnız alış fiyatı bilinen ürünleri topluyor, fiyatı olmayan stoklu ürün sayısını gösteriyor
+  (`PRC-12`; `7fe8770`, T221). Stok listesi yalnız toplamı gösteriyor; depo dağılımı ürün
+  sayfasında (T219).
 
 ### F-08 — Raporlar ve Excel dışa aktarma
 - **İhtiyaç:** muhasebeciye ve yöneticiye Excel.
@@ -333,7 +340,7 @@ Katman kuralları `PROJECT_BRAIN` §5, ilkeler §12. Kayıtlarda yalnız özelli
   iyileştirmeleri: T210, T212–T215. Sonraki sürüm T202 (B2B sipariş), T203 (otomatik
   periyodik senkron). T53 (bizim sunduğumuz REST) ayrı iştir.
 
-### F-13 — İnternetten erişilebilir test ortamı (Planlandı)
+### F-13 — İnternetten erişilebilir test ortamı (Geliştiriliyor)
 - **İhtiyaç:** uygulamayı localhost dışında, HTTPS ve gerçek bir alan adıyla denemek.
 - **Kapsam:** ilk hedef giriş, ürün yükleme (F-02) ve stok hareketlerinin (F-03) çevrim içi çalışması.
 - **Kararlar:** `OPS-12` (test ve üretim ayrı; teste gerçek müşteri verisi girmez); barındırma
@@ -344,10 +351,14 @@ Katman kuralları `PROJECT_BRAIN` §5, ilkeler §12. Kayıtlarda yalnız özelli
   telefon köprüsü çok örnekli dağıtımda kapalı (`ARC-14`); cron planı (`OPS-02`); UTC sunucuda
   gün sınırı kayar (T122); bulut veritabanının yedeği sağlayıcının yedeğidir, yerel `db:backup`
   değildir, tatbikat T129.
+- **Uygulanan:** AWS Lightsail adayı için Docker imajı ve production compose (S1, `4472fa5`) ile
+  log döndürme (S4.0, `f64e716`); yerelde boş volume'le doğrulandı (runbook "L"). Kullanıcı
+  bildirimi (2026-11-02): uygulama Lightsail'de çalışıyor; çalışan commit doğrulanmadı; otomatik
+  şifreli S3 yedeği sürüyor, tamamlanmadı.
 - **İşler ve sıra:** T144, B2B V1'in ilk BUILD diliminden sonraki yakın adım (B2B'yi geciktirmez);
   üretim ayrı iş T42.
 
-### F-15 — Envanteri Güncelle: depo bazlı envanter dosyası ve tek dosyayla ilk kurulum (Geliştiriliyor: Dilim 1 çekirdeği bitti, kullanıma hazır değil)
+### F-15 — Envanteri Güncelle: depo bazlı envanter dosyası ve tek dosyayla ilk kurulum (Geliştiriliyor: Dilim 1–4 kodda, kabul testi bekliyor)
 - **İhtiyaç:** işletmenin envanter raporunu depo başına yükleyip yalnız o deponun miktarlarını
   güncellemek; ilk kurulumda ürünleri, depoları ve stokları binlerce ürünü elle girmeden tek
   dosyayla oluşturmak; toplam stoğu doğru görmek.
@@ -362,8 +373,13 @@ Katman kuralları `PROJECT_BRAIN` §5, ilkeler §12. Kayıtlarda yalnız özelli
   "Depo". Fiyat sütunları okunmaz, sunucuya gitmez. Testte yalnız aynı biçimde sentetik dosya.
 - **Uygulanan (Dilim 1, `50b6dd9`, T217):** yalnız veri modeli ve hareket kapısı (F-03):
   `depots`, `depot_id`, `import_run_id`, sunucuya özel envanter seçeneği (`DAT-24`), ürün kimliğiyle
-  hareket, barkodsuz ürün çekirdekte. Dosya okuma, önizleme, aktarım ve ekran **yok**.
-- **Akış (planlanan, onaylı PLAN 2026-10-27):** T171 hattı (`ARC-15`) ikinci aktarım türüyle →
+  hareket, barkodsuz ürün çekirdekte.
+- **Uygulanan (Dilim 2–4, 2026-10-27…28; manuel kabul testi bekliyor):** envanter dosyası çekirdeği
+  (`a09157d`, T218; migration 0015, `inventory-file.ts`, `inventory-import.ts`); Stok → Envanteri
+  güncelle ekranı ve ürün sayfasında salt okunur depo dağılımı (`f9a8bef`, T219;
+  `apps/web/src/app/(panel)/stok/envanter/`); harekette depo seçimi ve Atanmamış Stok (`1b759a6`,
+  T220, F-03). Depo bugün yalnız envanter dosyasıyla açılıyor (elle açma/arşiv T226).
+- **Akış (onaylı PLAN 2026-10-27; Dilim 2–3'te uygulandı):** T171 hattı (`ARC-15`) ikinci aktarım türüyle →
   önizleme: değişecek (eski → yeni), değişmeyecek, yeni ürün, yeni depo, hata, belirsiz eşleşme,
   depoya atama bekliyor → onay (aynı içerikte "Bu yeni bir sayım", sunucuda zorunlu) → parça parça
   uygulama: yeni ürün stok kodu başına bir kez (barkodsuz, fiyatsız) ve depo, sonra fark hareketi
@@ -379,7 +395,8 @@ Katman kuralları `PROJECT_BRAIN` §5, ilkeler §12. Kayıtlarda yalnız özelli
   dosyada olmayan stoklu ürün sayısı gösterilmez ve ERP çıktısının sıfır satırları atlama riski
   açık (T227); manuel sütun eşleştirme yok (T229); depo silme ya da arşivleme yok (T226); satış
   fiyatı güncellemesi yok (`PRC-13`, T224); sekme kapanırsa aktarım durur (`ARC-15`).
-- **İşler ve sıra:** Dilim 1 bitti (T217). Cuma 30 Ekim hedefi: Dilim 2 (T218, dosya hattı) ve
-  Dilim 3 (T219, ekran ve depo dağılımı), değer dürüstlüğü (T221); Perşembe 12:00 karar noktası
-  (`CURRENT_STATE`). Sonra Dilim 4 (T220, manuel depo seçimi), Dilim 6 (T222), T223–T225.
+- **İşler ve sıra:** Dilim 1 bitti (T217). Dilim 2–4 (T218–T220) ve değer dürüstlüğü (T221'in
+  değer kısmı) kodda; manuel kabul testi Dilim 6'da (T222). Kalan: "Depoya atama bekliyor" rozeti
+  (T221), eski stoğun depoya atanması (T223), tek ürün sayım düzeltmesi (T232), depolar arası
+  transfer (T233), T224–T225.
   Tehdit ve korumalar `SECURITY_MODEL` S22.
