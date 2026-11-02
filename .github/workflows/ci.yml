@@ -24,8 +24,14 @@ on:
   push:
     # `development` normal geliştirme dalı (CLAUDE.md). Onun push'u CI'sız
     # kalsaydı akıştaki "commit/push → CI" adımı boşa geçer, kırmızı kod
-    # ancak master'a PR açıldığında görünürdü.
-    branches: [master, development]
+    # ancak kararlı dala PR açıldığında görünürdü.
+    #
+    # `main` ve `master` geçiş süresince BİRLİKTE (OPS-13): GitHub push'ta
+    # dalın KENDİ ci.yml'ini okuyor. `master` yeniden adlandırılmadan önce
+    # bu commit'e ilerlerse orada da, adlandırmadan sonra `main`'de de CI
+    # koşar. `master` ancak adlandırma tamamlanınca çıkarılır; erken
+    # çıkarılırsa kararlı daldaki push CI'sız kalır.
+    branches: [main, master, development]
   pull_request:
 
 # GITHUB_TOKEN yalnızca okuyabilsin. Varsayılan izinler repo ve
@@ -39,12 +45,13 @@ permissions:
 # Aynı dal üstünde arka arkaya push yapılırsa eski koşuyu iptal et:
 # ikinci push'un sonucu zaten birincininkini geçersiz kılıyor.
 #
-# MASTER HARİÇ. Orada iptal edilen koşunun commit'i "durumu bilinmiyor"
-# olarak kalıyor. Bugün zararsız, ama T42 (deploy) yeşil koşuya
-# bağlanacak ve iptal edilmiş bir commit başarısız gibi görünecek.
+# KARARLI DAL HARİÇ (`main`; geçiş süresince `master` de). Orada iptal
+# edilen koşunun commit'i "durumu bilinmiyor" olarak kalıyor. Bugün
+# zararsız, ama T42 (deploy) yeşil koşuya bağlanacak ve iptal edilmiş bir
+# commit başarısız gibi görünecek.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/master' }}
 
 jobs:
   test:

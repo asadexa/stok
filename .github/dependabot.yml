@@ -7,6 +7,13 @@
 # HAFTALIK, GÜNLÜK DEĞİL: günlük güncelleme tek kişilik bir projede
 # incelenemeyecek kadar çok PR üretir ve ilk çare Dependabot'u kapatmak
 # olur. Haftalık, birikimi yönetilebilir tutuyor.
+#
+# HEDEF `development` (OPS-13): güncellemeler önce entegrasyon dalında CI
+# ve kullanıcı testinden geçip sürümle `main`'e gider. Hedef verilmezse
+# PR varsayılan dala açılır ve kararlı dala test edilmemiş değişiklik girer.
+# İKİ SINIR: GitHub bu dosyayı yalnız VARSAYILAN daldan okur, yani ayar
+# ancak `main`'e ulaşınca etkinleşir. Güvenlik güncellemeleri bu ayarı
+# dikkate almaz ve her zaman varsayılan dala açılır.
 
 version: 2
 updates:
@@ -15,6 +22,7 @@ updates:
   # sabitlemenin bakım maliyetini üstlenen şey bu.
   - package-ecosystem: github-actions
     directory: /
+    target-branch: development
     schedule:
       interval: weekly
     commit-message:
@@ -23,6 +31,7 @@ updates:
   # pnpm workspace: kök manifest tüm paketleri kapsıyor.
   - package-ecosystem: npm
     directory: /
+    target-branch: development
     schedule:
       interval: weekly
     commit-message:
