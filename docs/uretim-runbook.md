@@ -76,7 +76,7 @@ adımlar için gerekmiyor.
 docker network create citech-proxy
 
 # 2) Kaynak: dağıtılacak commit'i açıkça seç
-git clone https://github.com/asadexa/stok.git /opt/citech/stok
+git clone https://github.com/KeremGerede/stok.git /opt/citech/stok
 cd /opt/citech/stok
 git checkout <commit>
 

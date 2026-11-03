@@ -4,11 +4,12 @@ Yalnız BUGÜNÜN gerçeği. Her merge'te ya da durum değiştiğinde güncellen
 satırlar silinir (tarihçe git'te). Ayrıntı yazılmaz: işler → `TODOS.md`,
 kararlar → `DECISIONS.md`, model → `PROJECT_BRAIN.md`.
 
-**Tarih:** 2026-11-03 · **Çalışma branch'i:** `development` (`311c39d`) · **Stabil referans:** `master`
-(`master` = `dac05ff`, devralma öncesi son kod; geliştirme `development`'ta yapılır). Dal modeli
-`OPS-13`: `master` → `main` geçişi **henüz yapılmadı**; `master` fast-forward ile `development`'a
-ilerletilip GitHub'da yeniden adlandırılacak. Yedek dallar `backup/master-pre-migration`
-(`dac05ff`) ve `backup/development-pre-migration` (`5199069`).
+**Tarih:** 2026-11-03 · **Depo:** `KeremGerede/stok` (eski adres `asadexa/stok` GitHub'da
+yönlendiriliyor) · **Çalışma branch'i:** `development` · **Kararlı dal:** `main` (varsayılan dal).
+İkisi de `c2f9805`. Dal modeli `OPS-13`: `master` fast-forward ile ilerletilip `main` olarak yeniden
+adlandırıldı. Ruleset'ler: `main` PR, üç zorunlu CI işi, silme ve force-push yasağı; `development`
+silme ve force-push yasağı; `backup/*` silme ve force-push yasağı. Yedek dallar
+`backup/master-pre-migration` (`dac05ff`) ve `backup/development-pre-migration` (`5199069`).
 
 ## Deploy
 
@@ -124,8 +125,9 @@ sınırından geçti). Önizleme yanıtı blob'u tarayıcıya taşıyor (uzun: 3
 görünüyor. 4 MiB − 2 KB dosya eyleme ulaştı; tam 4 MiB dosya istemci denetimini geçip Next'in
 gövde sınırına çarptı (500, genel hata ekranı; T208); 4 MiB + 1 B istemcide durdu.
 
-GitHub CI: son koşu #97 (`311c39d`, CI tetikleyicisi ve Dependabot hedefi, OPS-13, 2026-11-02)
-yeşil. #95 (`f64e716`, log döndürme, 2026-10-28) yeşil. #90–#94 de yeşil: #90
+GitHub CI: son koşu #101 (`c2f9805`, `main` push, 2026-11-03) yeşil; #98 (`c2f9805`,
+`development`) yeşil, #99 (`c2f9805`, `master`) ikinci denemede yeşil. #97 (`311c39d`, CI
+tetikleyicisi ve Dependabot hedefi, OPS-13, 2026-11-02) yeşil. #95 (`f64e716`, log döndürme, 2026-10-28) yeşil. #90–#94 de yeşil: #90
 `a09157d` (Dilim 2, ikinci denemede), #91 `f9a8bef` (Dilim 3), #92 `7fe8770` (T221), #93 `1b759a6`
 (Dilim 4), #94 `4472fa5` (S1 Docker; CI Docker imajını derlemiyor). Öncesinde #88 (`50b6dd9`, çok depo Dilim 1, 2026-10-27) yeşil, üç iş de geçti; öncesinde
 #87 (`3db7d81`, T171, 2026-10-23) yeşil. #84 (`667512a`, T200 1b, 2026-10-20) yeşil; üç iş de adım adım geçti (Linux
@@ -144,8 +146,11 @@ Neden test düzeneğiydi (geçici compose projesi bekleme betiğine aktarılmıy
 önce `SELECT 1` kapısı ekledi. Ortak `wait-for-db.mjs`'te kalan benzer pencere: T195.
 `581f291` (#68) ilk denemede
 Linux web derlemesinde Turbopack font çözümleme hatasıyla kırmızıydı, ikinci deneme yeşil; kök
-neden bilinmiyor, tekrar ederse ayrı incelenecek. master'daki son koşu #44 (2026-09-14) yeşil.
-9 Dependabot PR açık, 3'ü kırmızı (T140).
+neden bilinmiyor. `c2f9805`'te aynı tür hata tekrar etti: `master` push'unun CI #99'unda ilk
+denemede yalnız demo işinin "Web derlemesi" adımı düştü, ikinci deneme yeşil (T230). `main`'deki
+son koşu #101 (`c2f9805`, push) yeşil. Açık Dependabot PR'ları: #15 (`minor-ve-yama`, 14
+güncelleme) `development`'ı hedefliyor, CI #100 yeşil; eski tabandaki 8 büyük sürüm PR'ı (#2, #3,
+#7–#10, #13, #14) adlandırmayla `main`'e geçti ve ayrı karar bekliyor (T140).
 
 ## Çalışan ana kapsam (web)
 
@@ -286,16 +291,12 @@ geçici kapsayıcıda izole inceleme, yalnız tanınan kümede silme. Geliştirm
 
 ## Sıradaki workstream
 
-**Sıradaki iş: Faz 0.3 `master` → `main` geçişi (`OPS-13`, `OPS-14`)**, ardından onaylanacak ilk
-ürün workstream'i. Geçiş öncesinde kalan engeller:
-- Bu belge senkronunun commit'i ve CI'ı (kararlı aday bu commit olur; uygulama kodu `311c39d` ile aynı).
-- `Protect migration backups` ruleset'i kimlik doğrulamasız API'de hiçbir dalı hedeflemiyor
-  görünüyor (`include` boş); GitHub arayüzünde doğrulanmadı.
-- GitHub yönetici yetkisi doğrulanmadı (adlandırma ve kurallar için gerekli).
-- 9 açık Dependabot PR'ı `master`'ı hedefliyor; kapatma ya da `development`'a yönlendirme kararı.
+**Faz 0.3 `master` → `main` geçişinin dal kısmı tamamlandı (`OPS-13`)**; sonra onaylanacak ilk
+ürün workstream'i gelir. Geçişten kalan işler:
+- Eski 8 Dependabot PR'ı için karar: `development`'a yönlendirme ya da kapatma (T140).
 - Bilinen sınırlar listesinin kullanıcı tarafından kabulü (kayıtlı değil): T221 rozeti, T223, T226, T227, T232, T233, T216, T208,
   T234–T237.
-Geçişten sonra: Lightsail sunucu doğrulamaları (`OPS-14`, T171 bellek ölçümü), T222 test notu.
+- Lightsail sunucu doğrulamaları (`OPS-14`, T171 bellek ölçümü), T222 test notu.
 Kullanıcı testinde bulunan eksikler T232 (tek ürün sayım düzeltmesi), T223 (eski stoğun depoya
 atanması) ve T233 (depolar arası transfer).
 
@@ -331,8 +332,8 @@ geçmeden oraya hiçbir WS-1 değişikliği uygulanmaz; tatbikat henüz yok. Tam
 2. Sonra T121 + T122 → T126 → T124 → T123. Her biri minimum değişiklik
    + test + `dogrula`.
 
-Paralelde, insan işi ve kod dışı: T120 (sahiplik), T140 (Dependabot triyajı +
-branch koruması + zorunlu CI kontrolleri).
+Paralelde, insan işi ve kod dışı: T120 (sahiplik), T140 (Dependabot triyajı, yayın; dal
+koruması ve zorunlu CI kontrolleri 2026-11-03'te kuruldu).
 
 Ardından ürün hazırlığı (T127; kapsam kararıyla), en son üretim deploy'u (T42, T129). Çevrim
 içi test ortamı (T144) P1'e çıktı; önkoşulu (T124) ve bilinen sınırları T144 kaydında.
