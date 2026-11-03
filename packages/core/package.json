@@ -18,10 +18,10 @@
   "dependencies": {
     "@stok/db": "workspace:*",
     "@stok/shared": "workspace:*",
-    "drizzle-orm": "^0.45.2",
+    "drizzle-orm": "^0.45.4",
     "exceljs": "^4.4.0",
-    "jose": "^6.2.9",
-    "jszip": "^3.10.1",
+    "jose": "^6.2.14",
+    "jszip": "^3.10.2",
     "nodemailer": "^9.0.5",
     "postgres": "^3.4.5",
     "zod": "^3.24.1"
