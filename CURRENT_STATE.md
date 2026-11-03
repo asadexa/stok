@@ -6,8 +6,9 @@ kararlar → `DECISIONS.md`, model → `PROJECT_BRAIN.md`.
 
 **Tarih:** 2026-11-03 · **Depo:** `KeremGerede/stok` (eski adres `asadexa/stok` GitHub'da
 yönlendiriliyor) · **Çalışma branch'i:** `development` · **Kararlı dal:** `main` (varsayılan dal).
-İkisi de `c2f9805`. Dal modeli `OPS-13`: `master` fast-forward ile ilerletilip `main` olarak yeniden
-adlandırıldı. Ruleset'ler: `main` PR, üç zorunlu CI işi, silme ve force-push yasağı; `development`
+`main` = `6ac17a7` (PR #16, squash); `development` bu commit'i merge ile içeriyor, uygulama kodu
+iki dalda aynı. Dal modeli `OPS-13`: `master` fast-forward ile ilerletilip `main` olarak yeniden
+adlandırıldı; `development` → `main` PR'ları merge commit ile birleşir. Ruleset'ler: `main` PR, üç zorunlu CI işi, silme ve force-push yasağı; `development`
 silme ve force-push yasağı; `backup/*` silme ve force-push yasağı. Yedek dallar
 `backup/master-pre-migration` (`dac05ff`) ve `backup/development-pre-migration` (`5199069`).
 
@@ -125,7 +126,8 @@ sınırından geçti). Önizleme yanıtı blob'u tarayıcıya taşıyor (uzun: 3
 görünüyor. 4 MiB − 2 KB dosya eyleme ulaştı; tam 4 MiB dosya istemci denetimini geçip Next'in
 gövde sınırına çarptı (500, genel hata ekranı; T208); 4 MiB + 1 B istemcide durdu.
 
-GitHub CI: son koşu #101 (`c2f9805`, `main` push, 2026-11-03) yeşil; #98 (`c2f9805`,
+GitHub CI: son koşu #104 (`6ac17a7`, `main` push, PR #16, 2026-11-03) yeşil; #102 (`3297af9`,
+`development`) ikinci denemede yeşil (T230). #101 (`c2f9805`, `main` push) yeşil; #98 (`c2f9805`,
 `development`) yeşil, #99 (`c2f9805`, `master`) ikinci denemede yeşil. #97 (`311c39d`, CI
 tetikleyicisi ve Dependabot hedefi, OPS-13, 2026-11-02) yeşil. #95 (`f64e716`, log döndürme, 2026-10-28) yeşil. #90–#94 de yeşil: #90
 `a09157d` (Dilim 2, ikinci denemede), #91 `f9a8bef` (Dilim 3), #92 `7fe8770` (T221), #93 `1b759a6`
@@ -147,8 +149,8 @@ Neden test düzeneğiydi (geçici compose projesi bekleme betiğine aktarılmıy
 `581f291` (#68) ilk denemede
 Linux web derlemesinde Turbopack font çözümleme hatasıyla kırmızıydı, ikinci deneme yeşil; kök
 neden bilinmiyor. `c2f9805`'te aynı tür hata tekrar etti: `master` push'unun CI #99'unda ilk
-denemede yalnız demo işinin "Web derlemesi" adımı düştü, ikinci deneme yeşil (T230). `main`'deki
-son koşu #101 (`c2f9805`, push) yeşil. Açık Dependabot PR'ları: #15 (`minor-ve-yama`, 14
+denemede yalnız demo işinin "Web derlemesi" adımı düştü, ikinci deneme yeşil; #102'de bu kez
+Windows işinin "Web derlemesi" adımı (T230). Açık Dependabot PR'ları: #15 (`minor-ve-yama`, 14
 güncelleme) `development`'ı hedefliyor, CI #100 yeşil; eski tabandaki 8 büyük sürüm PR'ı (#2, #3,
 #7–#10, #13, #14) adlandırmayla `main`'e geçti ve ayrı karar bekliyor (T140).
 
@@ -291,8 +293,10 @@ geçici kapsayıcıda izole inceleme, yalnız tanınan kümede silme. Geliştirm
 
 ## Sıradaki workstream
 
-**Faz 0.3 `master` → `main` geçişinin dal kısmı tamamlandı (`OPS-13`)**; sonra onaylanacak ilk
-ürün workstream'i gelir. Geçişten kalan işler:
+**Faz 0.3 `master` → `main` geçişi kapanış aşamasında (`OPS-13`)**; sonra onaylanacak ilk ürün
+workstream'i gelir. Kalan işler:
+- Kapanış: bu belge senkronunun `development` → `main` PR'ı (merge commit ile) ve ardından
+  `development`'ın `main`'e fast-forward edilmesi.
 - Eski 8 Dependabot PR'ı için karar: `development`'a yönlendirme ya da kapatma (T140).
 - Bilinen sınırlar listesinin kullanıcı tarafından kabulü (kayıtlı değil): T221 rozeti, T223, T226, T227, T232, T233, T216, T208,
   T234–T237.
