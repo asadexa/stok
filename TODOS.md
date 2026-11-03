@@ -416,6 +416,9 @@ işler ve güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
     derlemesi" adımı düştü (API'deki adım sonucu); aynı commit #98'de ve #99'un test işinde
     derlendi. Hata metni kullanıcı bildirimine göre Turbopack'in IBM Plex Sans font çözümleme
     hatası; günlük kimlik doğrulamasız okunamadı. İkinci deneme yeşil. Kök neden kanıtlanmadı.
+    CI #102 (`3297af9`, `development` push, 2026-11-03): ilk denemede bu kez Windows işinin "Web
+    derlemesi" adımı düştü, diğer iki iş geçti; yeniden çalıştırmada yeşil. Commit uygulama kodunu
+    değiştirmiyordu. Hata metni okunamadı; bu sorunla aynı olduğu kanıtlanmadı.
   - Yapılacak: seçenekleri değerlendir: yazı tiplerini depoya alıp `next/font/local` kullanmak
     (ağ bağımlılığı kalkar, görünüm aynı kalmalı) ya da derlemeyi yeniden denemek. Görsel
     değişiklik olduğu için tarayıcıyla kontrol gerekir.
@@ -642,8 +645,8 @@ işler ve güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
     (CI atlanabilir). Tag/release/changelog, CODEOWNERS ve SECURITY.md yok.
   - Durum (2026-11-03): dal koruması kuruldu (`OPS-13`): `main` PR + üç zorunlu CI işi + silme
     ve force-push yasağı; `development` ve `backup/*` silme ve force-push yasağı. `development`'a
-    doğrudan push serbest, zorunlu CI kuralı bilinçli olarak yok (`OPS-13` koruma modeli). Kalan:
-    ruleset bypass listesinin doğrulanması, eski 8 Dependabot PR'ı (#2, #3, #7–#10, #13, #14; hepsi
+    doğrudan push serbest, zorunlu CI kuralı bilinçli olarak yok (`OPS-13` koruma modeli). Üç ruleset'in
+    bypass listesi boş (kullanıcı API kontrolü). Kalan: eski 8 Dependabot PR'ı (#2, #3, #7–#10, #13, #14; hepsi
     `main`'i hedefliyor), tag/release, CODEOWNERS, SECURITY.md.
   - Bağlı: T120.
 
