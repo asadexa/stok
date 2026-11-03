@@ -31,6 +31,8 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
   - Yapılacak (insan): repo transferi + görünürlük kararı, LICENSE / tescilli ürün
     notu, yazılı IP devri, artifact ve oturum dökümlerinin dışa aktarılması,
     hesap/secret sahipliği listesi (GitHub; ileride Vercel, Supabase, SMTP, domain).
+  - Durum (2026-11-03): repo `KeremGerede/stok`'a taşındı (aynı depo kimliği); hâlâ public.
+    Kararlı dal `main` korumalı (T140). Kalan maddeler açık.
   - Bağlı: T140. Kaynak: devralma denetimi 2026-10-08.
 
 ## P1
@@ -410,6 +412,10 @@ işler ve güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
   - Kanıt: S1 Docker derlemesi (2026-10-28, Linux konteyneri): aynı bağlamla ilk derleme geçti,
     ikinci derleme bu hatayla düştü, üçüncü derleme geçti. Kaynak değişmemişti. CI #68
     (`581f291`) aynı hatayla bir kez kırmızıydı; kök nedeni de büyük olasılıkla bu, kanıtı yok.
+    CI #99 (`c2f9805`, `master` push, 2026-11-03): ilk denemede yalnız demo işinin "Web
+    derlemesi" adımı düştü (API'deki adım sonucu); aynı commit #98'de ve #99'un test işinde
+    derlendi. Hata metni kullanıcı bildirimine göre Turbopack'in IBM Plex Sans font çözümleme
+    hatası; günlük kimlik doğrulamasız okunamadı. İkinci deneme yeşil. Kök neden kanıtlanmadı.
   - Yapılacak: seçenekleri değerlendir: yazı tiplerini depoya alıp `next/font/local` kullanmak
     (ağ bağımlılığı kalkar, görünüm aynı kalmalı) ya da derlemeyi yeniden denemek. Görsel
     değişiklik olduğu için tarayıcıyla kontrol gerekir.
@@ -634,6 +640,11 @@ işler ve güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
   - Neden: 9 Dependabot PR açık; minor grup, zod 4 ve coverage-v8 5 CI'da kırmızı
     (2026-09-14'ten beri kimse bakmıyor). Master korumasız, zorunlu kontrol yok
     (CI atlanabilir). Tag/release/changelog, CODEOWNERS ve SECURITY.md yok.
+  - Durum (2026-11-03): dal koruması kuruldu (`OPS-13`): `main` PR + üç zorunlu CI işi + silme
+    ve force-push yasağı; `development` ve `backup/*` silme ve force-push yasağı. `development`'a
+    doğrudan push serbest, zorunlu CI kuralı bilinçli olarak yok (`OPS-13` koruma modeli). Kalan:
+    ruleset bypass listesinin doğrulanması, eski 8 Dependabot PR'ı (#2, #3, #7–#10, #13, #14; hepsi
+    `main`'i hedefliyor), tag/release, CODEOWNERS, SECURITY.md.
   - Bağlı: T120.
 
 - [ ] **T141 (P2)** - denetim - **Admin eylemleri için audit log yok**

@@ -414,4 +414,4 @@ güncellenir. Yeni tehdit yeni ID alır; ID yeniden kullanılmaz.
 - **Güvenlik başlıkları yok:** CSP yok, `frame-ancestors`/X-Frame-Options yok; panel iframe'e konabilir (T137). CSP eklenirken telefon okutması için `'wasm-unsafe-eval'` ve kamera izni gerekecek (T137 notu).
 - **Yönetici eylemleri için denetim izi yok** (T141).
 - **Harici izleme ve alarm yok:** güvenlik olayları dahil (T129).
-- **Repo public ve korumasız:** güvenlik tasarımı ve demo kimlik bilgileri herkese açık (T120, T140).
+- **Repo public:** güvenlik tasarımı ve demo kimlik bilgileri herkese açık (T120). Kararlı dal `main` 2026-11-03'ten beri ruleset ile korumalı (PR + zorunlu CI). `development`'a doğrudan push serbest ve orada kırmızı CI'ı ruleset durdurmaz (`OPS-13` koruma modeli); bu düzen PR öncesi güvenlik incelemesinin yerine geçmez (T140).
