@@ -4,6 +4,7 @@ import type { ImportRunPreview, ImportRunProgress, ImportRunReportRow } from '@s
 import { errorText } from '@stok/shared'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { CountTile } from '@/components/count-tile'
+import { HeaderRowNote } from '@/components/header-row-note'
 import { formatCount } from '@/lib/format'
 import type { ActionResult } from '@/server/import-action'
 import type { ParseKind, ParseRequest, ParseResult } from './parse.worker'
@@ -45,7 +46,7 @@ type Phase<P> =
   | { step: 'select' }
   | { step: 'reading'; fileName: string }
   | { step: 'uploading'; fileName: string; sent: number; total: number }
-  | { step: 'preview'; fileName: string; runId: string; preview: P }
+  | { step: 'preview'; fileName: string; runId: string; preview: P; headerRowNumber: number }
   | { step: 'running'; fileName: string; runId: string; progress: ImportRunProgress; cancelling: boolean; stalled: boolean }
   | { step: 'result'; fileName: string; runId: string; progress: ImportRunProgress; report: ImportRunReportRow[] }
 
@@ -260,7 +261,13 @@ export function RunWizard<P>({
 
     const previewed = await once(() => actions.preview(runId))
     if (!previewed.ok) return failUpload(previewed.error)
-    setPhase({ step: 'preview', fileName, runId, preview: previewed.value })
+    setPhase({
+      step: 'preview',
+      fileName,
+      runId,
+      preview: previewed.value,
+      headerRowNumber: parsed.file.headerRowNumber ?? 1,
+    })
   }
 
   function failUpload(message: string) {
@@ -395,13 +402,16 @@ export function RunWizard<P>({
         </form>
       ) : null}
 
-      {phase.step === 'preview'
-        ? renderPreview({
+      {phase.step === 'preview' ? (
+        <>
+          <HeaderRowNote headerRowNumber={phase.headerRowNumber} />
+          {renderPreview({
             preview: phase.preview,
             runId: phase.runId,
             onBegin: (confirmNewCount) => begin(phase.fileName, phase.runId, confirmNewCount),
-          })
-        : null}
+          })}
+        </>
+      ) : null}
 
       {phase.step === 'running' ? (
         <ProgressPanel

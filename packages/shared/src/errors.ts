@@ -25,6 +25,21 @@ import { formatMoneyTr } from './prices'
 
 export type ErrorDetails = Record<string, unknown>
 
+/**
+ * Eksik sütun metinlerinin ortak eki: başlığın kaç satırda arandığı ve 1. satırın
+ * altındaki kısa adlar ("Kod", "Ad"). Kısa ad orada bilerek tanınmıyor
+ * (`SHORT_HEADERS`); söylenmeseydi kullanıcı "Kod sütunu var ama bulunamadı"
+ * diye takılırdı.
+ */
+function scannedNote(d: ErrorDetails): string {
+  const scanned = typeof d.scanned === 'number' ? ` Başlık ilk ${d.scanned} satırda arandı.` : ''
+  const short =
+    typeof d.shortNames === 'string'
+      ? ` Başlık 1. satırda değilse kısa adlar (${d.shortNames}) tanınmaz; sütunun açık adını yazın.`
+      : ''
+  return scanned + short
+}
+
 export interface ErrorMeta {
   http: number
   /** Outbox tekrar denemeli mi, yoksa kullanıcıya mı sormalı. */
@@ -240,18 +255,25 @@ export const ERROR_CODES = {
   },
 
   // --- Toplu içe aktarma (T23 / E1) ---
+  // Başlık ilk `scanned` satırda aranıyor (`findHeaderRow`); metin bunu söylüyor,
+  // yoksa üstünde uzun bir rapor bloğu olan dosyada kullanıcı neden
+  // bulunamadığını anlayamazdı. Sayfası olmayan xlsx'te `scanned` yok.
   IMPORT_NO_HEADER: {
     http: 400,
     retryable: false,
-    tr: () => 'Dosyanın ilk satırında sütun başlıkları bulunamadı',
+    tr: (d) =>
+      typeof d.scanned === 'number'
+        ? `Dosyanın ilk ${d.scanned} satırında sütun başlıkları bulunamadı`
+        : 'Dosyada sütun başlıkları bulunamadı',
   },
   IMPORT_MISSING_COLUMN: {
     http: 400,
     retryable: false,
     // Bulunan başlıklar metinde: kullanıcı sütunu yanlış adlandırmışsa
-    // hangi adı yazdığını görmeden düzeltemez.
+    // hangi adı yazdığını görmeden düzeltemez. "Bulunanlar", zorunlu sütunlara
+    // en yakın satırın başlıkları.
     tr: (d) =>
-      `Dosyada "Stok Kodu" ve "Ürün Adı" sütunları olmalı. Bulunanlar: ${d.found ?? '—'}`,
+      `Dosyada "Stok Kodu" (ya da "Malzeme Kodu") ve "Ürün Adı" (ya da "Malzeme Açıklaması") sütunları olmalı.${scannedNote(d)} Bulunanlar: ${d.found ?? '—'}`,
   },
   IMPORT_TOO_LARGE: {
     http: 413,
@@ -297,7 +319,7 @@ export const ERROR_CODES = {
     // Sütun sessizce yok sayılsaydı "Ambar"sız dosya bütün miktarları
     // depoya atanmamış stok sanardı.
     tr: (d) =>
-      `Envanter dosyasında "Malzeme Kodu", "Envanter Miktarı" ve "Ambar" sütunları olmalı. Eksik: ${d.missing ?? '—'}. Bulunanlar: ${d.found ?? '—'}`,
+      `Envanter dosyasında "Malzeme Kodu", "Envanter Miktarı" ve "Ambar" sütunları olmalı. Eksik: ${d.missing ?? '—'}.${scannedNote(d)} Bulunanlar: ${d.found ?? '—'}`,
   },
   IMPORT_REPEAT_UNCONFIRMED: {
     http: 409,
@@ -332,8 +354,8 @@ export const ERROR_CODES = {
     retryable: false,
     // Bulunan başlıklar metinde: IMPORT_MISSING_COLUMN ile aynı gerekçe.
     tr: (d) =>
-      'Dosyada "Ürün Adı", "Fiyat" ve "Tedarikçi Kodu" ya da "Barkod" sütunları olmalı. ' +
-      `Bulunanlar: ${d.found || '—'}`,
+      'Dosyada "Ürün Adı", "Fiyat" ve "Tedarikçi Kodu" ya da "Barkod" sütunları olmalı.' +
+      `${scannedNote(d)} Bulunanlar: ${d.found || '—'}`,
   },
   SUPPLIER_FEED_DUPLICATE_COLUMN: {
     http: 400,

@@ -257,9 +257,12 @@ export async function previewImport(
 
 /** Dosya düzeyi uyarılar. Aktarım kaydı da (T171) aynı cümleleri saklıyor. */
 export function importNotices(ignoredQtyColumns: string[]): string[] {
-  return ignoredQtyColumns.map(
-    (header) =>
-      `"${header}" sütunu açılış stoğu olarak okunmadı. Açılış stoğu girmek için sütunun adı "Açılış Stoğu" olmalı.`,
+  return ignoredQtyColumns.map((header) =>
+    // ERP envanter çıktısının miktarı deponun toplamı; ürün aktarımının tek
+    // depolu devri değil. Doğru yol envanter ekranı, sütunu yeniden adlandırmak değil.
+    normalizeHeader(header) === 'envanter miktari'
+      ? `"${header}" sütunu okunmadı. Depo bazında stok girmek için Stok → Envanteri güncelle ekranını kullanın.`
+      : `"${header}" sütunu açılış stoğu olarak okunmadı. Açılış stoğu girmek için sütunun adı "Açılış Stoğu" olmalı.`,
   )
 }
 
