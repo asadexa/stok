@@ -137,8 +137,13 @@ export interface PreviewRow {
 export interface OpeningPlan {
   qty: number
   unit: Unit
-  /** Ürünün tekli (çarpanı 1) barkodu: koli barkoduyla yazılsa miktar çarpılırdı. */
-  barcode: string
+  /**
+   * Ürünün tekli (çarpanı 1) barkodu; varsa devir onunla yazılıyor ve hareket
+   * barkodu kayda geçiriyor. Yoksa (barkodsuz ya da yalnız koli barkodlu ürün,
+   * PRD-19) devir ürün kimliğiyle yazılıyor (DAT-22): çarpan 1, miktar ürünün
+   * biriminde. Koli barkoduyla yazılsaydı miktar çarpılırdı.
+   */
+  barcode?: string
   /** Alış fiyatı (PRC-05): liste fiyatına eşit, sapma sebebi gerekmiyor. */
   unitPrice: number
 }
@@ -257,9 +262,12 @@ export async function previewImport(
 
 /** Dosya düzeyi uyarılar. Aktarım kaydı da (T171) aynı cümleleri saklıyor. */
 export function importNotices(ignoredQtyColumns: string[]): string[] {
-  return ignoredQtyColumns.map(
-    (header) =>
-      `"${header}" sütunu açılış stoğu olarak okunmadı. Açılış stoğu girmek için sütunun adı "Açılış Stoğu" olmalı.`,
+  return ignoredQtyColumns.map((header) =>
+    // ERP envanter çıktısının miktarı deponun toplamı; ürün aktarımının tek
+    // depolu devri değil. Doğru yol envanter ekranı, sütunu yeniden adlandırmak değil.
+    normalizeHeader(header) === 'envanter miktari'
+      ? `"${header}" sütunu okunmadı. Depo bazında stok girmek için Stok → Envanteri güncelle ekranını kullanın.`
+      : `"${header}" sütunu açılış stoğu olarak okunmadı. Açılış stoğu girmek için sütunun adı "Açılış Stoğu" olmalı.`,
   )
 }
 
@@ -359,9 +367,16 @@ function evaluateRow(
   const productId = existingProduct?.id
   const isUpdate = productId !== undefined
 
-  // Yeni üründe barkod ZORUNLU: barkodsuz ürün depoda okutulamaz, yani
-  // içe aktarma "başarılı" görünüp kullanılamaz bir katalog üretirdi.
-  if (!isUpdate && barcode === '') push('barcode', 'Yeni ürün için barkod zorunlu')
+  // Barkod İSTEĞE BAĞLI (PRD-19, T228): ürünün kimliği stok kodu. Sahte barkod
+  // üretilmiyor. Barkodsuz satırda barkod türü ya da koli içi adet doluysa
+  // satır hata: o değerler bir barkoda ait ve sessizce yok sayılsaydı kullanıcı
+  // koli barkodunun kaydedildiğini sanırdı.
+  if (barcode === '' && (data.barcodeKind !== undefined || data.qtyMultiplier !== undefined)) {
+    push(
+      data.barcodeKind !== undefined ? 'barcodeKind' : 'qtyMultiplier',
+      'Barkod boş; barkod türü ve koli içi adet yalnız barkodla birlikte girilir',
+    )
+  }
 
   if (data.barcodeKind && data.qtyMultiplier !== undefined) {
     if (!multiplierMatchesKind(data.barcodeKind, data.qtyMultiplier)) {
@@ -400,24 +415,19 @@ function evaluateRow(
       push('openingQty', 'Açılış stoğu için alış fiyatı gerekli (Alış Fiyatı sütunu ya da üründe kayıtlı)')
     }
 
-    // Tekli barkod: koli barkoduyla yazılsaydı devir çarpanla çarpılırdı.
+    // Tekli barkod varsa devir onunla (bugünkü yol, hareket barkodu kayda
+    // geçiriyor); yoksa ürün kimliğiyle (`writeOpening`). Eskiden tekli barkodu
+    // olmayan satırda plan hiç kurulmuyordu: barkodsuz yeni satırda hata da
+    // çıkmıyor, devir sessizce düşüyordu (T228).
     const rowHasUnitBarcode =
       barcode !== '' && (data.barcodeKind ?? 'UNIT') === 'UNIT' && (data.qtyMultiplier ?? 1) === 1
-    const openingBarcode = rowHasUnitBarcode ? barcode : (existingProduct?.unitBarcode ?? null)
-    if (openingBarcode === null && (isUpdate || barcode !== '')) {
-      push(
-        'openingQty',
-        isUpdate
-          ? 'Açılış stoğu için üründe tekli barkod yok; Barkod sütununa tekli barkod yazın'
-          : 'Açılış stoğu için tekli barkod gerekli; bu satırdaki barkod koli barkodu',
-      )
-    }
+    const openingBarcode = rowHasUnitBarcode ? barcode : (existingProduct?.unitBarcode ?? undefined)
 
     if (existingProduct?.hasMovements) {
       warnings.push('Devir atlanacak: üründe hareket var; ürün bilgisi güncellenecek')
     }
-    if (unitPrice !== null && openingBarcode !== null) {
-      opening = { qty, unit: productUnit, barcode: openingBarcode, unitPrice }
+    if (unitPrice !== null) {
+      opening = { qty, unit: productUnit, ...(openingBarcode ? { barcode: openingBarcode } : {}), unitPrice }
     }
   }
 
@@ -456,15 +466,26 @@ function checkCreate(data: ParsedRow) {
     ...(data.purchasePrice != null ? { purchasePrice: data.purchasePrice } : {}),
     ...(data.salePrice != null ? { salePrice: data.salePrice } : {}),
     ...(data.minStock !== undefined ? { minStock: data.minStock } : {}),
-    barcodes: [
-      {
-        barcode: data.barcode ?? '',
-        ...(data.barcodeKind ? { kind: data.barcodeKind } : {}),
-        ...(data.qtyMultiplier !== undefined ? { qtyMultiplier: data.qtyMultiplier } : {}),
-      },
-    ],
+    barcodes: barcodesOf(data),
   })
   return parsed.success ? [] : issuesOf(parsed.error)
+}
+
+/**
+ * Yeni ürünün barkod listesi: barkod yoksa BOŞ (PRD-19). Boş metinli bir barkod
+ * göndermek şemada hata olurdu ya da boş barkod yazmaya çalışırdı. Önizleme
+ * (`checkCreate`) ile kayıt (`createPayload`) aynı listeyi kullanıyor: ayrışsalar
+ * önizlemenin geçtiği satır kayıtta patlardı.
+ */
+function barcodesOf(data: ParsedRow) {
+  if (!data.barcode) return []
+  return [
+    {
+      barcode: data.barcode,
+      ...(data.barcodeKind ? { kind: data.barcodeKind } : {}),
+      ...(data.qtyMultiplier !== undefined ? { qtyMultiplier: data.qtyMultiplier } : {}),
+    },
+  ]
 }
 
 function checkUpdate(data: ParsedRow) {
@@ -780,7 +801,10 @@ async function writeOpening(
       actor,
       {
         idempotencyKey: openingKey(actor.tenantId, productId),
-        barcode: plan.barcode,
+        // Tekli barkod yoksa ürün kimliği (DAT-22): ürün az önce bu satırın
+        // yazdığı ürün, kiracı içinde çözülüyor. Anahtar ürüne bağlı, barkoda
+        // değil: aynı devir bir kez barkodla bir kez kimlikle gelse de tek yazılır.
+        ...(plan.barcode ? { barcode: plan.barcode } : { productId }),
         qty: plan.qty,
         reason: 'OPENING',
         unitPrice: plan.unitPrice,
@@ -825,13 +849,7 @@ function createPayload(data: ParsedRow): Record<string, unknown> {
     ...(data.purchasePrice != null ? { purchasePrice: data.purchasePrice } : {}),
     ...(data.salePrice != null ? { salePrice: data.salePrice } : {}),
     ...(data.minStock !== undefined ? { minStock: data.minStock } : {}),
-    barcodes: [
-      {
-        barcode: data.barcode,
-        ...(data.barcodeKind ? { kind: data.barcodeKind } : {}),
-        ...(data.qtyMultiplier !== undefined ? { qtyMultiplier: data.qtyMultiplier } : {}),
-      },
-    ],
+    barcodes: barcodesOf(data),
   }
 }
 

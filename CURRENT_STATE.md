@@ -193,7 +193,7 @@ bekleyen yok. Çok depo ve Envanteri Güncelle (F-15) manuel kabul testinde kabu
   bilinmeyen ürünü 0 saymıyor, sayısını gösteriyor. Yok: deposu bilinmeyen eski stoğun depoya
   atanması (T223; envanter dosyası da böyle bir ürünün satırını atlıyor), tek ürün sayım
   düzeltmesi (T232), depolar arası transfer (T233), "Depoya atama bekliyor" rozeti (T221), elle
-  depo açma/arşivleme (T226), ürün aktarımında barkodsuz satır (T228), fiyat geçmişi ve toplu
+  depo açma/arşivleme (T226), fiyat geçmişi ve toplu
   satış fiyatı (T224), toplu mal kabulü (T225).
 - **Ürün görseli**: yalnız URL; yükleme yok (T136).
 - **Kritik stok**: yalnız e-posta, push yok.

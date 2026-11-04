@@ -1,6 +1,6 @@
 import { AppError } from '@stok/shared'
 import { IMPORT_CELL_LIMIT, IMPORT_FILE_BYTES_LIMIT, IMPORT_ROW_LIMIT } from './product-file'
-import { normalizeHeader, readSheet } from './sheet'
+import { HEADER_SCAN_ROWS, findHeaderRow, headerKey, readSheet } from './sheet'
 
 /**
  * ============================================================================
@@ -59,17 +59,37 @@ export const INVENTORY_UNREAD_COLUMNS_LIMIT = 50
 export const INVENTORY_HEADER_LIMIT = 200
 
 export interface RawInventoryRow {
-  /** Dosyadaki satır numarası (başlık 1). */
+  /** Dosyadaki satır numarası (1 tabanlı). */
   rowNumber: number
   cells: Partial<Record<InventoryField, string>>
 }
 
 export interface ParsedInventoryFile {
   rows: RawInventoryRow[]
+  /** Başlığın dosyadaki satır numarası; 1'den büyükse üstteki satırlar okunmadı. */
+  headerRowNumber: number
   /** Dosyada bulunan alanlar. */
   columns: InventoryField[]
   /** Okunmayan sütunların başlıkları (dosyadaki yazımıyla). Değerleri gönderilmiyor. */
   unreadColumns: string[]
+}
+
+/**
+ * Bir satırı başlık olarak okur: tanınan alanların indisleri, tanınmayan başlıklar,
+ * eksik zorunlular. `strict`: 1. satırın altı, kısa adlar yok (`headerKey`). Bugünkü
+ * envanter eş adlarında kısa ad yok; kural üç okuyucuda aynı kalsın diye burada da.
+ */
+function mapInventoryColumns(row: string[], strict: boolean) {
+  const found: Partial<Record<InventoryField, number>> = {}
+  const unread: string[] = []
+  row.forEach((header, index) => {
+    const norm = headerKey(header, strict)
+    const field = INVENTORY_FIELDS.find((f) => INVENTORY_ALIASES[f].includes(norm))
+    if (field && found[field] === undefined) found[field] = index
+    else if (header.trim() !== '') unread.push(header.trim().slice(0, INVENTORY_HEADER_LIMIT))
+  })
+  const missing = INVENTORY_REQUIRED_FIELDS.filter((f) => found[f] === undefined)
+  return { found, unread, missing }
 }
 
 /** `.xlsx` ya da `.csv` envanter dosyasını ham satırlara çevirir. */
@@ -86,32 +106,24 @@ export async function parseInventoryFile(
   }
 
   const matrix = await readSheet(data, fileName)
-  const headerRow = matrix[0]
-  if (!headerRow || headerRow.every((c) => c.trim() === '')) {
-    throw new AppError('IMPORT_NO_HEADER', 'file has no header row')
+  const header = findHeaderRow(matrix, (row, strict) => mapInventoryColumns(row, strict).missing.length)
+  if (!header.row) {
+    throw new AppError('IMPORT_NO_HEADER', 'file has no header row', { scanned: HEADER_SCAN_ROWS })
   }
-
-  const found: Partial<Record<InventoryField, number>> = {}
-  const unread: string[] = []
-  headerRow.forEach((header, index) => {
-    const norm = normalizeHeader(header)
-    const field = INVENTORY_FIELDS.find((f) => INVENTORY_ALIASES[f].includes(norm))
-    if (field && found[field] === undefined) found[field] = index
-    else if (header.trim() !== '') unread.push(header.trim().slice(0, INVENTORY_HEADER_LIMIT))
-  })
 
   // Kod, miktar ve depo olmadan hiçbir satır anlamlandırılamaz; satır bazlı
   // hata vermek binlerce kez aynı cümleyi yazmak olurdu.
-  const missing = INVENTORY_REQUIRED_FIELDS.filter((f) => found[f] === undefined)
-  if (missing.length > 0) {
+  const { found, unread, missing } = mapInventoryColumns(header.row, (header.index ?? 0) > 0)
+  if (header.index === undefined) {
     throw new AppError('INVENTORY_MISSING_COLUMN', 'required inventory columns are missing', {
       missing: missing.map((f) => INVENTORY_COLUMN_LABELS[f]).join(', '),
-      found: headerRow.join(', '),
+      found: header.row.join(', '),
+      scanned: HEADER_SCAN_ROWS,
     })
   }
 
   const rows: RawInventoryRow[] = []
-  for (let i = 1; i < matrix.length; i += 1) {
+  for (let i = header.index + 1; i < matrix.length; i += 1) {
     const raw = matrix[i]!
     if (raw.every((c) => c.trim() === '')) continue
     if (rows.length >= limit) {
@@ -126,6 +138,7 @@ export async function parseInventoryFile(
 
   return {
     rows,
+    headerRowNumber: header.index + 1,
     columns: Object.keys(found) as InventoryField[],
     unreadColumns: [...new Set(unread)].slice(0, INVENTORY_UNREAD_COLUMNS_LIMIT),
   }

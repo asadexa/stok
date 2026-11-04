@@ -87,6 +87,12 @@ Katman kuralları `PROJECT_BRAIN` §5, ilkeler §12. Kayıtlarda yalnız özelli
   "temizle" değil "dokunma": yalnız ad ve kod içeren düzeltme dosyası fiyatları silmesin.
   20.000 satır ve 100 MB tek isteğin gövde ve süre sınırına sığmaz (ADR-007).
 - **Kurallar:**
+  - Başlık, zorunlu sütunları (Stok Kodu ve Ürün Adı; ERP adlarıyla Malzeme Kodu ve Malzeme
+    Açıklaması) taşıyan ilk satırdır; ilk 20 satırda aranır (`findHeaderRow`). Üstündeki rapor
+    satırları okunmaz ve önizleme bunu söyler. 1. satırın altında kısa adlar ("Kod", "Ad", "Ürün",
+    "İsim", "Tür") ne başlık seçiminde ne eşlemede sayılır (`SHORT_HEADERS`): ERP'nin "Kod | 001 |
+    Ad | Merkez" parametre satırı başlık sanılmasın. Bu üç dosya okuyucusunda (F-02, F-12, F-15) ortak.
+    `Envanter Miktarı` sütunu okunmaz; önizleme envanter ekranını gösterir.
   - En fazla 20.000 veri satırı ve 100 MB; hücre en fazla 1.000 karakter. XLSX'ten yalnız hücre
     verisi açılır (görseller açılmaz); açılan veri 64 MiB'ı aşarsa dosya reddedilir.
   - Belirsiz Türkçe sayı ("1.234") satır hatasıdır; Excel'in sayı hücresi belirsiz değildir (`DAT-20`).
@@ -116,7 +122,9 @@ Katman kuralları `PROJECT_BRAIN` §5, ilkeler §12. Kayıtlarda yalnız özelli
 - **Sınırlar:** sekme kapanırsa aktarım durur, kaldığı yerden devam ekranı yok (ürün kapsamı);
   devirde geçmiş tarihli fiyat yok (T172). Bir satır veritabanında 2 dakikadan uzun takılırsa
   ikinci işleyici onu yeniden deneyebilir: veri bozulmaz, sonucu `Çakışma` görünebilir (ADR-007).
-  Yeni üründe barkod zorunlu: kaldırmak barkodsuz satırın devrini sessizce düşürür (CEO-4, T228).
+  Barkod isteğe bağlı (PRD-19, T228): barkodsuz ürün stok koduyla tanınır; tekli barkodu olmayan
+  üründe devir ürün kimliğiyle yazılır (`DAT-22`), tekli barkod varsa barkodla. Barkodsuz satırda
+  Barkod Türü ya da Koli İçi Adet doluysa satır hatadır.
   Birden çok depolu işletmede devir `DEPOT_REQUIRED` ile yazılmaz (satır "devir yazılamadı"
   gösterir; Envanteri Güncelle'ye yönlendirme T218); önizleme bunu önceden göstermiyor (T234).
   20.000 satır ~25 dk sürüyor (T235). Deftere bağlı aktarım kaydı 30 günde silinmez
@@ -270,7 +278,8 @@ Katman kuralları `PROJECT_BRAIN` §5, ilkeler §12. Kayıtlarda yalnız özelli
   süzgeçli kalem tablosu. Ürün sayfasında "Tedarikçi fiyatları" bölümü: koşul gruplarına göre
   teklifler, belirsiz miktarlılar ayrı.
 - **Kurallar:**
-  - Dosyanın tamamı reddedilir: başlık yok, zorunlu sütun yok (Ürün Adı, Fiyat ve Tedarikçi
+  - Tablo dosyasında başlık, zorunlu sütunları taşıyan ilk satırdır (ilk 20 satır; F-02 ile ortak
+    kural). Dosyanın tamamı reddedilir: başlık yok, zorunlu sütun yok (Ürün Adı, Fiyat ve Tedarikçi
     Kodu ya da Barkod), aynı alana iki sütun, en fazla 5.000 satır aşıldı, veri satırı yok.
     Geçersiz satır yalnız kendisi atlanır ve listelenir. Metin stok satırı reddetmez.
   - Belirsiz Türkçe sayı ("1.234", `DAT-20`): fiyat ya da fiyat miktarında satır hatası, stokta
@@ -372,7 +381,8 @@ Katman kuralları `PROJECT_BRAIN` §5, ilkeler §12. Kayıtlarda yalnız özelli
 - **Dosya:** gerçek başlıklar `Malzeme Türü`, `Malzeme Kodu`, `Malzeme Açıklaması`, `Ambar`,
   `Envanter Miktarı`, `Birim`, `Ortalama Değer`, `Envanter Tutarı`, `Envanter Tutarı (RD)`. Her
   satırda zorunlu: `Malzeme Kodu`, `Envanter Miktarı`, `Ambar`; yeni üründe ayrıca `Malzeme
-  Açıklaması` ve tanınan `Birim`. Kritik sütun eksikse dosya sessizce geçilmez. `Ambar` arayüzde
+  Açıklaması` ve tanınan `Birim`. Başlığın üstünde rapor satırları olabilir (F-02 ile ortak kural).
+  Kritik sütun eksikse dosya sessizce geçilmez. `Ambar` arayüzde
   "Depo". Fiyat sütunları okunmaz, sunucuya gitmez. Testte yalnız aynı biçimde sentetik dosya.
 - **Uygulanan (Dilim 1, `50b6dd9`, T217):** yalnız veri modeli ve hareket kapısı (F-03):
   `depots`, `depot_id`, `import_run_id`, sunucuya özel envanter seçeneği (`DAT-24`), ürün kimliğiyle

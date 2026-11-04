@@ -58,6 +58,8 @@ export interface RefreshState {
   ignoredColumns?: string[]
   /** Listeye sığmayan okunmayan sütun sayısı. */
   ignoredColumnsOmitted?: number
+  /** Tablo dosyasında başlığın satır numarası; 1'den büyükse önizleme not düşüyor. */
+  headerRowNumber?: number
   preview?: ClientSummary
   /** Blob kayıt isteğine sığmıyor: kayıt kapalı, dosya bölünmeli. */
   saveBlocked?: boolean
@@ -118,6 +120,7 @@ export async function previewRefreshAction(
       columns: file.columns.map((c) => ({ label: FEED_FIELD_LABELS[c.field], header: c.header })),
       ignoredColumns: file.ignoredColumns,
       ignoredColumnsOmitted: file.ignoredColumnsOmitted,
+      headerRowNumber: file.headerRowNumber,
       preview: clientSummary(summary),
       saveBlocked: Buffer.byteLength(fileJson, 'utf8') > SUPPLIER_SAVE_BLOB_LIMIT,
     }

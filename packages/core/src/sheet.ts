@@ -30,6 +30,81 @@ export async function readSheet(data: Uint8Array, fileName: string): Promise<str
   return fileName.toLowerCase().endsWith('.csv') ? parseCsv(data) : parseXlsx(data)
 }
 
+/**
+ * Başlık satırının arandığı ilk satır sayısı. ERP raporlarının üstünde rapor
+ * adı, tarih ve süzgeç satırları oluyor; başlık bunların altında. Daha geniş bir
+ * tarama, sütun adına benzeyen bir satırı başlık sanma ihtimalini büyütürdü.
+ * Bulunamazsa hata metni bu sayıyı söylüyor: kullanıcı neyin arandığını görüyor.
+ */
+export const HEADER_SCAN_ROWS = 20
+
+export interface HeaderSearch {
+  /** Başlık satırının matristeki indisi; tanımsızsa başlık bulunamadı. */
+  index?: number
+  /**
+   * Başlık bulunduysa o satır. Bulunamadıysa zorunlu sütunlardan en çoğunu
+   * taşıyan satır (eşitlikte ilki): hata metninin "Bulunanlar"ı buradan gelir.
+   * İlk satırı göstermek, rapor başlıklı dosyada "STOK RAPORU" yazardı ve
+   * kullanıcıya hangi sütunun eksik olduğunu söylemezdi. Tanımsızsa taranan
+   * satırların hepsi boş.
+   */
+  row?: string[]
+  /** Başlık bulunamadıysa `row`'un indisi. */
+  closestIndex?: number
+}
+
+/**
+ * 1. satırın altında başlık SAYILMAYAN kısa ve genel adlar (`normalizeHeader`
+ * hâliyle). ERP raporunun parametre bloğu "Kod | 001 | Ad | Merkez Şube" gibi
+ * satırlar taşıyor; bu adlarla eşleşseydi o satır başlık seçilir, gerçek başlık
+ * veri satırı olur ve sütunlar yanlış hücrelerden okunurdu. 1. satırda bugünkü
+ * gibi geçerli: o satırın başlık olduğu zaten varsayılıyordu, davranışı değişmez.
+ */
+export const SHORT_HEADERS: ReadonlySet<string> = new Set(['kod', 'ad', 'urun', 'isim', 'name', 'tur'])
+
+/**
+ * Başlık hücresinin eş ad tablosunda aranacak anahtarı. `strict` (1. satırın
+ * altı) iken kısa ad boş anahtar döner, yani hiçbir alana eşlenmez. Üç dosya
+ * okuyucusu bunu hem başlığı ararken hem seçilen başlığı eşlerken kullanıyor:
+ * ikisi ayrı kural uygulasaydı başlık açık adla bulunup sütun kısa addan okunabilirdi.
+ */
+export function headerKey(raw: string, strict: boolean): string {
+  const key = normalizeHeader(raw)
+  return strict && SHORT_HEADERS.has(key) ? '' : key
+}
+
+/** Satırdaki kısa adlar, dosyadaki yazımıyla; yoksa tanımsız. Hata metni için. */
+export function shortHeaderNames(row: string[]): string | undefined {
+  const names = row.map((c) => c.trim()).filter((c) => c !== '' && SHORT_HEADERS.has(normalizeHeader(c)))
+  return names.length > 0 ? names.join(', ') : undefined
+}
+
+/**
+ * Zorunlu sütunların HEPSİNİ taşıyan ilk satırı başlık sayar (`missing` 0).
+ * Kısmi eşleşme başlık sayılmıyor: "Ürün Adı: Kalem" yazan bir süzgeç satırı
+ * başlık seçilseydi altındaki gerçek başlık veri satırı olarak okunurdu.
+ * `missing`'in `strict` argümanı 1. satırın altında doğru: kısa adlar sayılmaz
+ * (`SHORT_HEADERS`). En yakın satır ise kısa adlar sayılarak seçiliyor: hata
+ * metni "Kod, Açıklama" gibi kullanıcının yazdığı başlığı göstersin.
+ * Başlığın üstündeki satırlar veri değil (veri başlığın altında başlıyor); bu
+ * yüzden atlanmaları satır kaybı değil. Çağıran, atlanan satır sayısını
+ * kullanıcıya gösteriyor.
+ */
+export function findHeaderRow(
+  matrix: string[][],
+  missing: (row: string[], strict: boolean) => number,
+): HeaderSearch {
+  let closest: { row: string[]; index: number; missing: number } | undefined
+  for (let i = 0; i < Math.min(matrix.length, HEADER_SCAN_ROWS); i += 1) {
+    const row = matrix[i]!
+    if (row.every((c) => c.trim() === '')) continue
+    if (missing(row, i > 0) === 0) return { index: i, row }
+    const count = missing(row, false)
+    if (!closest || count < closest.missing) closest = { row, index: i, missing: count }
+  }
+  return closest ? { row: closest.row, closestIndex: closest.index } : {}
+}
+
 async function parseXlsx(data: Uint8Array): Promise<string[][]> {
   const workbook = new ExcelJS.Workbook()
   const readable = await valuesOnlyWorkbook(data)
@@ -212,8 +287,17 @@ export function parseCsv(data: Uint8Array): string[][] {
   let text = new TextDecoder('utf-8').decode(data)
   if (text.charCodeAt(0) === 0xfeff) text = text.slice(1)
 
-  const firstLine = text.split(/\r?\n/, 1)[0] ?? ''
-  const delimiter = countOutsideQuotes(firstLine, ';') > countOutsideQuotes(firstLine, ',') ? ';' : ','
+  // Ayırıcı, ayırıcı taşıyan İLK satırdan seçiliyor. Eskiden yalnız ilk satıra
+  // bakılıyordu: rapor başlıklı dosyada o satır "STOK RAPORU" ve ayırıcısız, yani
+  // `;` dosyası `,` sanılıp her satır tek hücreye okunuyordu ve başlık hiç
+  // bulunamıyordu. Başlığı ilk satırda olan dosyada seçim eskisiyle aynı.
+  // Bilinen sınır: rapor satırı virgül taşıyorsa ("Merkez, 01.11.2026") `;`
+  // dosyası yine `,` sanılır ve başlık bulunamadı hatası çıkar.
+  const delimiterLine =
+    text
+      .split(/\r?\n/, HEADER_SCAN_ROWS)
+      .find((line) => countOutsideQuotes(line, ';') + countOutsideQuotes(line, ',') > 0) ?? ''
+  const delimiter = countOutsideQuotes(delimiterLine, ';') > countOutsideQuotes(delimiterLine, ',') ? ';' : ','
 
   const rows: string[][] = []
   let row: string[] = []

@@ -4,6 +4,7 @@ import type { FeedRowIssue, RefreshSampleRow } from '@stok/core'
 import { SUPPLIER_MATCH_STATES } from '@stok/shared'
 import { useActionState, useState } from 'react'
 import { CountTile } from '@/components/count-tile'
+import { HeaderRowNote } from '@/components/header-row-note'
 import { SupplierPrice, conditionLabel, priceQtyLabel } from '@/components/supplier-price'
 import { formatCount } from '@/lib/format'
 import type { ClientSummary, RefreshState } from './actions'
@@ -108,6 +109,7 @@ export function RefreshWizard({
             kaydettiğinizde hepsi yazılır. Ürün kartının fiyatı ve stoğunuz değişmez.
           </p>
 
+          <HeaderRowNote headerRowNumber={state.headerRowNumber ?? 1} />
           <ColumnsPanel
             columns={state.columns ?? []}
             ignored={state.ignoredColumns ?? []}

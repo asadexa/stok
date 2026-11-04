@@ -9,11 +9,15 @@ import {
 } from '@stok/shared'
 import { z } from 'zod'
 import {
+  HEADER_SCAN_ROWS,
   ambiguousNumberMessage,
+  findHeaderRow,
+  headerKey,
   isAmbiguousTurkishNumber,
   normalizeHeader,
   parseTurkishNumber,
   readSheet,
+  shortHeaderNames,
 } from './sheet'
 import { issuesOf, validationError } from './validate'
 
@@ -209,6 +213,12 @@ export interface ParsedSupplierFile {
   ignoredColumnsOmitted?: number
   /** Fiyat sütununun adından gelen tür ("Liste Fiyatı" → LIST). */
   headerPriceType?: SupplierPriceType
+  /**
+   * Tablo dosyasında başlığın satır numarası; 1'den büyükse üstteki satırlar
+   * okunmadı. JSON'da ve kayıttaki dosyada (`parsedSupplierFileSchema`) yok:
+   * yalnız önizleme notu için, kayıt kararları ona bakmıyor.
+   */
+  headerRowNumber?: number
 }
 
 const feedFieldEnum = z.enum(FEED_FIELDS as [FeedField, ...FeedField[]])
@@ -270,11 +280,41 @@ export async function parseSupplierFile(
   throw new AppError('SUPPLIER_FEED_UNREADABLE', 'unsupported file type')
 }
 
+/**
+ * Satırın başlık olması için eksik zorunlu alan sayısı. Tekrarlanan sütun burada
+ * HATA DEĞİL: başlığın üstündeki bir rapor satırı "Fiyat" kelimesini iki kez
+ * taşıyabilir. Tekrar kuralı yalnız başlık seçildikten sonra uygulanıyor.
+ * `strict`: 1. satırın altı, kısa adlar yok (`headerKey`).
+ */
+function missingFeedColumns(row: string[], strict: boolean): number {
+  const fields = new Set(row.map((h) => HEADER_ALIASES[headerKey(h.trim(), strict)]?.field))
+  return (
+    Number(!fields.has('name')) +
+    Number(!fields.has('price')) +
+    Number(!fields.has('supplierCode') && !fields.has('barcode'))
+  )
+}
+
 function parseTableFeed(matrix: string[][], limit: number): ParsedSupplierFile {
-  const headerRow = matrix[0]
-  if (!headerRow || headerRow.every((c) => c.trim() === '')) {
-    throw new AppError('IMPORT_NO_HEADER', 'file has no header row')
+  const located = findHeaderRow(matrix, missingFeedColumns)
+  if (!located.row) {
+    throw new AppError('IMPORT_NO_HEADER', 'file has no header row', { scanned: HEADER_SCAN_ROWS })
   }
+  // Zorunlu sütun kuralı tek yerde (`missingFeedColumns`): başlık seçildiyse
+  // sağlanmış demek, aşağıda yeniden denetlenmiyor.
+  if (located.index === undefined) {
+    const shortNames = located.closestIndex ? shortHeaderNames(located.row) : undefined
+    throw new AppError('SUPPLIER_FEED_MISSING_COLUMN', 'required columns missing', {
+      found: located.row
+        .map((h) => h.trim())
+        .filter(Boolean)
+        .join(', '),
+      scanned: HEADER_SCAN_ROWS,
+      ...(shortNames ? { shortNames } : {}),
+    })
+  }
+  const headerRow = located.row
+  const strict = located.index > 0
 
   const indexOf: Partial<Record<FeedField, number>> = {}
   const columns: { field: FeedField; header: string }[] = []
@@ -285,7 +325,7 @@ function parseTableFeed(matrix: string[][], limit: number): ParsedSupplierFile {
   headerRow.forEach((raw, index) => {
     const header = raw.trim()
     if (header === '') return
-    const alias = HEADER_ALIASES[normalizeHeader(header)]
+    const alias = HEADER_ALIASES[headerKey(header, strict)]
     if (!alias) {
       if (ignoredColumns.length < SUPPLIER_IGNORED_COLUMN_LIMIT) ignoredColumns.push(headerLabel(header))
       else ignoredColumnsOmitted += 1
@@ -304,18 +344,8 @@ function parseTableFeed(matrix: string[][], limit: number): ParsedSupplierFile {
     if (alias.priceType) headerPriceType = alias.priceType
   })
 
-  const has = (f: FeedField) => indexOf[f] !== undefined
-  if (!has('name') || !has('price') || (!has('supplierCode') && !has('barcode'))) {
-    throw new AppError('SUPPLIER_FEED_MISSING_COLUMN', 'required columns missing', {
-      found: headerRow
-        .map((h) => h.trim())
-        .filter(Boolean)
-        .join(', '),
-    })
-  }
-
   const rows: SupplierFileRow[] = []
-  for (let i = 1; i < matrix.length; i += 1) {
+  for (let i = located.index + 1; i < matrix.length; i += 1) {
     const raw = matrix[i]!
     if (raw.every((c) => c.trim() === '')) continue
     if (rows.length >= limit) {
@@ -333,6 +363,7 @@ function parseTableFeed(matrix: string[][], limit: number): ParsedSupplierFile {
   }
   return {
     rows,
+    headerRowNumber: located.index + 1,
     columns,
     ignoredColumns,
     ...(ignoredColumnsOmitted > 0 ? { ignoredColumnsOmitted } : {}),

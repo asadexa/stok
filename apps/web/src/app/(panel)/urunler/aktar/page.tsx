@@ -56,7 +56,10 @@ export default async function ImportPage() {
             <span className="font-medium">Stok Kodu</span> ve{' '}
             <span className="font-medium">Ürün Adı</span> zorunlu.
           </li>
-          <li>Yeni ürünler için <span className="font-medium">Barkod</span> da zorunlu.</li>
+          <li>
+            <span className="font-medium">Barkod</span> isteğe bağlı; barkodsuz ürün stok koduyla
+            tanınır, açılış stoğu barkodsuz da yazılır.
+          </li>
           <li>
             {/* Noktalama açık bir ifade içinde: JSX artığı bir noktalı virgülle
                 karışmasın, hem okuyan hem linter niyeti görsün. */}

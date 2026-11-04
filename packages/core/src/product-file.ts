@@ -1,5 +1,5 @@
 import { AppError, type BarcodeKind, type Unit } from '@stok/shared'
-import { normalizeHeader, readSheet } from './sheet'
+import { HEADER_SCAN_ROWS, findHeaderRow, headerKey, normalizeHeader, readSheet, shortHeaderNames } from './sheet'
 
 /**
  * ============================================================================
@@ -71,8 +71,10 @@ export type ImportField = keyof ParsedRow
  * kullanıcı raporu indirip düzeltip geri yükleyebilmeli.
  */
 const COLUMN_ALIASES: Record<ImportField, string[]> = {
-  sku: ['stok kodu', 'stokkodu', 'kod', 'sku', 'urun kodu'],
-  name: ['urun adi', 'ad', 'urun', 'isim', 'name'],
+  // "Malzeme Kodu" / "Malzeme Açıklaması": ERP çıktısının adları; envanter
+  // dosyası (`inventory-file.ts`) aynılarını tanıyor ve kod eşitliği PRD-19'da.
+  sku: ['stok kodu', 'stokkodu', 'kod', 'sku', 'urun kodu', 'malzeme kodu'],
+  name: ['urun adi', 'ad', 'urun', 'isim', 'name', 'malzeme aciklamasi', 'malzeme adi'],
   unit: ['birim', 'unit'],
   category: ['kategori', 'category'],
   brand: ['marka', 'brand'],
@@ -124,13 +126,16 @@ const AMBIGUOUS_QTY_HEADERS = [
   'eldeki stok',
   'qty',
   'quantity',
+  // ERP envanter çıktısı artık ürün aktarımında da okunuyor (Malzeme Kodu eş
+  // adı): miktar sütunu uyarısız kalsaydı kullanıcı stoğun girdiğini sanırdı.
+  'envanter miktari',
 ]
 
-/** Başlık satırından sütun indekslerini çıkarır. */
-function mapColumns(headers: string[]): Partial<Record<ImportField, number>> {
+/** Başlık satırından sütun indekslerini çıkarır; `strict`: 1. satırın altı, kısa adlar yok. */
+function mapColumns(headers: string[], strict: boolean): Partial<Record<ImportField, number>> {
   const found: Partial<Record<ImportField, number>> = {}
   headers.forEach((header, index) => {
-    const norm = normalizeHeader(header)
+    const norm = headerKey(header, strict)
     for (const [field, aliases] of Object.entries(COLUMN_ALIASES) as [ImportField, string[]][]) {
       if (found[field] === undefined && aliases.includes(norm)) found[field] = index
     }
@@ -139,13 +144,19 @@ function mapColumns(headers: string[]): Partial<Record<ImportField, number>> {
 }
 
 export interface RawRow {
-  /** Dosyadaki satır numarası (başlık satırı 1). Kullanıcı bunu arıyor. */
+  /** Dosyadaki satır numarası (1 tabanlı). Kullanıcı bunu arıyor. */
   rowNumber: number
   cells: Record<ImportField, string>
 }
 
 export interface ParsedFile {
   rows: RawRow[]
+  /**
+   * Başlığın dosyadaki satır numarası; 1'den büyükse üstteki satırlar okunmadı.
+   * Yalnız dosya okuyucusu dolduruyor: sunucunun aktarım kaydından kurduğu
+   * dosyada (`import-runs.ts`) yok ve önizleme kararları ona bakmıyor.
+   */
+  headerRowNumber?: number
   /** Dosyada bulunan sütunlar. Ekranda "şunları gördüm" diye gösteriliyor. */
   columns: ImportField[]
   /** Açılış stoğu sanılabilecek ama okunmayan başlıklar (dosyadaki yazımıyla). */
@@ -178,22 +189,28 @@ export async function parseProductFile(
   }
 
   const matrix = await readSheet(data, fileName)
-  const headerRow = matrix[0]
-  if (!headerRow || headerRow.every((c) => c.trim() === '')) {
-    throw new AppError('IMPORT_NO_HEADER', 'file has no header row')
+  const header = findHeaderRow(matrix, (row, strict) => {
+    const found = mapColumns(row, strict)
+    return Number(found.sku === undefined) + Number(found.name === undefined)
+  })
+  if (!header.row) {
+    throw new AppError('IMPORT_NO_HEADER', 'file has no header row', { scanned: HEADER_SCAN_ROWS })
   }
-
-  const columns = mapColumns(headerRow)
-  if (columns.sku === undefined || columns.name === undefined) {
-    // Bu ikisi olmadan hiçbir satır anlamlandırılamaz; satır bazlı hata
+  if (header.index === undefined) {
+    // Stok kodu ve ad olmadan hiçbir satır anlamlandırılamaz; satır bazlı hata
     // vermek 800 kere aynı şeyi yazmak olurdu.
+    const shortNames = header.closestIndex ? shortHeaderNames(header.row) : undefined
     throw new AppError('IMPORT_MISSING_COLUMN', 'sku and name columns are required', {
-      found: headerRow.join(', '),
+      found: header.row.join(', '),
+      scanned: HEADER_SCAN_ROWS,
+      ...(shortNames ? { shortNames } : {}),
     })
   }
 
+  const headerRow = header.row
+  const columns = mapColumns(headerRow, header.index > 0)
   const rows: RawRow[] = []
-  for (let i = 1; i < matrix.length; i += 1) {
+  for (let i = header.index + 1; i < matrix.length; i += 1) {
     const raw = matrix[i]!
     // Tamamen boş satır atlanıyor: Excel dosyalarının sonunda yüzlerce
     // boş satır olması çok yaygın ve bunları hata olarak raporlamak
@@ -208,8 +225,8 @@ export async function parseProductFile(
     for (const [field, index] of Object.entries(columns) as [ImportField, number][]) {
       cells[field] = (raw[index] ?? '').trim().slice(0, IMPORT_CELL_LIMIT + 1)
     }
-    // Satır numarası DOSYADAKİ numara (1 tabanlı, başlık dahil): kullanıcı
-    // hatayı Excel'de bu numarayla bulacak.
+    // Satır numarası DOSYADAKİ numara (1 tabanlı, başlık ve üstündeki satırlar
+    // dahil): kullanıcı hatayı Excel'de bu numarayla bulacak.
     rows.push({ rowNumber: i + 1, cells })
   }
 
@@ -217,5 +234,10 @@ export async function parseProductFile(
     .map((h) => h.trim())
     .filter((h) => AMBIGUOUS_QTY_HEADERS.includes(normalizeHeader(h)))
 
-  return { rows, columns: Object.keys(columns) as ImportField[], ignoredQtyColumns }
+  return {
+    rows,
+    headerRowNumber: header.index + 1,
+    columns: Object.keys(columns) as ImportField[],
+    ignoredQtyColumns,
+  }
 }
