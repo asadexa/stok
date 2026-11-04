@@ -26,6 +26,15 @@
  * bağlandıktan sonra (docker-compose.yml) yayın bozulursa ya da yanlış porta
  * bakılırsa içeriden "hazır" gelir, uygulama ise host'tan bağlanamaz. Bu
  * betik "hazır" dediği an uygulamanın da bağlanabildiğini söylemeli.
+ *
+ * İÇERİDEKİ SORU TCP'DEN (`-h 127.0.0.1`, T195). Taze volume'de imajın
+ * `docker-entrypoint.sh`'ı `db/init/*.sql`'i `listen_addresses=''` ile YALNIZ
+ * SOKETTE dinleyen geçici bir sunucuda koşturuyor. Soket üzerinden soran
+ * `pg_isready` bu sırada "hazır" diyor, Linux'ta `docker-proxy` de portu
+ * arkasında dinleyen olmadan kabul ediyor: betik dönüyor, ardından koşan
+ * `migrate` geçici sunucunun kapanmasına denk gelip `ECONNRESET` alıyordu
+ * (CI #72 `backup.test.ts`, CI #113 `db-reset.test.ts`). TCP'yi yalnız gerçek
+ * sunucu açar; üretim compose'unun sağlık kontrolü de aynı kuralı kullanıyor.
  */
 
 import { spawnSync } from 'node:child_process'
@@ -73,7 +82,7 @@ export async function waitForDatabase(port, { timeoutMs = 60_000, onTick } = {})
 
   while (Date.now() < deadline) {
     const ready = inDocker
-      ? quiet('docker', ['compose', 'exec', '-T', 'db', 'pg_isready', '-U', 'postgres', '-d', 'stok']) &&
+      ? quiet('docker', ['compose', 'exec', '-T', 'db', 'pg_isready', '-h', '127.0.0.1', '-U', 'postgres', '-d', 'stok']) &&
         (await portOpen(port))
       : await portOpen(port)
     if (ready) return true
