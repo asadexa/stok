@@ -357,12 +357,9 @@ describe('önizleme', () => {
     expect(result.rows[1]?.issues[0]?.message).toContain('2. satırda da var')
   })
 
-  it('yeni üründe barkod zorunlu', async () => {
-    // Barkodsuz ürün depoda okutulamaz: aktarım "başarılı" görünüp
-    // kullanılamaz bir katalog üretirdi.
+  it('yeni üründe barkod isteğe bağlı (PRD-19, T228)', async () => {
     const result = await preview(['Stok Kodu,Ürün Adı', `${uniq('NB-')},Barkodsuz`])
-    expect(result.counts.error).toBe(1)
-    expect(result.rows[0]?.issues[0]?.column).toBe('Barkod')
+    expect(result.counts).toEqual({ create: 1, update: 0, error: 0 })
   })
 
   it('güncellemede barkod zorunlu değil', async () => {

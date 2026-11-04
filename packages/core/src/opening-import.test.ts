@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { type TestTenant, seedTestTenant, testAdminDb, testAppDb } from '@stok/db/testing'
+import ExcelJS from 'exceljs'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { Actor } from './authz'
 import { commitImport, openingKey, parseProductFile, previewImport } from './import'
@@ -115,7 +116,8 @@ describe('önizleme', () => {
     ['üç ondalıktan fazla', 'Kilogram;3;{bc};Tekli;1;1,2345', 'Açılış Stoğu: En fazla 3 ondalık basamak'],
     ['sayı değil', 'Adet;3;{bc};Tekli;1;çok', 'Açılış Stoğu: Açılış stoğu sayı olarak okunamadı'],
     ['fiyatsız devir', 'Adet;;{bc};Tekli;1;10', 'Açılış Stoğu: Açılış stoğu için alış fiyatı gerekli (Alış Fiyatı sütunu ya da üründe kayıtlı)'],
-    ['koli barkodlu yeni ürüne devir', 'Adet;3;{bc};Koli;12;10', 'Açılış Stoğu: Açılış stoğu için tekli barkod gerekli; bu satırdaki barkod koli barkodu'],
+    ['barkodsuz satırda barkod türü', 'Adet;3;;Koli;;10', 'Barkod Türü: Barkod boş; barkod türü ve koli içi adet yalnız barkodla birlikte girilir'],
+    ['barkodsuz satırda koli içi adet', 'Adet;3;;;12;10', 'Koli İçi Adet: Barkod boş; barkod türü ve koli içi adet yalnız barkodla birlikte girilir'],
   ])('satır hatası: %s', async (_ad, rest, expected) => {
     const p = await plan([HEADER, `${uniq('ER-')};Ürün;${rest.replace('{bc}', uniq('bc'))}`])
     const row = p.rows[0]!
@@ -280,6 +282,177 @@ describe('uygulama', () => {
       expect((await movementsOf(sku)).filter((m) => m.reason === 'OPENING')).toHaveLength(1)
     }
     expect(await checkStockInvariant(tenant.tenantId, opts)).toEqual([])
+  })
+})
+
+/**
+ * T228 — BARKOD İSTEĞE BAĞLI (PRD-19). Tekli barkodu olmayan üründe devir ürün
+ * kimliğiyle yazılıyor (DAT-22). Eskiden bu satırlarda devir planı hiç
+ * kurulmuyordu: barkod zorunluluğu kaldırılsaydı devir sessizce düşerdi.
+ */
+describe('T228: barkodsuz ürün ve devir', () => {
+  async function barcodeIdOf(productSku: string): Promise<(string | null)[]> {
+    const rows = await admin.client<{ barcode_id: string | null }[]>`
+      SELECT m.barcode_id FROM stock_movements m JOIN products p ON p.id = m.product_id
+       WHERE m.tenant_id = ${tenant.tenantId} AND p.sku = ${productSku}
+    `
+    return rows.map((r) => r.barcode_id)
+  }
+
+  async function barcodeCount(productSku: string): Promise<number> {
+    const [row] = await admin.client<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM product_barcodes b JOIN products p ON p.id = b.product_id
+       WHERE p.tenant_id = ${tenant.tenantId} AND p.sku = ${productSku}
+    `
+    return row!.n
+  }
+
+  it('Barkod sütunu HİÇ olmayan CSV: ürün barkodsuz oluşuyor, devir ürün kimliğiyle yazılıyor', async () => {
+    const sku = uniq('NB-')
+    const result = await commitImport(
+      boss,
+      await plan(['Stok Kodu;Ürün Adı;Birim;Alış Fiyatı;Açılış Stoğu', `${sku};Barkodsuz Kalem;Adet;9,50;40`]),
+      opts,
+    )
+
+    expect(result).toMatchObject({ created: 1, failed: 0, openings: { written: 1, skipped: 0, failed: 0 } })
+    expect(await barcodeCount(sku)).toBe(0)
+    const [m] = await movementsOf(sku)
+    expect(m).toMatchObject({ reason: 'OPENING', delta: '40.000', unit_price: '9.50' })
+    expect(m!.idempotency_key).toBe(openingKey(tenant.tenantId, m!.product_id))
+    expect(await barcodeIdOf(sku)).toEqual([null])
+    expect(await checkStockInvariant(tenant.tenantId, opts)).toEqual([])
+  })
+
+  it('Barkod sütunu HİÇ olmayan XLSX da aynı', async () => {
+    const sku = uniq('NBX-')
+    const wb = new ExcelJS.Workbook()
+    const sheet = wb.addWorksheet('Ürünler')
+    sheet.addRow(['Malzeme Kodu', 'Malzeme Açıklaması', 'Birim', 'Alış Fiyatı', 'Açılış Stoğu'])
+    sheet.addRow([sku, 'Barkodsuz Defter', 'Adet', 12.5, 6])
+    const file = await parseProductFile(Buffer.from(await wb.xlsx.writeBuffer()), 'erp.xlsx')
+    const result = await commitImport(boss, await previewImport(boss, file, opts), opts)
+
+    expect(result).toMatchObject({ created: 1, failed: 0, openings: { written: 1, skipped: 0, failed: 0 } })
+    expect((await movementsOf(sku))[0]).toMatchObject({ reason: 'OPENING', delta: '6.000', unit_price: '12.50' })
+  })
+
+  it('Barkod sütunu var, hücre boş: ürün aktarılıyor, devirsiz satır da hatasız', async () => {
+    const withOpening = uniq('NBB-')
+    const withoutOpening = uniq('NBB-')
+    const result = await commitImport(
+      boss,
+      await plan([HEADER, `${withOpening};Boş Barkod;Adet;3;;;;5`, `${withoutOpening};Boş Barkod Devirsiz;Adet;3;;;;`]),
+      opts,
+    )
+
+    expect(result).toMatchObject({ created: 2, failed: 0, openings: { written: 1, skipped: 0, failed: 0 } })
+    expect((await movementsOf(withOpening))[0]).toMatchObject({ reason: 'OPENING', delta: '5.000' })
+    expect(await movementsOf(withoutOpening)).toEqual([])
+  })
+
+  it('barkodsuz satırda fiyatsız devir sessizce düşmüyor: satır hata', async () => {
+    const sku = uniq('NBF-')
+    const p = await plan(['Stok Kodu;Ürün Adı;Açılış Stoğu', `${sku};Fiyatsız;10`])
+
+    expect(p.rows[0]!.action).toBe('error')
+    expect(issuesOf(p.rows[0]!)).toContain(
+      'Açılış Stoğu: Açılış stoğu için alış fiyatı gerekli (Alış Fiyatı sütunu ya da üründe kayıtlı)',
+    )
+  })
+
+  it('aynı barkodsuz dosya ikinci kez: ikinci devir yok, not var', async () => {
+    const sku = uniq('NBT-')
+    const lines = ['Stok Kodu;Ürün Adı;Alış Fiyatı;Açılış Stoğu', `${sku};Tekrar;2;30`]
+    await commitImport(boss, await plan(lines), opts)
+    const before = await movementCount()
+
+    const second = await commitImport(boss, await plan([lines[0]!, `${sku};Tekrar;2;45`]), opts)
+
+    expect(await movementCount()).toBe(before)
+    expect(second.openings).toEqual({ written: 0, skipped: 1, failed: 0 })
+    expect(second.notices.map((n) => n.message)).toEqual([
+      'Ürün güncellendi, devir daha önce yazılmış (30 adet); dosyadaki değer yazılmadı',
+    ])
+  })
+
+  it('koli barkodlu yeni ürünün devri çarpılmadan, ürün biriminde yazılıyor', async () => {
+    const sku = uniq('NBK-')
+    const result = await commitImport(boss, await plan([HEADER, `${sku};Koli Ürün;Adet;3;${uniq('bc')};Koli;12;10`]), opts)
+
+    expect(result.openings).toEqual({ written: 1, skipped: 0, failed: 0 })
+    expect((await movementsOf(sku))[0]).toMatchObject({ reason: 'OPENING', delta: '10.000' })
+    // Koli barkoduyla yazılsaydı 120 olurdu ve hareket koli barkodunu taşırdı.
+    expect(await barcodeIdOf(sku)).toEqual([null])
+  })
+
+  it('tekli barkodlu satırın devri bugünkü gibi barkodla yazılıyor', async () => {
+    const sku = uniq('BB-')
+    await commitImport(boss, await plan([HEADER, `${sku};Barkodlu;Adet;3;${uniq('bc')};Tekli;1;4`]), opts)
+
+    const ids = await barcodeIdOf(sku)
+    expect(ids).toHaveLength(1)
+    expect(ids[0]).not.toBeNull()
+  })
+
+  it('mevcut barkodsuz ürüne devir ürün kimliğiyle yazılıyor', async () => {
+    const sku = uniq('NBM-')
+    await commitImport(boss, await plan(['Stok Kodu;Ürün Adı;Alış Fiyatı', `${sku};Önce Devirsiz;5`]), opts)
+
+    const result = await commitImport(boss, await plan([HEADER_NO_PRICE, `${sku};Önce Devirsiz;8`]), opts)
+
+    expect(result).toMatchObject({ updated: 1, openings: { written: 1, skipped: 0, failed: 0 } })
+    expect((await movementsOf(sku))[0]).toMatchObject({ reason: 'OPENING', delta: '8.000', unit_price: '5.00' })
+  })
+
+  it('barkodsuz satırda dosyada iki kez geçen stok kodu hâlâ hata', async () => {
+    const sku = uniq('NBD-')
+    const p = await plan(['Stok Kodu;Ürün Adı', `${sku};Bir`, `${sku};İki`])
+
+    expect(p.rows.map((r) => r.action)).toEqual(['create', 'error'])
+  })
+
+  describe('başka kiracı ve çok depo', () => {
+    let other: TestTenant
+    let otherBoss: Actor
+
+    beforeAll(async () => {
+      other = await seedTestTenant(admin.db, 'openimp-b', [{ sku: 'ORTAK-KOD', name: 'Öteki İşletmenin Ürünü', purchasePrice: '1.00' }])
+      otherBoss = { tenantId: other.tenantId, userId: other.adminUserId, role: 'ADMIN' }
+    })
+
+    async function otherMovementCount(): Promise<number> {
+      const [row] = await admin.client<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM stock_movements WHERE tenant_id = ${other.tenantId}
+      `
+      return row!.n
+    }
+
+    it('başka kiracıdaki aynı stok kodu eşleşmiyor: ürün bu kiracıda açılıyor', async () => {
+      const p = await plan(['Stok Kodu;Ürün Adı;Alış Fiyatı;Açılış Stoğu', 'ORTAK-KOD;Bu İşletmenin Ürünü;2;3'])
+      expect(p.rows[0]!.action).toBe('create')
+      await commitImport(boss, p, opts)
+
+      const [mine] = await movementsOf('ORTAK-KOD')
+      expect(mine).toMatchObject({ reason: 'OPENING', delta: '3.000' })
+      expect(await otherMovementCount()).toBe(0)
+    })
+
+    it('birden çok depolu kiracıda barkodsuz devir yazılmıyor ve bu söyleniyor', async () => {
+      await admin.client`
+        INSERT INTO depots (tenant_id, name) VALUES (${other.tenantId}, 'Merkez'), (${other.tenantId}, 'Şube')
+      `
+      const sku = uniq('NBC-')
+      const file = await parseProductFile(
+        Buffer.from(['Stok Kodu;Ürün Adı;Alış Fiyatı;Açılış Stoğu', `${sku};Çok Depo;2;5`].join('\n'), 'utf8'),
+        'depo.csv',
+      )
+      const result = await commitImport(otherBoss, await previewImport(otherBoss, file, opts), opts)
+
+      expect(result).toMatchObject({ created: 1, openings: { written: 0, skipped: 0, failed: 1 } })
+      expect(result.notices[0]!.message).toContain('birden fazla depo var')
+      expect(await otherMovementCount()).toBe(0)
+    })
   })
 })
 

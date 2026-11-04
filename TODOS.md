@@ -476,17 +476,6 @@ işler ve güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
     otomatik sıfırlama yok. Örnek dosya sıfır satırları atlıyorsa öncelik yükselir.
   - Bağlı: T218, T219.
   - Kaynak: CEO Review bulgu 6 ve CEO-7, 2026-10-27.
-- [ ] **T228 (P2)** - import - **Ürün aktarımında barkodu isteğe bağlı yapmak: barkodsuz yeni satırın Açılış Stoğu sessizce düşüyor**
-  - Neden: bugün ürün aktarımı barkodsuz yeni satırı hata yapıyor (`import.ts`). Kural kalkarsa
-    fiyatı olan barkodsuz yeni satırda devir yazılmadan ve hatasız geçer: devir planı tekli
-    barkod istiyor, yeni satırda barkod boşsa ne plan ne satır hatası oluşuyor (`import.ts`,
-    `openingBarcode` kontrolü).
-  - Kapsam: devir ürün kimliğiyle (`DAT-22`) yazılmalı ya da açıkça raporlanmalı; ardından
-    barkod zorunluluğu kalkar (`PRD-19`). CEO-4 gereği bu çözülene kadar ertelendi.
-  - Bağlı: T177, `DAT-18`, `PRD-19`.
-  - Doğrula: barkodsuz yeni satırın devri ya yazılıyor ya da satır sonucunda görünüyor; sessiz
-    kayıp yok.
-  - Kaynak: CEO Review bulgu 4 ve CEO-4, 2026-10-27.
 - [ ] **T216 (P2)** - cron - **Kuyruğa alınan büyük dışa aktarma hiç çalışmıyor: cron'da `STOCK_EXPORT`/`MOVEMENT_EXPORT` işleyicisi yok**
   - Neden: `planExport` büyük raporu kuyruğa atıp e-postayla göndermeyi vaat ediyor, ama
     `runCron` `runQueuedJobs`'a yalnız `DAILY_REPORT`, `LOW_STOCK_SCAN`, `HEALTH_ALARM`
@@ -1061,6 +1050,8 @@ değil. Kayıtlarda "Ürün kararı" onaylı kapsamdır; "Teknik not" henüz ona
   - Durum (2026-11-02): ürün formu ve elle hareket (T220, `1b759a6`) ile envanter dosyasından
     barkodsuz yeni ürün (T218, `a09157d`) kodda; ikisinin de manuel kabul testi bekliyor. Kalan:
     ürün aktarımı (T228). T228 bitince ve UAT sonrası kapanır.
+  - Durum (2026-11-04): T228 kodda ve manuel kabul testi geçti. Kalan: T220 ve T218 yollarının
+    kabul testi kaydı.
   - Bağlı: T155, T175, T156.
 - [ ] **T178** - hareket - **Seri barkod okutma** (değerlendirilecek, 2026-10-13). Kayıttan sonra
   sebep sıfırlanıyor (`hareket/page.tsx:145-148`), mal kabulünde her kalemde yeniden seçiliyor.
@@ -1102,6 +1093,24 @@ FIFO maliyet.
 ## Kapananlar
 
 _(Bu dosyada açılıp kapanan görevler buraya iner. T1–T119'un kapanış kayıtları arşivde.)_
+
+- [x] **T228 (P2)** - import - **Ürün aktarımında barkodu isteğe bağlı yapmak: barkodsuz yeni satırın Açılış Stoğu sessizce düşüyor**
+  - Neden: bugün ürün aktarımı barkodsuz yeni satırı hata yapıyor (`import.ts`). Kural kalkarsa
+    fiyatı olan barkodsuz yeni satırda devir yazılmadan ve hatasız geçer: devir planı tekli
+    barkod istiyor, yeni satırda barkod boşsa ne plan ne satır hatası oluşuyor (`import.ts`,
+    `openingBarcode` kontrolü).
+  - Kapsam: devir ürün kimliğiyle (`DAT-22`) yazılmalı ya da açıkça raporlanmalı; ardından
+    barkod zorunluluğu kalkar (`PRD-19`). CEO-4 gereği bu çözülene kadar ertelendi.
+  - Bağlı: T177, `DAT-18`, `PRD-19`.
+  - Doğrula: barkodsuz yeni satırın devri ya yazılıyor ya da satır sonucunda görünüyor; sessiz
+    kayıp yok.
+  - Kapandı (2026-11-04): barkod zorunluluğu kalktı; tekli barkodu olmayan üründe devir ürün
+    kimliğiyle yazılıyor (`import.ts`, `writeOpening`). Barkodsuz satırda Barkod Türü ya da Koli İçi
+    Adet doluysa satır hata. Kanıt: `opening-import.test.ts` "T228" bloğu (barkod sütunu olmayan CSV
+    ve XLSX dahil); `dogrula` üç korumayı kaldırınca 8, 8 ve 2 test kırmızı. Manuel kabul testi
+    (kullanıcı, yerel demo, 2026-11-04): barkodsuz ürün oluştu, devir 7 adet yazıldı, aynı dosyanın
+    tekrarı ikinci devir yazmadı, stok koduyla 2 adet çıkış 7 → 5.
+  - Kaynak: CEO Review bulgu 4 ve CEO-4, 2026-10-27; 30 Ekim 2026 ERP testi (3.541 barkodsuz satır).
 
 - [x] **T218 (P1)** - core - **Çok depo Dilim 2: envanter dosyası aktarımı ve ilk kurulum (arayüz yok)**
   - Neden: `PRD-18`'in dosya hattı yok. Dilim 1'in kapısı (`DAT-24`) ve aktarım bağlantısı

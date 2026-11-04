@@ -122,7 +122,9 @@ Katman kuralları `PROJECT_BRAIN` §5, ilkeler §12. Kayıtlarda yalnız özelli
 - **Sınırlar:** sekme kapanırsa aktarım durur, kaldığı yerden devam ekranı yok (ürün kapsamı);
   devirde geçmiş tarihli fiyat yok (T172). Bir satır veritabanında 2 dakikadan uzun takılırsa
   ikinci işleyici onu yeniden deneyebilir: veri bozulmaz, sonucu `Çakışma` görünebilir (ADR-007).
-  Yeni üründe barkod zorunlu: kaldırmak barkodsuz satırın devrini sessizce düşürür (CEO-4, T228).
+  Barkod isteğe bağlı (PRD-19, T228): barkodsuz ürün stok koduyla tanınır; tekli barkodu olmayan
+  üründe devir ürün kimliğiyle yazılır (`DAT-22`), tekli barkod varsa barkodla. Barkodsuz satırda
+  Barkod Türü ya da Koli İçi Adet doluysa satır hatadır.
   Birden çok depolu işletmede devir `DEPOT_REQUIRED` ile yazılmaz (satır "devir yazılamadı"
   gösterir; Envanteri Güncelle'ye yönlendirme T218); önizleme bunu önceden göstermiyor (T234).
   20.000 satır ~25 dk sürüyor (T235). Deftere bağlı aktarım kaydı 30 günde silinmez
