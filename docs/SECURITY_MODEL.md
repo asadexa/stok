@@ -259,7 +259,8 @@ güncellenir. Yeni tehdit yeni ID alır; ID yeniden kullanılmaz.
   konteynerde komut çalıştırma.
 - **Koruma:** compose portu yalnız `127.0.0.1` (`'127.0.0.1:5433:5432'`, WS-1.1);
   `.env.example` bağlantı adresleri `127.0.0.1`. `wait-for-db.mjs` Docker'da içeriden
-  `pg_isready`'e ek olarak host portunu da sınıyor; yayın bozulursa "hazır" demiyor.
+  `pg_isready`'e (TCP, `-h 127.0.0.1`, T195) ek olarak host portunu da sınıyor; yayın bozulursa
+  "hazır" demiyor.
 - **Ölçüm (2026-10-13, geliştirme laptopu):** önce `0.0.0.0`, `[::]` (Docker Desktop) ve
   `[::1]` (`wslrelay.exe`) dinliyordu; yerel ağ IPv4'ü, iki küresel IPv6 adresi ve WSL
   arayüzünden TCP bağlantısı açıktı. Sonra tek dinleyici `127.0.0.1:5433`; `::1` reddediyor,

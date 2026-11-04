@@ -145,7 +145,8 @@ durum" adımı (`pnpm db:backup` ve `--status`) yeşil. Öncesinde `4fef58f` (#7
 (#72) kırmızıydı: `backup.test.ts`'in hazırlığı migration'da `ECONNRESET` aldı, 8 test atlandı.
 Neden test düzeneğiydi (geçici compose projesi bekleme betiğine aktarılmıyordu, Linux
 `docker-proxy`'si portu PostgreSQL hazır olmadan kabul etti); `1e47741` ortamı aktarıp migration'dan
-önce `SELECT 1` kapısı ekledi. Ortak `wait-for-db.mjs`'te kalan benzer pencere: T195.
+önce `SELECT 1` kapısı ekledi. Ortak `wait-for-db.mjs`'teki benzer pencere (CI #113,
+`db-reset.test.ts`) T195 ile kapandı: Docker kipinde `pg_isready` TCP'den soruyor.
 `581f291` (#68) ilk denemede
 Linux web derlemesinde Turbopack font çözümleme hatasıyla kırmızıydı, ikinci deneme yeşil; kök
 neden bilinmiyor. `c2f9805`'te aynı tür hata tekrar etti: `master` push'unun CI #99'unda ilk

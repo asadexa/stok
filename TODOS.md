@@ -900,23 +900,6 @@ işler ve güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
 - [ ] **T191 (P3)** - test - Geçici compose projesi kuran üç test dosyası (`db-reset.test.ts`, `db-reset-target.test.ts`, `backup.test.ts`) fikstürü kopya olarak taşıyor: compose JSON'u ve "gözden çıkarılabilir proje" ön koşulu ayrışabilir. `db-reset.test.ts`, WS-1.3a refactor'ünün davranış kanıtı olduğu için bilerek değiştirilmedi. WS-1.4 (tatbikat) dördüncü kullanıcı olunca ortak test modülüne alınır. Kaynak: WS-1.3a, 2026-10-16.
 - [ ] **T193 (P3)** - güvenlik - Yedek dizini kuralı yalnız OneDrive'ı (ortam değişkenleri) tanıyor; Dropbox, Google Drive ve benzeri senkron klasörleri algılanmıyor. `STOK_BACKUP_DIR` böyle bir klasörü gösterirse döküm (parola özetleri, kişisel veri, alış fiyatları) buluta gider. Doğrulanmadı (bu makinede başka istemci yok). `SECURITY_MODEL` S20. Kaynak: WS-1.3a, 2026-10-16.
 - [ ] **T194 (P3)** - db - `pg_dump` çıktısı akışla alındığı için arşivde veri ofseti yok: `pg_restore -j` (paralel geri yükleme) kullanılamıyor, sıralı geri yükleme çalışır. 12 MB'ta önemsiz; veritabanı büyürse geri yükleme süresi uzar. Seçenek: kapsayıcıda dosyaya döküm + `docker cp` (WS-1.3a planı Soru 4, alternatif a). Doğrula: WS-1.4'te sıralı geri yükleme süresi ölçülür. Kaynak: WS-1.3a, 2026-10-16.
-- [ ] **T195 (P3)** - altyapı - **`wait-for-db.mjs` imajın geçici init sunucusunu "hazır" sayabilir**
-  - Neden: Docker kipinde betik kapsayıcının içinden `pg_isready` (Unix soketi) ve host'tan TCP
-    portuna bakıyor. Taze volume'de imajın `docker-entrypoint.sh`'ı `db/init/*.sql`'i
-    `listen_addresses=''` ile yalnız sokette dinleyen geçici bir sunucuda koşturuyor: bu sırada
-    `pg_isready` "hazır" diyor, Linux'ta `docker-proxy` de portu arkasında dinleyen olmadan kabul
-    ediyor. Betik bu pencerede dönerse ardından koşan `migrate` geçici sunucunun kapanmasına denk
-    gelip `ECONNRESET` ya da `57P03` alabilir.
-  - Kanıt: çıkarım, bu pencerede dönüş gözlenmedi. Yakın biçimi CI #72'de yaşandı
-    (`backup.test.ts`, betik yalnız TCP'ye bakınca); `1e47741` yalnız o testte `SELECT 1`
-    kapısıyla kapattı. Yerel ölçümde bekleme olmadan `up -d`'den hemen sonraki ilk sorgu `57P03`
-    aldı.
-  - Bağlı: `db:up`, `db:reset` (volume yeniden kurulunca), `scripts/demo.mjs`, `db-reset.test.ts`;
-    WS-1.4 tatbikatı taze kümede bekleyecekse o da. Arşivdeki T59 (kapalı) açık port biçimini kapatmıştı.
-  - Doğrula: taze volume'le `db:up` ve hemen ardından `migrate` tekrarlı koşuda yeşil. Seçenek:
-    betik "hazır" demeden önce yayımlanan porta `SELECT 1` göndersin ya da `pg_isready`'yi
-    `-h 127.0.0.1` ile TCP'den sorsun. Düzelince `backup.test.ts`'teki `waitForQuery` kaldırılabilir mi bakılır.
-  - Kaynak: WS-1.3a CI #72 analizi, 2026-10-16.
 - [ ] **T197 (P3)** - test - **Doğrulamanın CLI'da son adı engellediği entegrasyon testiyle kanıtlı değil**
   - Neden: `backup.test.ts`'in 2. testi `verifyDump`'ı doğrudan çağırıyor, 7. testi `pg_dump`
     aşamasında düşüyor. `backup()` içindeki `verifyDump` çağrısı kaldırılsa ya da sonucu yok
@@ -1093,6 +1076,28 @@ FIFO maliyet.
 ## Kapananlar
 
 _(Bu dosyada açılıp kapanan görevler buraya iner. T1–T119'un kapanış kayıtları arşivde.)_
+
+- [x] **T195 (P3)** - altyapı - **`wait-for-db.mjs` imajın geçici init sunucusunu "hazır" sayabilir**
+  - Neden: Docker kipinde betik kapsayıcının içinden `pg_isready` (Unix soketi) ve host'tan TCP
+    portuna bakıyor. Taze volume'de imajın `docker-entrypoint.sh`'ı `db/init/*.sql`'i
+    `listen_addresses=''` ile yalnız sokette dinleyen geçici bir sunucuda koşturuyor: bu sırada
+    `pg_isready` "hazır" diyor, Linux'ta `docker-proxy` de portu arkasında dinleyen olmadan kabul
+    ediyor. Betik bu pencerede dönerse ardından koşan `migrate` geçici sunucunun kapanmasına denk
+    gelip `ECONNRESET` ya da `57P03` alabilir.
+  - Kanıt: CI #72 (`backup.test.ts`, migration'da `ECONNRESET`; `1e47741` yalnız o testte `SELECT 1`
+    kapısıyla kapattı) ve CI #113 ilk denemesi (`db-reset.test.ts:204`, `CREATE SCHEMA IF NOT EXISTS
+    "drizzle"`'da `read ECONNRESET`; aynı ağaç main CI #112'de yeşil; kullanıcının GitHub günlüğü
+    doğrulaması, 2026-11-04).
+  - Bağlı: `db:up`, `db:reset` (volume yeniden kurulunca), `scripts/demo.mjs`, `db-reset.test.ts`;
+    WS-1.4 tatbikatı taze kümede bekleyecekse o da. Arşivdeki T59 (kapalı) açık port biçimini kapatmıştı.
+  - Kapandı (2026-11-04): Docker kipinde `pg_isready -h 127.0.0.1` (TCP; geçici init sunucusu TCP
+    açmıyor), üretim compose'unun sağlık kontrolüyle aynı kural. Kanıt: `wait-for-db.test.ts` izole
+    projede init'i `pg_sleep(8)` ile uzatıp betik döndüğü an tek TCP sorgusuyla init sonrasını
+    sınıyor (belirlenimci); `dogrula`: `-h` kaldırılınca kırmızı (`the database system is starting
+    up`, Windows Docker Desktop'ta da). Bilerek değişmeyenler (kullanıcı kararı): `backup.test.ts`'teki
+    `waitForQuery` korunuyor; geliştirme `docker-compose.yml` sağlık kontrolü hâlâ soketten soruyor
+    (hiçbir betik o durumu beklemiyor, bugün etkisiz; hizalanması ayrı iş).
+  - Kaynak: WS-1.3a CI #72 analizi, 2026-10-16; CI #113, 2026-11-04.
 
 - [x] **T228 (P2)** - import - **Ürün aktarımında barkodu isteğe bağlı yapmak: barkodsuz yeni satırın Açılış Stoğu sessizce düşüyor**
   - Neden: bugün ürün aktarımı barkodsuz yeni satırı hata yapıyor (`import.ts`). Kural kalkarsa
