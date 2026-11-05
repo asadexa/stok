@@ -101,7 +101,9 @@ test('çalışan stok düzeltme bölümünü görmüyor', async ({ page }) => {
   await girisYap(page, YILMAZ_CALISAN)
   await page.goto('/stok')
   await page.goto((await page.locator('table a[href^="/urunler/"]').first().getAttribute('href'))!)
-  await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+  // Sayfada iki h1 var (üst şerit ve ürün adı): ürün sayfasının yüklendiği,
+  // ürüne özgü bölümden anlaşılıyor.
+  await expect(page.locator('section[aria-label="Mevcut durum"]')).toBeVisible()
   await expect(page.locator('section[aria-label="Stoğu düzelt"]')).toHaveCount(0)
 })
 
