@@ -394,6 +394,12 @@ Katman kuralları `PROJECT_BRAIN` §5, ilkeler §12. Kayıtlarda yalnız özelli
   güncelle ekranı ve ürün sayfasında salt okunur depo dağılımı (`f9a8bef`, T219;
   `apps/web/src/app/(panel)/stok/envanter/`); harekette depo seçimi ve Atanmamış Stok (`1b759a6`,
   T220, F-03). Depo bugün yalnız envanter dosyasıyla açılıyor (elle açma/arşiv T226).
+- **Uygulanan (T232, 2026-11-05, `development`; kullanıcı kabulü 2026-11-05; dağıtılmadı):** ürün sayfasında "Stoğu düzelt
+  (sayım)" bölümü (`PRD-20`): yönetici depo seçip sayılan miktarı girer, kaydetmeden önce
+  "mevcut → hedef, fark" görünür; kapı `DAT-24` (deposuz işletmede hedef toplam stok). Sayfa
+  açıldıktan sonra stok değiştiyse düzeltme yazılmaz; aynı form iki kez gönderilirse tek hareket.
+  Dosyalar `apps/web/src/app/(panel)/urunler/[id]/page.tsx`, `stock-adjust.tsx`; testler
+  `depots.test.ts` "deposuz envanter düzeltmesi", e2e `t232-stok-duzeltme.spec.ts`.
 - **Akış (onaylı PLAN 2026-10-27; Dilim 2–3'te uygulandı):** T171 hattı (`ARC-15`) ikinci aktarım türüyle →
   önizleme: değişecek (eski → yeni), değişmeyecek, yeni ürün, yeni depo, hata, belirsiz eşleşme,
   depoya atama bekliyor → onay (aynı içerikte "Bu yeni bir sayım", sunucuda zorunlu) → parça parça
@@ -406,7 +412,8 @@ Katman kuralları `PROJECT_BRAIN` §5, ilkeler §12. Kayıtlarda yalnız özelli
   tekrarı 0 yeni hareket yazar; aynı içerik uyarı verir; önizlemeden sonra değişen stok `Çakışma`
   olur; boş miktar, boş `Ambar` ve negatif miktar satır hatasıdır; çalışan ekranı açamaz; defter
   = projeksiyon.
-- **Sınırlar:** deposu bilinmeyen eski stoğu olan ürünün satırı yazılmaz (depoya atama T223);
+- **Sınırlar:** deposu bilinmeyen eski stoğu olan ürünün satırı yazılmaz ve ürün sayfasından da
+  düzeltilemez (depoya atama T223);
   dosyada olmayan stoklu ürün sayısı gösterilmez ve ERP çıktısının sıfır satırları atlama riski
   açık (T227); manuel sütun eşleştirme yok (T229); depo silme ya da arşivleme yok (T226); satış
   fiyatı güncellemesi yok (`PRC-13`, T224); sekme kapanırsa aktarım durur (`ARC-15`).

@@ -41,7 +41,7 @@ Yol haritasının üstü (kullanıcı kararı 2026-10-27, A2 ve CEO-8; 2026-10-2
 (1) **çok depolu stok ve Envanteri Güncelle** (`PRD-17`, `PRD-18`; F-15): Dilim 1–4 bitti
 (T217–T220); manuel kabul testi U0–U12 geçti (kullanıcı bildirimi, 2026-11-03; T222). T221'in
 değer kısmı kodda, rozeti açık. T171 kabul testi geçti; kalan Lightsail ölçümü. UAT bulguları
-T234–T237. (2) Kullanıcı testinde bulunan eksikler: tek ürün sayım düzeltmesi (T232), eski stoğun depoya
+T234–T237. (2) Kullanıcı testinde bulunan eksikler: tek ürün sayım düzeltmesi (T232, kapandı 2026-11-05), eski stoğun depoya
 atanması (T223) ve depolar arası transfer (T233); Dilim 5'in kalanı (T221 rozeti). (3) Bu kritik yolun dışında
 ve sıraları korunarak: T201 gerçek tedarikçi API'si, sonra T200 Dilim 2; UX iyileştirmeleri uygun
 ürün dilimlerinde (T212–T215, T210, T211), tek bir yeniden tasarım olarak değil. T200 PLAN ve
@@ -77,21 +77,6 @@ işler ve güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
     Kalan, kapanmasını engelleyen tek madde: kullanıcıya yönelik test notu (bilinen sınırlar,
     yanlış dosya düzeltme yolu) yazılmadı.
   - Kaynak: depo bazlı envanter PLAN'ı ve CEO-8, 2026-10-27.
-- [ ] **T232 (P1)** - web - **Ürün detayından manuel stok/sayım düzeltmesi yok; tek ürünün miktarı yalnız dosyayla düzeltilebiliyor**
-  - Neden: sayılan miktarı tek bir ürün için girmenin yolu yok. Sayım düzeltmesi (`COUNT_ADJUST`)
-    yalnız envanter dosyasından yazılıyor: `createMovement`'ın `inventory` seçeneğinin tek çağıranı
-    `packages/core/src/inventory-import.ts`. Kullanıcı ya dosya hazırlıyor ya da "Diğer giriş/çıkış"
-    kullanıyor; ikincisi sayım farkını sıradan harekete karıştırıyor.
-  - Kanıt: kod okuması 2026-10-31 (`movements.ts` `inventory` seçeneği, `reasons.ts` `COUNT_ADJUST_*`
-    elle seçilemiyor); kullanıcı testi bildirimi ("ürünün mevcut stok miktarı kolayca düzeltilemiyor").
-  - Yapılacak (onaylanmadı): ürün sayfasında depo bazında yeni miktar girişi; mevcut `inventory`
-    kapısı (`DAT-24`): beklenen miktar, hedef, `count:approve`, kilit altında `STOCK_CHANGED`.
-    Atanmamış stoklu üründe davranış T223 ile birlikte kararlaştırılır.
-  - Bağlı: `DAT-24`, `PRD-18`, T223, T233, T127, T155.
-  - Doğrula: fark kadar tek `COUNT_ADJUST` hareketi; fark 0'da hareket yok; önizlemeden sonra
-    değişen stokta red (`dogrula`); çalışan düzeltme yapamıyor; defter = projeksiyon.
-  - Kaynak: Faz 0 durum analizi ve kullanıcı testi, 2026-10-31.
-
 - [ ] **T171 (P1)** - import - **Büyük içe aktarma tek istekte uzun sürüyor (2.000 satır devirli 47 sn); kullanıcı hedefi 20.000 satır**
   - Neden: satırlar tek tek, her devir kendi `createMovement` transaction'ında yazılıyor
     (bilinçli: tek yazma kapısı ve satır bazlı hata). Yerel `next start`'ta sorun değil;
@@ -1089,6 +1074,20 @@ FIFO maliyet.
 ## Kapananlar
 
 _(Bu dosyada açılıp kapanan görevler buraya iner. T1–T119'un kapanış kayıtları arşivde.)_
+
+- [x] **T232 (P1)** - web - **Ürün detayından manuel stok/sayım düzeltmesi yok; tek ürünün miktarı yalnız dosyayla düzeltilebiliyor**
+  - Neden: sayılan miktarı tek ürün için girmenin yolu yoktu; `COUNT_ADJUST` yalnız envanter
+    dosyasından yazılıyordu, kullanıcı "Diğer giriş/çıkış"la sayım farkını sıradan harekete karıştırıyordu.
+  - Kapandı (2026-11-05, kullanıcı kabulü): ürün sayfasında "Stoğu düzelt (sayım)" (`PRD-20`); kapı
+    `DAT-24`, deposuz işletmede hedef toplam stok. Kanıt: `depots.test.ts` "deposuz envanter düzeltmesi"
+    (eski miktarla red, çift gönderimde tek hareket, fark 0 ve çalışan reddi, depolu işletmede boş depo
+    reddi, depo oluşturmayla yarışta çift sayım yok); `dogrula`: boş depo koruması, atanmamış stok
+    kontrolü ve beklenen miktar karşılaştırması kaldırılınca ilgili testler kırmızı; E2E
+    `t232-stok-duzeltme.spec.ts` (depolu kısım izole veritabanında ve CI'da). Manuel kabul testi
+    (kullanıcı, izole `stok_test_e2e_t232`, 2026-11-05): U1–U6 ve U8–U10 geçti; isteğe bağlı U7
+    (hızlı çift tıklama) yapılmadı, çift gönderim yalnız otomatik testle kanıtlı.
+  - Açık kalan: depolu işletmede atanmamış stoklu üründe düzeltme kapalı; depoya atama T223.
+  - Kaynak: Faz 0 durum analizi ve kullanıcı testi, 2026-10-31.
 
 - [x] **T195 (P3)** - altyapı - **`wait-for-db.mjs` imajın geçici init sunucusunu "hazır" sayabilir**
   - Neden: Docker kipinde betik kapsayıcının içinden `pg_isready` (Unix soketi) ve host'tan TCP

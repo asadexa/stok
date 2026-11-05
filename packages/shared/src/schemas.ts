@@ -247,7 +247,9 @@ export type CreateMovementInput = z.infer<typeof createMovementSchema>
 export const inventoryAdjustmentSchema = z.object({
   idempotencyKey: z.string().uuid(),
   productId: z.string().uuid(),
-  depotId: z.string().uuid(),
+  // `null` yalnız HİÇ deposu olmayan işletmede geçerli: hedef o zaman toplam
+  // (depoya atanmamış) stok (T232, DAT-24). Depolu işletmede kapı reddediyor.
+  depotId: z.string().uuid().nullable(),
   expectedQty: z
     .number({ invalid_type_error: 'Miktar sayı olmalı' })
     .min(-1_000_000_000)

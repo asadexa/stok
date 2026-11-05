@@ -202,8 +202,8 @@ bekleyen yok. Çok depo ve Envanteri Güncelle (F-15) manuel kabul testinde kabu
   yol), Envanteri Güncelle ekranı, ürün sayfasında depo dağılımı, harekette depo seçimi, Atanmamış
   Stok'tan çıkış, barkodsuz ürün formu ve ürün kimliğiyle hareket; panel ve kategori değeri fiyatı
   bilinmeyen ürünü 0 saymıyor, sayısını gösteriyor. Yok: deposu bilinmeyen eski stoğun depoya
-  atanması (T223; envanter dosyası da böyle bir ürünün satırını atlıyor), tek ürün sayım
-  düzeltmesi (T232), depolar arası transfer (T233), "Depoya atama bekliyor" rozeti (T221), elle
+  atanması (T223; envanter dosyası da böyle bir ürünün satırını atlıyor), `main`'de tek ürün
+  sayım düzeltmesi (T232 `development`'ta, aşağıda), depolar arası transfer (T233), "Depoya atama bekliyor" rozeti (T221), elle
   depo açma/arşivleme (T226), fiyat geçmişi ve toplu
   satış fiyatı (T224), toplu mal kabulü (T225).
 - **Ürün görseli**: yalnız URL; yükleme yok (T136).
@@ -309,16 +309,18 @@ workstream'i gelir. Kalan işler:
 - Kapanış: bu belge senkronunun `development` → `main` PR'ı (merge commit ile) ve ardından
   `development`'ın `main`'e fast-forward edilmesi.
 - Eski 8 Dependabot PR'ı için karar: `development`'a yönlendirme ya da kapatma (T140).
-- Bilinen sınırlar listesinin kullanıcı tarafından kabulü (kayıtlı değil): T221 rozeti, T223, T226, T227, T232, T233, T216, T208,
+- Bilinen sınırlar listesinin kullanıcı tarafından kabulü (kayıtlı değil): T221 rozeti, T223, T226, T227, T233, T216, T208,
   T234–T237.
 - Lightsail sunucu doğrulamaları (`OPS-14`, T171 bellek ölçümü), T222 test notu.
-Kullanıcı testinde bulunan eksikler T232 (tek ürün sayım düzeltmesi), T223 (eski stoğun depoya
-atanması) ve T233 (depolar arası transfer).
+Kullanıcı testinde bulunan eksikler T223 (eski stoğun depoya atanması) ve T233 (depolar arası
+transfer); T232 (tek ürün sayım düzeltmesi) kapandı.
 
 **Yol haritası sırası** (kullanıcı kararı 2026-10-27; 2026-10-22 sırasının üstüne):
 1. **Çok depo ve Envanteri Güncelle**: Dilim 1–4 ve T221'in değer kısmı kodda ve kabul testinde
    geçti (2026-11-03). T171 (20.000 satır; `ARC-15`, ADR-007, `DAT-20`, S21, F-02) kabul testinde
-   geçti; kalan Lightsail ölçümü. Sıradaki çok depo işleri T232, T223, T233 ve T221 rozeti.
+   geçti; kalan Lightsail ölçümü. Sıradaki çok depo işleri T223, T233 ve T221 rozeti.
+   T232 (tek ürün sayım düzeltmesi) `development`'ta; kullanıcı kabul testi geçti (2026-11-05,
+   izole veritabanı). `main`'de ve Lightsail'de yok.
 2. **T201 gerçek tedarikçi API'si**: ilk hedef, erişimi sağlanabilen bir sağlayıcıyla uçtan uca.
    Sağlayıcı, kimlik doğrulama ve yaklaşım PLAN'da kanıtla seçilir; gerçek sağlayıcı seçilmeden genel
    entegrasyon iddia edilmez. Çok depo kritik yolunun dışında.

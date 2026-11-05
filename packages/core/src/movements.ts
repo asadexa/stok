@@ -122,7 +122,8 @@ interface CreateMovementOptions {
 
 /** Envanter düzeltmesinin kilit altında sınanan değerleri (ölçekli). */
 interface InventoryCheck {
-  depotId: string
+  /** `null`: deposuz işletme, hedef depoya atanmamış (= toplam) stok. */
+  depotId: string | null
   expected: bigint
   target: bigint
 }
@@ -317,7 +318,7 @@ function parseInventoryInput(raw: unknown): {
     input: {
       idempotencyKey: adj.idempotencyKey,
       productId: adj.productId,
-      depotId: adj.depotId,
+      ...(adj.depotId !== null ? { depotId: adj.depotId } : {}),
       qty: scaledToNumber(diff < 0n ? -diff : diff),
       reason: diff > 0n ? 'COUNT_ADJUST_UP' : 'COUNT_ADJUST_DOWN',
       ...(adj.note ? { note: adj.note } : {}),
@@ -362,6 +363,16 @@ async function writeMovement(
   // Atanmamış Stok (A1) bir depo değil: seçildiyse hareket depoya atanmamış
   // kovadan düşüyor, depo çözümü hiç yapılmıyor.
   const depot = input.fromUnassigned ? null : await resolveDepot(tx, actor.tenantId, input.depotId)
+
+  // DEPOSUZ ENVANTER DÜZELTMESİ yalnız hiç deposu olmayan işletmede. Depo
+  // kimliği verilmeyince `resolveDepot` tek depoyu kendisi seçiyor (DAT-23);
+  // burada izin verilseydi sayım, kullanıcının gördüğü toplam yerine o depoya
+  // yazılırdı. İki ve daha çok depoda `resolveDepot` zaten DEPOT_REQUIRED.
+  if (flags.inventory && flags.inventory.depotId === null && depot !== null) {
+    throw new AppError('DEPOT_REQUIRED', 'tenant has a depot; inventory adjustment needs one', {
+      reason: 'INVENTORY_HAS_DEPOT',
+    })
+  }
 
   const effectiveQty = effectiveQuantity(input.qty, target.qtyMultiplier, target.unit as Unit)
   const delta = toDelta(1, input.reason) === 1 ? effectiveQty : -effectiveQty
@@ -435,8 +446,10 @@ async function writeMovement(
     }
     // DEPOYA ATANMAMIŞ STOK. Eski stoğun hangi depoda olduğu bilinmiyor;
     // yanına depo sayımı yazılsaydı aynı mal iki kez sayılırdı (toplam
-    // şişerdi). Ürün önce depoya atanmalı; satır yazılmıyor.
-    const unassigned = await sumDelta(tx, actor.tenantId, target.productId, null)
+    // şişerdi). Ürün önce depoya atanmalı; satır yazılmıyor. Deposuz
+    // düzeltmede hedef zaten atanmamış miktarın kendisi: yukarıda sınandı.
+    const unassigned =
+      flags.inventory.depotId === null ? 0n : await sumDelta(tx, actor.tenantId, target.productId, null)
     if (unassigned !== 0n) {
       throw new AppError('STOCK_CHANGED', `unassigned stock ${formatScaled(unassigned)}`, {
         reason: 'UNASSIGNED',

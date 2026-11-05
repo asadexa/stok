@@ -1,4 +1,6 @@
+import { randomUUID } from 'node:crypto'
 import {
+  AppError,
   BARCODE_KINDS,
   BARCODE_KIND_VALUES,
   UNITS,
@@ -11,8 +13,10 @@ import {
   addBarcode,
   archiveBarcode,
   archiveProduct,
+  createMovement,
   getProductDepotStock,
   getProductDetail,
+  listDepots,
   listLocations,
   listProductOffers,
   restoreProduct,
@@ -29,11 +33,27 @@ import {
   nullableNumber,
   nullableText,
   numberOr,
+  optionalNumber,
+  optionalText,
   text,
   type FormParams,
 } from '@/server/form'
 import { currentActor } from '@/server/session'
+import { type AdjustOption, StockAdjustForm } from './stock-adjust'
 import { SupplierOffers } from './supplier-offers'
+
+/**
+ * Sayım düzeltmesinin defterdeki sabit açıklaması (T232, K5). Kullanıcı notu
+ * bunun arkasına ekleniyor; toplam, hareket notunun 500 karakter sınırına
+ * (`inventoryAdjustmentSchema.note`) sığmalı. Sığmasaydı kapı bütün düzeltmeyi
+ * reddederdi.
+ */
+const ADJUST_NOTE_PREFIX = 'Ürün sayfasından sayım düzeltmesi'
+const ADJUST_NOTE_SEPARATOR = ': '
+const ADJUST_NOTE_MAX = 500 - ADJUST_NOTE_PREFIX.length - ADJUST_NOTE_SEPARATOR.length
+/** K6: görev kodu yok; kullanıcıya ne yapması gerektiği söyleniyor. */
+const UNASSIGNED_TEXT =
+  'Bu üründe henüz bir depoya atanmamış stok var. Stoğu düzeltmeden önce bu stoğun bir depoya atanması gerekiyor.'
 
 /**
  * ============================================================================
@@ -60,6 +80,7 @@ interface UrunParams extends FormParams {
   kaydedildi?: string
   barkod?: string
   arsiv?: string
+  sayim?: string
 }
 
 export default async function ProductPage({
@@ -90,6 +111,23 @@ export default async function ProductPage({
   const offers = actorCan(actor, 'supplier:read')
     ? await listProductOffers(actor, product.productId, { db })
     : null
+
+  // STOK DÜZELTMESİ (T232). Deposuz işletmede tek seçenek toplam stok. Depolu
+  // işletmede her depo, ürün orada hiç hareket görmediyse 0 ile; üründe
+  // depoya atanmamış stok varsa form yerine açıklama (K6): kapı bu düzeltmeyi
+  // zaten reddeder (çift sayım olurdu).
+  const canAdjust = actorCan(actor, 'count:approve') && !product.archivedAt
+  const adjustBlocked = canAdjust && depotStock !== null && depotStock.unassigned !== 0
+  let adjustOptions: AdjustOption[] = []
+  if (canAdjust && !adjustBlocked) {
+    adjustOptions = depotStock
+      ? (await listDepots(actor, { db })).map((d) => ({
+          value: d.id,
+          label: d.name,
+          qty: depotStock.depots.find((s) => s.depotId === d.id)?.qty ?? 0,
+        }))
+      : [{ value: '', label: 'Toplam stok', qty: product.qty }]
+  }
 
   // -------------------------------------------------------------------------
   // Sunucu eylemleri. Yetki kontrolü servislerde; buradaki `canEdit` sadece
@@ -165,6 +203,43 @@ export default async function ProductPage({
     redirect(`/urunler/${id}?barkod=kaldirildi`)
   }
 
+  async function adjustStock(form: FormData) {
+    'use server'
+    const owner = await currentActor()
+    if (!owner) redirect('/giris')
+
+    const userNote = optionalText(form, 'not')
+    if (userNote && userNote.length > ADJUST_NOTE_MAX) {
+      redirect(`/urunler/${id}?sayim=not`)
+    }
+    const depo = text(form, 'depo')
+    try {
+      // Yetki (`count:approve`), fark, kilit altındaki karşılaştırma ve
+      // idempotency yazma kapısında (DAT-24); burada yalnız form çevrimi.
+      await createMovement(
+        owner,
+        {
+          idempotencyKey: text(form, 'anahtar'),
+          productId: id,
+          depotId: depo === '' ? null : depo,
+          expectedQty: optionalNumber(form, 'beklenen'),
+          targetQty: optionalNumber(form, 'hedef'),
+          note: userNote ? `${ADJUST_NOTE_PREFIX}${ADJUST_NOTE_SEPARATOR}${userNote}` : ADJUST_NOTE_PREFIX,
+          clientCreatedAt: new Date().toISOString(),
+        },
+        { db: appDb(), inventory: true },
+      )
+    } catch (err) {
+      // Ortak STOCK_CHANGED metni dosya akışını anlatıyor ("önizleme", "dosya");
+      // bu ekranın kendi cümlesi var.
+      if (err instanceof AppError && err.code === 'STOCK_CHANGED') {
+        redirect(`/urunler/${id}?sayim=${err.details.reason === 'UNASSIGNED' ? 'atanmamis' : 'degisti'}`)
+      }
+      redirect(`/urunler/${id}?${errorQuery(err)}`)
+    }
+    redirect(`/urunler/${id}?sayim=kaydedildi`)
+  }
+
   async function toggleArchive(form: FormData) {
     'use server'
     const owner = await currentActor()
@@ -208,6 +283,12 @@ export default async function ProductPage({
         {query.barkod === 'kaldirildi' ? <Notice>Barkod kaldırıldı.</Notice> : null}
         {query.arsiv === 'alindi' ? <Notice>Ürün arşive alındı.</Notice> : null}
         {query.arsiv === 'geri' ? <Notice>Ürün arşivden çıkarıldı.</Notice> : null}
+        {query.sayim === 'kaydedildi' ? <Notice>Sayım düzeltmesi kaydedildi.</Notice> : null}
+        {query.sayim === 'degisti' ? (
+          <Alert>Stok, sayfa açıldıktan sonra değişti; düzeltme yazılmadı. Güncel miktara bakıp yeniden girin.</Alert>
+        ) : null}
+        {query.sayim === 'atanmamis' ? <Alert>{UNASSIGNED_TEXT} Düzeltme yazılmadı.</Alert> : null}
+        {query.sayim === 'not' ? <Alert>Not en fazla {ADJUST_NOTE_MAX} karakter olabilir; düzeltme yazılmadı.</Alert> : null}
 
         {product.archivedAt ? (
           <p className="flex gap-2 rounded-control border border-line-control bg-surface-2 p-3 text-sm text-ink-2">
@@ -281,6 +362,31 @@ export default async function ProductPage({
                 </tr>
               </tbody>
             </table>
+          )}
+        </section>
+      ) : null}
+
+      {canAdjust ? (
+        <section
+          aria-label="Stoğu düzelt"
+          className="mb-6 max-w-2xl rounded-card border border-line bg-surface shadow-card"
+        >
+          <h2 className="border-b border-line px-4 py-3 font-semibold">Stoğu düzelt (sayım)</h2>
+          {adjustBlocked ? (
+            <p className="px-4 py-3 text-sm text-ink-2">{UNASSIGNED_TEXT}</p>
+          ) : (
+            <>
+              <p className="px-4 pt-3 text-sm text-ink-2">
+                Saydığınız miktarı girin. Fark kadar sayım düzeltmesi hareketi yazılır; fiyatlar değişmez.
+              </p>
+              <StockAdjustForm
+                action={adjustStock}
+                options={adjustOptions}
+                unit={product.unit as Unit}
+                idempotencyKey={randomUUID()}
+                noteMax={ADJUST_NOTE_MAX}
+              />
+            </>
           )}
         </section>
       ) : null}

@@ -108,7 +108,10 @@ export const ERROR_CODES = {
     retryable: false,
     // Birden çok depo varken hangisinden çıkıldığını sunucu tahmin edemez;
     // tahmin etseydi stok yanlış depodan düşerdi.
-    tr: () => 'Bu işletmede birden fazla depo var; hareket için depo seçilmeli',
+    tr: (d) =>
+      d.reason === 'INVENTORY_HAS_DEPOT'
+        ? 'Bu işletmede depo var; stok düzeltmesi için depo seçilmeli'
+        : 'Bu işletmede birden fazla depo var; hareket için depo seçilmeli',
   },
   UNASSIGNED_OUT_ONLY: {
     http: 400,
