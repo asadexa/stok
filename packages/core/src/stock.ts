@@ -1,4 +1,4 @@
-import { AppError, type Unit, listStockSchema } from '@stok/shared'
+import { AppError, type Unit, listStockSchema, transferReasonsSqlList } from '@stok/shared'
 import { type Db, currentStock, depots, locations, products, stockMovements, withTenant } from '@stok/db'
 import { and, asc, eq, isNull, or, sql } from 'drizzle-orm'
 import {
@@ -605,6 +605,8 @@ export async function dashboardSummary(
                SUM(abs(delta))::text                        AS total
           FROM stock_movements
          WHERE created_at >= ${since.toISOString()}::timestamptz
+           -- Depo transferi giriş/çıkış değil, yer değişikliği (T223).
+           AND reason NOT IN ${sql.raw(transferReasonsSqlList())}
            ${scopedUserId ? sql`AND user_id = ${scopedUserId}` : sql``}
          GROUP BY 1
       `)
@@ -686,6 +688,7 @@ export async function dashboardSummary(
           LEFT JOIN stock_movements m
                  ON m.created_at >= g.day
                 AND m.created_at <  g.day + interval '1 day'
+                AND m.reason NOT IN ${sql.raw(transferReasonsSqlList())}
                 ${scopedUserId ? sql`AND m.user_id = ${scopedUserId}` : sql``}
          GROUP BY g.day
          ORDER BY g.day

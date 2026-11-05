@@ -412,8 +412,14 @@ Katman kuralları `PROJECT_BRAIN` §5, ilkeler §12. Kayıtlarda yalnız özelli
   tekrarı 0 yeni hareket yazar; aynı içerik uyarı verir; önizlemeden sonra değişen stok `Çakışma`
   olur; boş miktar, boş `Ambar` ve negatif miktar satır hatasıdır; çalışan ekranı açamaz; defter
   = projeksiyon.
-- **Sınırlar:** deposu bilinmeyen eski stoğu olan ürünün satırı yazılmaz ve ürün sayfasından da
-  düzeltilemez (depoya atama T223);
+- **Uygulanan (T223, 2026-11-05, `development`; kullanıcı kabulü bekliyor; dağıtılmadı):** ürün
+  sayfasında "Atanmamış stoğu depoya ata" (`PRD-21`): yönetici hedef depoyu ve miktarı (varsayılan
+  tamamı) seçer, kaydetmeden önce iki kova ve değişmeyen toplam görünür. Kapı `transferStock`
+  (`DAT-26`, `DAT-27`; migration 0016). Tam atamadan sonra "Stoğu düzelt" açılır. Dosyalar
+  `urunler/[id]/page.tsx`, `assign-form.tsx`; testler `transfers.test.ts`, e2e
+  `t223-depoya-atama.spec.ts`.
+- **Sınırlar:** deposu bilinmeyen eski stoğu olan ürünün envanter satırı yazılmaz ve ürün
+  sayfasından düzeltilemez; önce depoya atanır (T223). Eksi atanmamış stok atanamaz (T239);
   dosyada olmayan stoklu ürün sayısı gösterilmez ve ERP çıktısının sıfır satırları atlama riski
   açık (T227); manuel sütun eşleştirme yok (T229); depo silme ya da arşivleme yok (T226); satış
   fiyatı güncellemesi yok (`PRC-13`, T224); sekme kapanırsa aktarım durur (`ARC-15`).

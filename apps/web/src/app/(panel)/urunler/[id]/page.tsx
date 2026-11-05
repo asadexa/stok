@@ -20,6 +20,9 @@ import {
   listLocations,
   listProductOffers,
   restoreProduct,
+  TRANSFER_NOTE_LIMIT,
+  transferNotePrefix,
+  transferStock,
   updateProduct,
 } from '@stok/core'
 import { appDb } from '@stok/db'
@@ -39,6 +42,7 @@ import {
   type FormParams,
 } from '@/server/form'
 import { currentActor } from '@/server/session'
+import { type AssignDepot, AssignForm } from './assign-form'
 import { type AdjustOption, StockAdjustForm } from './stock-adjust'
 import { SupplierOffers } from './supplier-offers'
 
@@ -54,6 +58,14 @@ const ADJUST_NOTE_MAX = 500 - ADJUST_NOTE_PREFIX.length - ADJUST_NOTE_SEPARATOR.
 /** K6: görev kodu yok; kullanıcıya ne yapması gerektiği söyleniyor. */
 const UNASSIGNED_TEXT =
   'Bu üründe henüz bir depoya atanmamış stok var. Stoğu düzeltmeden önce bu stoğun bir depoya atanması gerekiyor.'
+/**
+ * Eksi atanmamış stok (eski, eksiye izin verilmiş bir çıkış). Çözüm önerilmiyor:
+ * atama eksi miktarı taşıyamaz, depolu işletmede normal giriş de atanmamış
+ * kovaya değil bir depoya yazılır. Yanlış yol göstermek kullanıcıyı stoğu
+ * ikinci kez girmeye götürürdü (T223 ek koşul 1, T239).
+ */
+const NEGATIVE_UNASSIGNED_TEXT =
+  'Bu üründe depoya atanmamış stok eksi görünüyor. Eksi miktar bir depoya atanamaz ve bu ekrandan düzeltilemiyor; stok düzeltmesi ve depoya atama bu ürün için kapalı.'
 
 /**
  * ============================================================================
@@ -81,6 +93,7 @@ interface UrunParams extends FormParams {
   barkod?: string
   arsiv?: string
   sayim?: string
+  atama?: string
 }
 
 export default async function ProductPage({
@@ -118,14 +131,26 @@ export default async function ProductPage({
   // zaten reddeder (çift sayım olurdu).
   const canAdjust = actorCan(actor, 'count:approve') && !product.archivedAt
   const adjustBlocked = canAdjust && depotStock !== null && depotStock.unassigned !== 0
+  // DEPOYA ATAMA (T223): yalnız depolu işletmede ve atanmamış stok artıyken
+  // (K7). Eksi atanmamış stok bir depoya taşınamaz; depolu işletmede normal
+  // giriş de onu düzeltmez (giriş bir depoya yazılır). Bu yüzden yanlış bir
+  // yol önerilmiyor, yalnız durum anlatılıyor (T239).
+  const negativeUnassigned = depotStock !== null && depotStock.unassigned < 0
+  const tenantDepots = canAdjust && depotStock ? await listDepots(actor, { db }) : []
+  const depotQty = (depotId: string) => depotStock?.depots.find((s) => s.depotId === depotId)?.qty ?? 0
+  const canAssign = canAdjust && depotStock !== null && depotStock.unassigned > 0
+  const assignDepots: AssignDepot[] = canAssign
+    ? tenantDepots.map((d) => ({
+        id: d.id,
+        name: d.name,
+        qty: depotQty(d.id),
+        noteMax: TRANSFER_NOTE_LIMIT - transferNotePrefix(d.name).length - 2,
+      }))
+    : []
   let adjustOptions: AdjustOption[] = []
   if (canAdjust && !adjustBlocked) {
     adjustOptions = depotStock
-      ? (await listDepots(actor, { db })).map((d) => ({
-          value: d.id,
-          label: d.name,
-          qty: depotStock.depots.find((s) => s.depotId === d.id)?.qty ?? 0,
-        }))
+      ? tenantDepots.map((d) => ({ value: d.id, label: d.name, qty: depotQty(d.id) }))
       : [{ value: '', label: 'Toplam stok', qty: product.qty }]
   }
 
@@ -240,6 +265,36 @@ export default async function ProductPage({
     redirect(`/urunler/${id}?sayim=kaydedildi`)
   }
 
+  async function assignStock(form: FormData) {
+    'use server'
+    const owner = await currentActor()
+    if (!owner) redirect('/giris')
+
+    try {
+      // Yetki, kiracı, birim, not sınırı ve kilit altındaki kaynak kontrolü
+      // `transferStock`'ta (T223); burada yalnız form çevrimi.
+      await transferStock(
+        owner,
+        {
+          idempotencyKey: text(form, 'anahtar'),
+          productId: id,
+          fromDepotId: null,
+          toDepotId: text(form, 'depo'),
+          qty: optionalNumber(form, 'miktar'),
+          note: optionalText(form, 'not'),
+          clientCreatedAt: new Date().toISOString(),
+        },
+        { db: appDb() },
+      )
+    } catch (err) {
+      if (err instanceof AppError && err.code === 'INSUFFICIENT_STOCK') {
+        redirect(`/urunler/${id}?atama=yetersiz`)
+      }
+      redirect(`/urunler/${id}?${errorQuery(err)}`)
+    }
+    redirect(`/urunler/${id}?atama=kaydedildi`)
+  }
+
   async function toggleArchive(form: FormData) {
     'use server'
     const owner = await currentActor()
@@ -284,6 +339,10 @@ export default async function ProductPage({
         {query.arsiv === 'alindi' ? <Notice>Ürün arşive alındı.</Notice> : null}
         {query.arsiv === 'geri' ? <Notice>Ürün arşivden çıkarıldı.</Notice> : null}
         {query.sayim === 'kaydedildi' ? <Notice>Sayım düzeltmesi kaydedildi.</Notice> : null}
+        {query.atama === 'kaydedildi' ? <Notice>Stok depoya atandı.</Notice> : null}
+        {query.atama === 'yetersiz' ? (
+          <Alert>Atanmamış stok bu arada azaldı; atama yazılmadı. Güncel miktara bakıp yeniden deneyin.</Alert>
+        ) : null}
         {query.sayim === 'degisti' ? (
           <Alert>Stok, sayfa açıldıktan sonra değişti; düzeltme yazılmadı. Güncel miktara bakıp yeniden girin.</Alert>
         ) : null}
@@ -366,6 +425,26 @@ export default async function ProductPage({
         </section>
       ) : null}
 
+      {canAssign && depotStock ? (
+        <section
+          aria-label="Depoya ata"
+          className="mb-6 max-w-2xl rounded-card border border-line bg-surface shadow-card"
+        >
+          <h2 className="border-b border-line px-4 py-3 font-semibold">Atanmamış stoğu depoya ata</h2>
+          <p className="px-4 pt-3 text-sm text-ink-2">
+            Deposu bilinmeyen eski stoğu bir depoya taşıyın. Toplam stok ve fiyatlar değişmez.
+          </p>
+          <AssignForm
+            action={assignStock}
+            depots={assignDepots}
+            unassigned={depotStock.unassigned}
+            total={depotStock.total}
+            unit={product.unit as Unit}
+            idempotencyKey={randomUUID()}
+          />
+        </section>
+      ) : null}
+
       {canAdjust ? (
         <section
           aria-label="Stoğu düzelt"
@@ -373,7 +452,9 @@ export default async function ProductPage({
         >
           <h2 className="border-b border-line px-4 py-3 font-semibold">Stoğu düzelt (sayım)</h2>
           {adjustBlocked ? (
-            <p className="px-4 py-3 text-sm text-ink-2">{UNASSIGNED_TEXT}</p>
+            <p className="px-4 py-3 text-sm text-ink-2">
+              {negativeUnassigned ? NEGATIVE_UNASSIGNED_TEXT : UNASSIGNED_TEXT}
+            </p>
           ) : (
             <>
               <p className="px-4 pt-3 text-sm text-ink-2">

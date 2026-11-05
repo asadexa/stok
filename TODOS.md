@@ -7,7 +7,7 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
 **Kurallar**
 
 - ID `T<n>`. Arşivdeki görevler numaralarını korur. Yeni görev en büyük
-  numaradan devam eder — **sıradaki boş numara: T238**. Numara yeniden
+  numaradan devam eder — **sıradaki boş numara: T240**. Numara yeniden
   kullanılmaz.
 - Biçim: `- [ ] **T<n> (P0–P3)** - <alan> - **Başlık**`. Altında kısa
   **Neden / Kanıt / Bağlı / Doğrula / Kaynak** satırları.
@@ -437,6 +437,15 @@ işler ve güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
     görüldü: "depoya atanmamış eski stok depoya taşınamıyor" (2026-10-31).
   - Doğrula: atama sonrası `current_stock` aynı, depolar doğru; atanmamışı aşan atama reddi
     (`dogrula`); defter = projeksiyon.
+  - Durum (2026-11-05): geliştirme tamamlandı, `development`'a commit edildi; dağıtılmadı. Kararlar
+    `DAT-26` (iki yazma kapısı, DAT-02'nin yerine), `DAT-27` (transfer modeli), `PRD-21` (arayüz);
+    migration 0016. Kanıt: `transfers.test.ts` 13 test (kısmi/tam atama, yetersiz ve eksi kaynak,
+    yetki, kiracı, kilit altında araya giren çıkış, sıralı ve eşzamanlı çift gönderim, atomiklik,
+    DB CHECK, göstergeler, tam atamadan sonra T232); `dogrula` 7 korumada kırmızı; izole E2E 44/44
+    (`t223-depoya-atama.spec.ts` dahil). Eski sürüm uyumluluğu ölçüldü: transfer satırından sonra
+    0016 öncesi web imajı panel/hareketler/Excel'de hata veriyor (runbook L.3 geri dönüş sınırı).
+  - Kalan (açık tutma gerekçesi): manuel kabul testi (K1–K10, izole `stok_test_e2e_t223`);
+    kullanıcı kararıyla ertelendi, T233'le birlikte yapılacak (2026-11-05).
   - Kaynak: depo bazlı envanter PLAN'ı (S2), 2026-10-27.
 - [ ] **T233 (P2)** - core - **Depolar arası stok transferi yok**
   - Neden: malı bir depodan ötekine tek işlemde taşımanın yolu yok. Bugün iki ayrı hareket
@@ -449,7 +458,21 @@ işler ve güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
   - Bağlı: T223, T232, `PRD-17`, `DAT-21`, `DAT-23`, INV-9 (yeni sebepler tek kaynaktan).
   - Doğrula: kaynak depo yetmezse red; toplam `current_stock` aynı, iki depo doğru; iki satır
     aynı transfer kimliğiyle bağlı; yarıda kalan transfer yok (`dogrula`).
+  - Durum (2026-11-05): ortak çekirdek T223'te geldi (`transferStock`, `TRANSFER_*`, `transfer_id`;
+    `DAT-27`). Kalan: `stockTransferSchema.fromDepotId`'yi depoya açmak, kaynak = hedef reddi,
+    kaynak depo yeterliliği ve transfer arayüzü.
   - Kaynak: Faz 0 durum analizi ve kullanıcı testi, 2026-10-31.
+- [ ] **T239 (P3)** - core - **Eksi atanmamış stok depoya atanamıyor ve düzeltilemiyor**
+  - Neden: eski, eksiye izin verilmiş bir çıkış (`allowNegative`) depolu işletmede atanmamış kovayı
+    eksiye düşürmüş olabilir. Atama eksi miktarı taşıyamaz (`DAT-27`); sayım düzeltmesi atanmamış
+    stok varken kapalı (`DAT-24`); normal giriş depolu işletmede bir depoya yazılır, kovayı
+    düzeltmez. Ürün sayfası yalnız durumu anlatıyor (`PRD-21`).
+  - Kanıt: kod okuması ve `transfers.test.ts` "yetersiz ve eksi kaynak" (2026-11-05). Gerçek veride
+    var olup olmadığı ölçülmedi.
+  - Yapılacak (onaylanmadı): önce gerçek veride ölçmek; sonra çözüm için ürün kararı (ör. kovayı
+    sıfırlayan, elle seçilemeyen bir düzeltme). Çözüm T223 kapsamında değil.
+  - Bağlı: T223, T232, `DAT-08`, `DAT-23`, INV-1.
+  - Kaynak: T223 BUILD onayı, ek koşul 1, 2026-11-05.
 - [ ] **T224 (P2)** - core - **Çok depo Dilim 8: fiyat geçmişi, ardından isteğe bağlı toplu satış fiyatı güncellemesi**
   - Neden: `PRC-13` onaylı ama ürün fiyatı yerinde güncelleniyor, geçmiş yok; geçmiş olmadan
     toplu değişiklik eski fiyatları geri dönülmez biçimde kaybettirir.

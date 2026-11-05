@@ -55,9 +55,12 @@ describe('sayım düzeltmeleri elle seçilemez', () => {
   })
 
   it('elle seçilebilseydi denetim izi anlamını kaybederdi', () => {
-    // Sayım düzeltmeleri SADECE sayım akışı tarafından üretilmeli.
+    // Sayım düzeltmeleri SADECE sayım akışı, transfer bacakları SADECE
+    // `transferStock` tarafından üretilmeli (T223: tek bacaklı "transfer"
+    // toplamı sessizce değiştirirdi).
     const selectable = [...selectableReasons('IN'), ...selectableReasons('OUT')]
-    expect(selectable).toHaveLength(MOVEMENT_REASON_VALUES.length - 2)
+    const internal = MOVEMENT_REASON_VALUES.filter((r) => !selectable.includes(r))
+    expect(internal.sort()).toEqual(['COUNT_ADJUST_DOWN', 'COUNT_ADJUST_UP', 'TRANSFER_IN', 'TRANSFER_OUT'])
   })
 })
 

@@ -132,6 +132,11 @@ gunzip -c stok-<etiket>.tar.gz | docker load    # .env.production'da STOK_IMAGE_
   ayrı etiketle: `docker tag stok-web:<mevcut> stok-web:rollback-<tarih>`.
 - **Migration:** `git diff <eski>..<yeni> -- packages/db/migrations` boşsa migrate adımı ve
   `tools` derlemesi atlanabilir.
+- **0016 (depo transferi, T223) geri dönüş sınırı:** migration yalnız ekleme yapıyor ve eski web
+  imajı yeni şemayla açılıyor. Ama ilk transfer satırı (`TRANSFER_IN`/`TRANSFER_OUT`) yazıldıktan
+  sonra 0016 öncesi web imajı panelde, hareketler ekranında ve hareket Excel'inde hata veriyor
+  (izole ölçüm 2026-11-05: "Bu ekran yüklenemedi", Excel HTTP 500). Bu noktadan sonra web'i geri
+  almak yerine ileri düzeltme yapılır. Migration geri alınmaz, transfer satırları silinmez (INV-2).
 
 ```bash
 cd /opt/citech/stok

@@ -266,6 +266,37 @@ export const inventoryAdjustmentSchema = z.object({
 
 export type InventoryAdjustmentInput = z.infer<typeof inventoryAdjustmentSchema>
 
+/**
+ * Depo transferi (T223). Bu sürümde kaynak YALNIZ depoya atanmamış stok
+ * (`fromDepotId: null`): eski stoğu bir depoya atamak. Depodan depoya
+ * transfer T233'te şemayı genişletir; çekirdek aynı kalır.
+ */
+export const stockTransferSchema = z.object({
+  idempotencyKey: z.string().uuid(),
+  productId: z.string().uuid(),
+  fromDepotId: z.null(),
+  toDepotId: z.string().uuid(),
+  qty: z
+    .number({ invalid_type_error: 'Miktar sayı olmalı' })
+    .positive('Miktar sıfırdan büyük olmalı')
+    .max(1_000_000, 'Miktar en fazla 1.000.000 olabilir')
+    .refine(hasValidPrecision, { message: `En fazla ${MAX_DECIMALS} ondalık basamak` }),
+  note: z.string().trim().max(500).optional(),
+  clientCreatedAt: z.string().datetime({ offset: true }),
+})
+
+export type StockTransferInput = z.infer<typeof stockTransferSchema>
+
+export interface StockTransferResponse {
+  transferId: string
+  productId: string
+  productName: string
+  qty: number
+  /** Toplam stok; transfer onu değiştirmez. */
+  newQty: number
+  duplicate: boolean
+}
+
 export const createMovementResponseSchema = z.object({
   movementId: z.string().uuid(),
   productId: z.string().uuid(),

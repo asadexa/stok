@@ -26,14 +26,14 @@ export interface AdjustOption {
   qty: number
 }
 
-/** "7", "7,5", "7.250" → binde bir tamsayı; geçersizse null. */
-function toThousandths(raw: string): bigint | null {
+/** "7", "7,5", "7.250" → binde bir tamsayı; geçersizse null. Atama formu da kullanıyor. */
+export function toThousandths(raw: string): bigint | null {
   const match = /^(\d{1,7})(?:[.,](\d{1,3}))?$/.exec(raw.trim())
   if (!match) return null
   return BigInt(match[1]!) * 1000n + BigInt((match[2] ?? '').padEnd(3, '0'))
 }
 
-function thousandthsOf(qty: number): bigint {
+export function thousandthsOf(qty: number): bigint {
   return toThousandths(String(qty)) ?? 0n
 }
 

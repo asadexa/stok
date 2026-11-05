@@ -1,4 +1,4 @@
-import { AppError, type MovementReason, formatQty, reasonLabel, type Unit } from '@stok/shared'
+import { AppError, type MovementReason, TRANSFER_REASONS, formatQty, reasonLabel, type Unit } from '@stok/shared'
 import { type Db, appDb, withTenant } from '@stok/db'
 import { sql } from 'drizzle-orm'
 import type { Actor } from './authz'
@@ -169,11 +169,14 @@ export async function dailySummary(
          WHERE p.archived_at IS NULL AND COALESCE(cs.qty, 0) <= p.min_stock
       `)
 
+      // Depo transferi giriş/çıkış değil, yer değişikliği (T223): sayılarda yok,
+      // ekteki satır listesinde (`rows`) duruyor ki ayrıntıda izlenebilsin.
+      const flow = list.filter((r) => !TRANSFER_REASONS.includes(r.reason))
       return {
         day,
-        movementCount: list.length,
-        inQty: list.filter((r) => r.delta > 0).reduce((a, r) => a + r.delta, 0),
-        outQty: list.filter((r) => r.delta < 0).reduce((a, r) => a - r.delta, 0),
+        movementCount: flow.length,
+        inQty: flow.filter((r) => r.delta > 0).reduce((a, r) => a + r.delta, 0),
+        outQty: flow.filter((r) => r.delta < 0).reduce((a, r) => a - r.delta, 0),
         gapCount: gapli.length,
         gapTotal: Number(gapli.reduce((a, r) => a + r.gap!, 0).toFixed(2)),
         topGapUser,

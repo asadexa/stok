@@ -112,7 +112,8 @@ silinmez, arşivlenir (`DAT-10`).
 **Projeksiyon** `current_stock` bir önbellek değil, denetlenen bir kopya. INSERT
 sonrası trigger yazıyor; yani hareketi kim yazarsa yazsın güncellenir.
 
-**Tek yazma kapısı** `createMovement()` (`packages/core/src/movements.ts`, `DAT-02`). Sıra:
+**Yazma kapısı** `createMovement()` (`packages/core/src/movements.ts`, `DAT-26`); iki bacaklı depo
+transferi aynı modüldeki `transferStock()` ile, aynı kilit ve idempotency kurallarıyla (`DAT-27`). Sıra:
 
 1. Yetki kontrolü (envanter düzeltmesinde ayrıca `count:approve`)
 2. zod doğrulaması
@@ -256,7 +257,7 @@ Bunlardan birini bozan değişiklik, testler yeşil olsa bile bozuktur.
 |---|---|---|
 | INV-1 | Her ürün için `SUM(stock_movements.delta) = current_stock.qty` | Trigger; `createMovement` transaction içi kontrolü; cron/sağlık `checkStockInvariant`; `invariant.test.ts` |
 | INV-2 | Defter append-only: UPDATE/DELETE yok | Yetki + trigger (migration 0002); `rls.test.ts` |
-| INV-3 | Stoğu yalnız `createMovement()` değiştirir | Konvansiyon + grep. `current_stock` uygulama rolüne yazılabilir; sertleştirme TODOS'ta |
+| INV-3 | Stoğu yalnız `movements.ts`'teki iki kapı değiştirir: `createMovement()` ve depo transferi için `transferStock()` (`DAT-26`) | Konvansiyon + grep. `current_stock` uygulama rolüne yazılabilir; sertleştirme TODOS'ta |
 | INV-4 | Uygulama `stok_app` ile bağlanır; her tabloda FORCE RLS; kiracı bağlamı yalnız `withTenant` | `rls.test.ts`, Biome kuralı |
 | INV-5 | Çıkış kilit altında kontrol edilir; eşzamanlı çıkışlar stoğu yetkisiz negatife düşüremez | `FOR UPDATE`; `concurrency.test.ts` |
 | INV-6 | Aynı idempotency anahtarı ikinci bir hareket üretmez | UNIQUE indeks; `kaos.test.ts`, `movements.test.ts` |
