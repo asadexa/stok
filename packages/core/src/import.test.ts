@@ -488,21 +488,71 @@ describe('uygulama', () => {
     expect(row.brand).toBe('Eski Marka')
   })
 
-  it('güncellemede BOŞ fiyat hücresi alanı temizliyor', async () => {
-    // Sütun dosyada VAR ama hücre boş: kullanıcı bilerek sildi.
+  it('güncellemede BOŞ fiyat hücresi mevcut alış ve satış fiyatını KORUYOR (PRC-14)', async () => {
+    // Sütun dosyada VAR ama hücre boş: ERP çıktısında olağan. Silinseydi
+    // dosyanın yeniden yüklenmesi fiyatları geri dönülmez biçimde kaybettirirdi.
     const sku = uniq('TEM-')
     await commitImport(
       boss,
-      await preview(['Stok Kodu,Ürün Adı,Barkod,Alış Fiyatı', `${sku},Ürün,${uniq('bc')},50`]),
+      await preview([
+        'Stok Kodu,Ürün Adı,Barkod,Alış Fiyatı,Satış Fiyatı',
+        `${sku},Ürün,${uniq('bc')},50,80`,
+      ]),
+      opts,
+    )
+    const second = await preview(['Stok Kodu,Ürün Adı,Alış Fiyatı,Satış Fiyatı', `${sku},Yeni Ad,,`])
+    expect(second.rows[0]?.data?.purchasePrice).toBeUndefined()
+    expect(second.rows[0]?.data?.salePrice).toBeUndefined()
+    await commitImport(boss, second, opts)
+
+    const row = (await listStock(boss, { search: sku }, opts)).rows[0]!
+    expect(row.name).toBe('Yeni Ad')
+    expect(row.purchasePrice).toBe(50)
+    expect(row.salePrice).toBe(80)
+  })
+
+  it('önizleme boş fiyat hücresi kuralını yalnız fiyat sütunu varsa söylüyor', async () => {
+    const note = 'Boş fiyat hücreleri mevcut fiyatları değiştirmez.'
+    const withPrice = await preview(['Stok Kodu,Ürün Adı,Satış Fiyatı', `${uniq('NT-')},Ürün,`])
+    const withoutPrice = await preview(['Stok Kodu,Ürün Adı', `${uniq('NT-')},Ürün`])
+
+    expect(withPrice.notices.some((n) => n.startsWith(note))).toBe(true)
+    expect(withoutPrice.notices.some((n) => n.startsWith(note))).toBe(false)
+  })
+
+  it('güncellemede 0 fiyat boş sayılmıyor: mevcut fiyat sıfıra iniyor', async () => {
+    const sku = uniq('SIF-')
+    await commitImport(
+      boss,
+      await preview([
+        'Stok Kodu,Ürün Adı,Barkod,Alış Fiyatı,Satış Fiyatı',
+        `${sku},Ürün,${uniq('bc')},50,80`,
+      ]),
       opts,
     )
     await commitImport(
       boss,
-      await preview(['Stok Kodu,Ürün Adı,Alış Fiyatı', `${sku},Ürün,`]),
+      await preview(['Stok Kodu,Ürün Adı,Alış Fiyatı,Satış Fiyatı', `${sku},Ürün,0,0`]),
       opts,
     )
 
-    expect((await listStock(boss, { search: sku }, opts)).rows[0]?.purchasePrice).toBeNull()
+    const row = (await listStock(boss, { search: sku }, opts)).rows[0]!
+    expect(row.purchasePrice).toBe(0)
+    expect(row.salePrice).toBe(0)
+  })
+
+  it('yeni üründe fiyat sütunları var, hücreler boş: iki fiyat da boş kalıyor', async () => {
+    const sku = uniq('YBF-')
+    const result = await commitImport(
+      boss,
+      await preview(['Stok Kodu,Ürün Adı,Barkod,Alış Fiyatı,Satış Fiyatı', `${sku},Ürün,${uniq('bc')},,`]),
+      opts,
+    )
+    expect(result.created).toBe(1)
+
+    const row = (await listStock(boss, { search: sku }, opts)).rows[0]!
+    expect(row.purchasePrice).toBeNull()
+    expect(row.salePrice).toBeNull()
   })
 
   it('güncellemede yeni barkod ekleniyor, mevcut olan iki kez eklenmiyor', async () => {

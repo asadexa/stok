@@ -95,6 +95,40 @@ test('dosya tarayıcıda okunuyor, ilerleme görünüyor, sonuç ve rapor iniyor
   await expect(page.getByText(`Toplu Ürün ${n} 0040`)).toBeVisible()
 })
 
+test('boş fiyat hücresi fiyatı korur; fiyat ürün formundan temizlenir (PRC-14)', async ({ page }) => {
+  const n = ek()
+  const kod = `FYT-${n}`
+  const baslik = 'Stok Kodu;Ürün Adı;Birim;Alış Fiyatı;Satış Fiyatı;Barkod'
+  await girisYap(page)
+
+  async function uygula() {
+    await page.getByRole('button', { name: /satırı aktar/i }).click()
+    await expect(page.locator('section[aria-label="Sonuç"]')).toContainText('Aktarım tamamlandı.', { timeout: 60_000 })
+  }
+
+  await onizle(page, [baslik, `${kod};Fiyat Ürünü ${n};Adet;50;80;9${n}`])
+  await uygula()
+
+  // Fiyat sütunu var, hücreler boş: önizleme kuralı söylüyor, fiyatlar kalıyor.
+  const onizleme = await onizle(page, [baslik, `${kod};Fiyat Ürünü ${n};Adet;;;`])
+  await expect(onizleme).toContainText('Boş fiyat hücreleri mevcut fiyatları değiştirmez.')
+  await uygula()
+
+  await page.goto(`/stok?ara=${encodeURIComponent(kod)}`)
+  const urun = (await page.locator('table a[href^="/urunler/"]').first().getAttribute('href'))!
+  await page.goto(urun)
+  await expect(page.locator('input[name="alis"]')).toHaveValue(/^50/)
+  await expect(page.locator('input[name="satis"]')).toHaveValue(/^80/)
+
+  // Bilerek temizleme ürün formundan.
+  await page.locator('input[name="alis"]').fill('')
+  await page.getByRole('button', { name: 'Kaydet' }).click()
+  await expect(page.getByText('Değişiklikler kaydedildi.')).toBeVisible()
+  await page.goto(urun)
+  await expect(page.locator('input[name="alis"]')).toHaveValue('')
+  await expect(page.locator('input[name="satis"]')).toHaveValue(/^80/)
+})
+
 test('iptal: aktarım duruyor, işlenen satırlar kalıyor, kalanlar "işlenmedi"', async ({ page }) => {
   const n = ek()
   const toplam = 1_000

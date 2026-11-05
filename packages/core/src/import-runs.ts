@@ -266,7 +266,7 @@ export async function startImportRun(
           fileBytes: input.fileBytes,
           totalRows: input.totalRows,
           columns: input.columns,
-          notices: importNotices(input.ignoredQtyColumns),
+          notices: importNotices(input.ignoredQtyColumns, input.columns),
         })
         .returning({ id: importRuns.id })
       return row!.id

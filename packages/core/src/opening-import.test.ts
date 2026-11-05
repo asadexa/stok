@@ -52,7 +52,7 @@ let seq = 0
 const uniq = (prefix: string) => `${prefix}${++seq}-${randomUUID().slice(0, 6)}`
 
 const HEADER = 'Stok Kodu;Ürün Adı;Birim;Alış Fiyatı;Barkod;Barkod Türü;Koli İçi Adet;Açılış Stoğu'
-/** Fiyat sütunu YOK: devir üründe kayıtlı alış fiyatıyla yazılır. Sütun olup hücre boş olsaydı fiyat temizlenirdi. */
+/** Fiyat sütunu YOK: devir üründe kayıtlı alış fiyatıyla yazılır (boş hücre de aynı, PRC-14). */
 const HEADER_NO_PRICE = 'Stok Kodu;Ürün Adı;Açılış Stoğu'
 
 async function plan(lines: string[]) {
@@ -97,6 +97,7 @@ describe('önizleme', () => {
     expect(p.rows[0]!.opening).toBeUndefined()
     expect(p.notices).toEqual([
       '"Miktar" sütunu açılış stoğu olarak okunmadı. Açılış stoğu girmek için sütunun adı "Açılış Stoğu" olmalı.',
+      'Boş fiyat hücreleri mevcut fiyatları değiştirmez. Bir ürünün fiyatını silmek için ürün sayfasını kullanın.',
     ])
   })
 
@@ -126,11 +127,11 @@ describe('önizleme', () => {
     expect(issuesOf(row)).toContain(expected)
   })
 
-  it('Alış Fiyatı sütunu var ama hücre boşsa fiyat TEMİZLENİYOR, devir fiyatsız kalıp reddediliyor', async () => {
+  it('Alış Fiyatı sütunu var ama hücre boşsa fiyat KORUNUYOR, devir üründe kayıtlı fiyatla planlanıyor (PRC-14)', async () => {
     const p = await plan([HEADER, 'VAR-HAREKETSIZ;Hareketsiz Ürün;;;;;;5'])
-    expect(issuesOf(p.rows[0]!)).toContain(
-      'Açılış Stoğu: Açılış stoğu için alış fiyatı gerekli (Alış Fiyatı sütunu ya da üründe kayıtlı)',
-    )
+    expect(p.rows[0]!.action).toBe('update')
+    expect(p.rows[0]!.data?.purchasePrice).toBeUndefined()
+    expect(p.rows[0]!.opening).toMatchObject({ qty: 5, unitPrice: 4 })
   })
 
   it('kilogramda 2,5 devir kabul', async () => {

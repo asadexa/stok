@@ -82,6 +82,8 @@ Katman kuralları `PROJECT_BRAIN` §5, ilkeler §12. Kayıtlarda yalnız özelli
     `GET /api/rapor/aktarim?kayit=`): hatalı, yazılamayan, çakışan, belirsiz, işlenmeyen satırlar
     ve devir notları.
   - Satır bazlı hata; güncellemede dosyada olmayan sütuna dokunulmaz.
+  - Boş fiyat hücresi mevcut alış ve satış fiyatını değiştirmez; `0` fiyatı sıfıra günceller.
+    Fiyat sütunu varsa önizleme bunu söyler. Fiyatı silmek ürün formundandır (`PRC-14`).
 - **Neden böyle:** dosyalar çoğu zaman sütunları kayık ve birimleri karışık gelir; önizleme
   zorunlu, hatalar satır bazlı (tek bozuk satır yüzlerce doğru satırı düşürmesin). Eksik sütun
   "temizle" değil "dokunma": yalnız ad ve kod içeren düzeltme dosyası fiyatları silmesin.

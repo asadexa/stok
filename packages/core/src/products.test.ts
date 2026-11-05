@@ -186,6 +186,15 @@ describe('updateProduct', () => {
     expect(updated.purchasePrice).toBe(10)
   })
 
+  it('ürün formu yolu: null gönderilen alış ve satış fiyatı temizleniyor (PRC-14)', async () => {
+    // Dosyadaki boş hücre fiyatı artık silmiyor; bilerek temizlemenin tek yolu bu.
+    const product = await createProduct(boss, draft({ purchasePrice: 10, salePrice: 15 }), opts)
+    const updated = await updateProduct(boss, product.productId, { purchasePrice: null, salePrice: null }, opts)
+
+    expect(updated.purchasePrice).toBeNull()
+    expect(updated.salePrice).toBeNull()
+  })
+
   it('stok kodu başka üründe kullanılıyorsa reddediliyor', async () => {
     const first = await createProduct(boss, draft(), opts)
     const second = await createProduct(boss, draft(), opts)

@@ -470,8 +470,8 @@ işler ve güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
     toplu değişiklik eski fiyatları geri dönülmez biçimde kaybettirir.
   - Kapsam: önce yalnız ekleme yapılan fiyat değişikliği kaydı (ürün, alan, eski, yeni,
     kullanıcı, zaman, kaynak), `patchProduct` içinde yazılır; sonra toplu satış fiyatı (`PRC-13`).
-    Aynı dilimde karar: ürün aktarımında boş satış/alış fiyatı hücresi bugün mevcut fiyatı
-    siliyor (`import.ts:307-308`); `PRC-13`'ün "boş satır fiyatı silmez" kuralıyla çelişiyor.
+    Boş fiyat hücresi kararı verildi ve ayrı uygulandı (2026-11-05, `PRC-14`): boş hücre mevcut
+    fiyatı silmiyor. Bu iş açık: fiyat geçmişi ve toplu satış fiyatı kalıyor.
   - Bağlı: `PRC-13`, F-02, F-04. Cuma için zorunlu değil.
   - Kaynak: depo bazlı envanter PLAN'ı §3.6, 2026-10-27.
 - [ ] **T225 (P2)** - core - **Çok depo Dilim 9: dosyayla toplu mal kabulü (Stoğa Ekle)**

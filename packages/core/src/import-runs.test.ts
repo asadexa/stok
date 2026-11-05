@@ -175,6 +175,17 @@ describe('yükleme ve önizleme', () => {
     expect(await counts(tenant.tenantId)).toEqual(before)
   })
 
+  it('boş fiyat hücresi notu kayıt yolunda dönüyor: kayda yazılıp önizlemede veriliyor (PRC-14)', async () => {
+    // Ekranın kullandığı yol bu: not `startImportRun`'da saklanıyor,
+    // `finalizeImportPreview` saklananı döndürüyor (yeniden hesaplamıyor).
+    const note = 'Boş fiyat hücreleri mevcut fiyatları değiştirmez. Bir ürünün fiyatını silmek için ürün sayfasını kullanın.'
+    const withPrice = await upload([HEADER, newRow()])
+    const withoutPrice = await upload(['Stok Kodu;Ürün Adı', `${uniq('NP-')};Fiyatsız`])
+
+    expect(withPrice.preview.notices).toContain(note)
+    expect(withoutPrice.preview.notices).not.toContain(note)
+  })
+
   it('parçalara bölünmüş dosyada da mükerrer stok kodu yakalanıyor (önizleme bütün dosyada)', async () => {
     const sku = uniq('MK-')
     const { runId, preview } = await upload(

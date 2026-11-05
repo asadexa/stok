@@ -256,19 +256,27 @@ export async function previewImport(
       update: rows.filter((r) => r.action === 'update').length,
       error: rows.filter((r) => r.action === 'error').length,
     },
-    notices: importNotices(file.ignoredQtyColumns ?? []),
+    notices: importNotices(file.ignoredQtyColumns ?? [], file.columns),
   }
 }
 
 /** Dosya düzeyi uyarılar. Aktarım kaydı da (T171) aynı cümleleri saklıyor. */
-export function importNotices(ignoredQtyColumns: string[]): string[] {
-  return ignoredQtyColumns.map((header) =>
+export function importNotices(ignoredQtyColumns: string[], columns: readonly ImportField[]): string[] {
+  const notices = ignoredQtyColumns.map((header) =>
     // ERP envanter çıktısının miktarı deponun toplamı; ürün aktarımının tek
     // depolu devri değil. Doğru yol envanter ekranı, sütunu yeniden adlandırmak değil.
     normalizeHeader(header) === 'envanter miktari'
       ? `"${header}" sütunu okunmadı. Depo bazında stok girmek için Stok → Envanteri güncelle ekranını kullanın.`
       : `"${header}" sütunu açılış stoğu olarak okunmadı. Açılış stoğu girmek için sütunun adı "Açılış Stoğu" olmalı.`,
   )
+  // PRC-14: kural eskiden tersiydi (boş hücre fiyatı silerdi). Söylenmezse
+  // kullanıcı dosyadaki boş hücreyle fiyat silmeye çalışıp sessizce başarısız olur.
+  if (columns.includes('purchasePrice') || columns.includes('salePrice')) {
+    notices.push(
+      'Boş fiyat hücreleri mevcut fiyatları değiştirmez. Bir ürünün fiyatını silmek için ürün sayfasını kullanın.',
+    )
+  }
+  return notices
 }
 
 function evaluateRow(
@@ -323,11 +331,12 @@ function evaluateRow(
   for (const field of ['purchasePrice', 'salePrice', 'minStock'] as const) {
     if (!file.columns.includes(field)) continue
     const parsed = parseTurkishNumber(raw.cells[field] ?? '')
-    if (parsed === undefined) {
-      // Boş hücre: fiyatta "temizle", kritik eşikte "dokunma".
-      if (field !== 'minStock') data[field] = null
-      continue
-    }
+    // Boş hücre her alanda "dokunma" (PRC-14). ERP çıktılarında fiyat sütunu
+    // çoğu satırda boş geliyor; "temizle" sayılsaydı dosyanın yeniden
+    // yüklenmesi fiyatları toplu ve geri dönülmez biçimde silerdi (fiyat
+    // geçmişi yok, T224). Bilerek temizleme ürün formundan yapılır. `0` boş
+    // değildir: `parseTurkishNumber` 0 döndürür ve fiyat sıfıra güncellenir.
+    if (parsed === undefined) continue
     if (Number.isNaN(parsed)) {
       push(field, numberIssue(raw.cells[field] ?? '', 'Sayı olarak okunamadı'))
       continue
@@ -407,8 +416,8 @@ function evaluateRow(
       push('openingQty', 'Bu ürün adetle sayılıyor; açılış stoğu tam sayı olmalı')
     }
 
-    // PRC-05: devir fiyatsız yazılamaz. Satırda Alış Fiyatı sütunu varsa o
-    // (boş hücre "fiyatı temizle" demek), yoksa üründe kayıtlı alış fiyatı.
+    // PRC-05: devir fiyatsız yazılamaz. Satırda Alış Fiyatı doluysa o; sütun
+    // yoksa ya da hücre boşsa (PRC-14, fiyata dokunulmaz) üründe kayıtlı fiyat.
     const unitPrice =
       data.purchasePrice !== undefined ? data.purchasePrice : (existingProduct?.purchasePrice ?? null)
     if (unitPrice === null) {
