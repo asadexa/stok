@@ -192,20 +192,21 @@ bekleyen yok. Çok depo ve Envanteri Güncelle (F-15) manuel kabul testinde kabu
   (kullanıcı bildirimi, 2026-11-03, yerel `stok_uat`): 2.000 satırda iptal ve yeniden yükleme
   mükerrer devirsiz tamamlandı; 20.000 devirli satır ~25 dk, hatasız (çekirdekte ölçüm ~23 dk).
   Sekme açık kalmalı; süre T235. Lightsail'de bellek ölçümü yok (T171 açık). Çok depolu işletmede
-  önizleme yazılamayacak devri yazılacak gibi gösteriyor (T234). T171 çalışmasında
+  önizleme devri "atlanacak" sayıyor, tek depoluda depo adını söylüyor (T234, `development`; manuel
+  kabul bekliyor). T171 çalışmasında
   yerel demo veritabanına migration uygulanmadı; ekran için 0013 gerekir (`pnpm demo` uygular). Devirde geçmiş tarihli fiyat yok (T172); birim değişimi sonrası eski veri denetlenmiyor (T170).
 - **Kuyruğa alınan büyük dışa aktarma**: cron'da işleyicisi yok, çalışmıyor (T216, kod okumasıyla).
 - **Çok depo ve Envanteri Güncelle** (`PRD-17`, `PRD-18`, F-15): Dilim 1–4 ve değer dürüstlüğü
   kodda; manuel kabul testi U0–U12 geçti (T218–T220 kapandı; T222'de kalan test notu). UAT
-  bulguları: girişte görünen Atanmamış Stok seçeneği (T236, sunucu reddediyor), eski depo uyarısı
-  (T237). Var: envanter dosyası (depo açan tek
+  bulguları girişte görünen Atanmamış Stok seçeneği (T236) ve eski depo uyarısı (T237)
+  `development`'ta düzeltildi; manuel kabul bekliyor. Var: envanter dosyası (depo açan tek
   yol), Envanteri Güncelle ekranı, ürün sayfasında depo dağılımı, harekette depo seçimi, Atanmamış
   Stok'tan çıkış, barkodsuz ürün formu ve ürün kimliğiyle hareket; panel ve kategori değeri fiyatı
-  bilinmeyen ürünü 0 saymıyor, sayısını gösteriyor. Yok: deposu bilinmeyen eski stoğun depoya
-  atanması (T223; envanter dosyası da böyle bir ürünün satırını atlıyor), `main`'de tek ürün
-  sayım düzeltmesi (T232 `development`'ta, aşağıda), depolar arası transfer (T233), "Depoya atama bekliyor" rozeti (T221), elle
-  depo açma/arşivleme (T226), fiyat geçmişi ve toplu
-  satış fiyatı (T224), toplu mal kabulü (T225).
+  bilinmeyen ürünü 0 saymıyor, sayısını gösteriyor. `development`'ta, `main`'de ve Lightsail'de
+  değil: tek ürün sayım düzeltmesi (T232, kabul edildi); depoya atama (T223), depolar arası
+  transfer (T233), stok listesinde "Depoya atama bekliyor" rozeti ve süzgeci (T221) (manuel kabul
+  bekliyor). Yok: elle depo açma/arşivleme (T226), fiyat geçmişi ve toplu satış fiyatı (T224),
+  toplu mal kabulü (T225).
 - **Ürün görseli**: yalnız URL; yükleme yok (T136).
 - **Kritik stok**: yalnız e-posta, push yok.
 - **Konum yönetimi**: arayüz yok.
@@ -318,7 +319,8 @@ transfer); T232 (tek ürün sayım düzeltmesi) kapandı.
 **Yol haritası sırası** (kullanıcı kararı 2026-10-27; 2026-10-22 sırasının üstüne):
 1. **Çok depo ve Envanteri Güncelle**: Dilim 1–4 ve T221'in değer kısmı kodda ve kabul testinde
    geçti (2026-11-03). T171 (20.000 satır; `ARC-15`, ADR-007, `DAT-20`, S21, F-02) kabul testinde
-   geçti; kalan Lightsail ölçümü. Sıradaki çok depo işleri T223, T233 ve T221 rozeti.
+   geçti; kalan Lightsail ölçümü. Çok depo işleri T223, T233, T221 rozeti, T234, T236 ve T237
+   geliştirildi (aşağıda); toplu manuel kabul bekliyor.
    T232 (tek ürün sayım düzeltmesi) `development`'ta; kullanıcı kabul testi geçti (2026-11-05,
    izole veritabanı). `main`'de ve Lightsail'de yok.
    T223 (atanmamış stoğu depoya atama; migration 0016) `development`'ta; geliştirme tamamlandı,
@@ -326,6 +328,9 @@ transfer); T232 (tek ürün sayım düzeltmesi) kapandı.
    Dağıtımda migrate adımı ve web geri dönüş sınırı var (runbook L.3).
    T233 (depolar arası transfer; aynı kapı, yeni migration yok) `development`'ta; geliştirme
    tamamlandı, manuel kabul testi T223'le birlikte yapılacak. `main`'de ve Lightsail'de yok.
+   T221 rozeti, T234, T236 ve T237 geliştirildi (`development`'ta; `main`'de ve Lightsail'de yok; şema
+   değişikliği yok). Toplu manuel kabul (T223, T233, T221, T234, T236, T237) bekliyor;
+   başlatılmadı.
 2. **T201 gerçek tedarikçi API'si**: ilk hedef, erişimi sağlanabilen bir sağlayıcıyla uçtan uca.
    Sağlayıcı, kimlik doğrulama ve yaklaşım PLAN'da kanıtla seçilir; gerçek sağlayıcı seçilmeden genel
    entegrasyon iddia edilmez. Çok depo kritik yolunun dışında.

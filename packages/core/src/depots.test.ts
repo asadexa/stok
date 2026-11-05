@@ -354,7 +354,7 @@ describe('envanter düzeltmesi (COUNT_ADJUST)', () => {
     expect(err.code).toBe('STOCK_CHANGED')
     expect(err.details).toMatchObject({ reason: 'UNASSIGNED', unassigned: 6 })
     expect(errorText(err.code, err.details)).toBe(
-      'Bu üründe depoya atama bekleyen stok var; envanter satırı yazılmadı',
+      'Bu üründe depoya atama bekleyen stok var; envanter satırı yazılmadı. Önce ürün sayfasından depoya atayın',
     )
     expect(await depotQty(p.id, null)).toBe(6)
     expect(await depotQty(p.id, d1)).toBe(0)

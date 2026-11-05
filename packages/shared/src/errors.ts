@@ -125,10 +125,11 @@ export const ERROR_CODES = {
     retryable: false,
     // Envanter güncellemesi: önizlemeden sonra depoda hareket oldu ya da üründe
     // depoya atanmamış stok var. Dosyadaki değer sessizce yazılsaydı aradaki
-    // satış ya da mal kabulü kaybolurdu.
+    // satış ya da mal kabulü kaybolurdu. Bu hatayı yalnız yönetici alır
+    // (envanter düzeltmesi `count:approve` ister); depoya atama yolu da onun.
     tr: (d) =>
       d.reason === 'UNASSIGNED'
-        ? 'Bu üründe depoya atama bekleyen stok var; envanter satırı yazılmadı'
+        ? 'Bu üründe depoya atama bekleyen stok var; envanter satırı yazılmadı. Önce ürün sayfasından depoya atayın'
         : 'Depodaki miktar önizlemeden sonra değişti; dosyadaki değer yazılmadı',
   },
   INVALID_QUANTITY: {

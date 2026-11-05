@@ -27,7 +27,7 @@ import {
 } from '@stok/db'
 import { and, eq, inArray, isNull } from 'drizzle-orm'
 import { type Actor, requirePermission } from './authz'
-import { createMovement } from './movements'
+import { type ImplicitDepot, createMovement, implicitDepot } from './movements'
 import {
   COLUMN_LABELS,
   IMPORT_CELL_LIMIT,
@@ -153,6 +153,8 @@ export interface ImportPreview {
   counts: { create: number; update: number; error: number }
   /** Dosya düzeyi uyarılar (okunmayan "Miktar" sütunu gibi). */
   notices: string[]
+  /** Tek depolu işletmede devrin yazılacağı depo (T234); depo yoksa ya da çoksa yok. */
+  openingDepot?: string
 }
 
 /**
@@ -246,8 +248,13 @@ export async function previewImport(
   const skus = [...new Set(file.rows.map((r) => r.cells.sku?.trim()).filter(Boolean))] as string[]
   const existing = await findExistingProducts(actor, skus, options)
 
+  // Devrin deposu (T234): yazma kapısının kuralıyla, yalnız devir sütunu varsa.
+  const depot: ImplicitDepot = file.columns.includes('openingQty')
+    ? await implicitDepot(actor, options)
+    : { kind: 'none' }
+
   const seen = new Map<string, number>()
-  const rows: PreviewRow[] = file.rows.map((raw) => evaluateRow(raw, file, existing, seen))
+  const rows: PreviewRow[] = file.rows.map((raw) => evaluateRow(raw, file, existing, seen, depot))
 
   return {
     rows,
@@ -257,8 +264,18 @@ export async function previewImport(
       error: rows.filter((r) => r.action === 'error').length,
     },
     notices: importNotices(file.ignoredQtyColumns ?? [], file.columns),
+    ...(depot.kind === 'single' ? { openingDepot: depot.name } : {}),
   }
 }
+
+/**
+ * Çok depolu işletmede devrin deposu bilinmiyor; yazma kapısı `DEPOT_REQUIRED`
+ * ile reddediyor (DAT-23). Önizleme bunu baştan söylüyor (T234); söylemeseydi
+ * kullanıcı "yazılacak" görüp onaylar, devirlerin yazılmadığını raporda öğrenirdi.
+ * Aktarım yalnız yöneticinin (`product:create`); Envanteri Güncelle de onun.
+ */
+export const MULTI_DEPOT_OPENING_MESSAGE =
+  'işletmede birden fazla depo var; depo bazında stok için Stok → Envanteri güncelle ekranını kullanın'
 
 /** Dosya düzeyi uyarılar. Aktarım kaydı da (T171) aynı cümleleri saklıyor. */
 export function importNotices(ignoredQtyColumns: string[], columns: readonly ImportField[]): string[] {
@@ -284,6 +301,7 @@ function evaluateRow(
   file: ParsedFile,
   existing: Map<string, ExistingProduct>,
   seen: Map<string, number>,
+  depot: ImplicitDepot,
 ): PreviewRow {
   const issues: ImportIssue[] = []
   const sku = raw.cells.sku?.trim() ?? ''
@@ -434,6 +452,9 @@ function evaluateRow(
 
     if (existingProduct?.hasMovements) {
       warnings.push('Devir atlanacak: üründe hareket var; ürün bilgisi güncellenecek')
+    }
+    if (depot.kind === 'multi') {
+      warnings.push(`Devir atlanacak: ${MULTI_DEPOT_OPENING_MESSAGE}; ürün ${isUpdate ? 'güncellenecek' : 'eklenecek'}`)
     }
     if (unitPrice !== null) {
       opening = { qty, unit: productUnit, ...(openingBarcode ? { barcode: openingBarcode } : {}), unitPrice }
@@ -835,13 +856,12 @@ async function writeOpening(
     }
     // Birden çok depolu işletmede devrin deposu bilinmiyor (DAT-23). Ürün
     // dosyasında depo sütunu yok; depo bazlı stok envanter dosyasıyla giriliyor
-    // (T218). Genel "depo seçilmeli" metni ürün aktarımında seçilecek bir yer
-    // göstermezdi.
+    // (T218). Sonuç SKIPPED (T234, K2): önizleme bunu "atlanacak" diye
+    // söylüyor, rapor da "atlandı" demeli. Karar yine burada, yazma anında:
+    // önizlemeden sonra ikinci depo açıldıysa devir yine yazılmıyor ve rapor
+    // gerçek sonucu söylüyor. Yalnız bu neden SKIPPED; diğer hatalar FAILED.
     if (err instanceof AppError && err.code === 'DEPOT_REQUIRED') {
-      return {
-        outcome: 'FAILED',
-        message: `${done}, devir yazılamadı: bu işletmede birden fazla depo var. Depo bazında stok için Stok → Envanteri güncelle ekranını kullanın.`,
-      }
+      return { outcome: 'SKIPPED', message: `${done}, devir atlandı: ${MULTI_DEPOT_OPENING_MESSAGE}` }
     }
     return { outcome: 'FAILED', message: `${done}, devir yazılamadı: ${messageOf(err)}` }
   }

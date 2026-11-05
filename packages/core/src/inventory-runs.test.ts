@@ -650,12 +650,17 @@ describe('ürün sayfası ve ürün aktarımı (T219)', () => {
       opts,
     )
     await appendImportRows(boss, runId, { rows: file.rows }, opts)
-    await finalizeImportPreview(boss, runId, opts)
+    // Önizleme devri "yazılacak" değil "atlanacak" sayıyor (T234).
+    const preview = await finalizeImportPreview(boss, runId, opts)
+    expect(preview).toMatchObject({ openings: 0, skippedOpenings: 1 })
+    expect(preview.openingDepot).toBeUndefined()
+    expect(preview.warnings[0]!.message).toContain('Devir atlanacak: işletmede birden fazla depo var')
     let progress = await beginImportRun(boss, runId, opts)
     while (progress.status === 'RUNNING') progress = await processImportChunk(boss, runId, opts)
 
-    // Ürün açıldı, devir yazılmadı; stok sessizce bir depoya ya da atanmamışa düşmedi.
-    expect(progress).toMatchObject({ status: 'DONE', rows: { created: 1 }, openings: { failed: 1 } })
+    // Ürün açıldı, devir yazılmadı (önizlemeyle aynı: atlandı); stok sessizce
+    // bir depoya ya da atanmamışa düşmedi.
+    expect(progress).toMatchObject({ status: 'DONE', rows: { created: 1 }, openings: { skipped: 1, failed: 0 } })
     expect(await total(tenant, 'DV-1')).toBe(0)
     const report = await importRunReport(boss, runId, opts)
     expect(report[0]!.message).toContain('birden fazla depo var')

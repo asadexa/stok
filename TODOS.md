@@ -7,7 +7,7 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
 **Kurallar**
 
 - ID `T<n>`. Arşivdeki görevler numaralarını korur. Yeni görev en büyük
-  numaradan devam eder — **sıradaki boş numara: T240**. Numara yeniden
+  numaradan devam eder — **sıradaki boş numara: T241**. Numara yeniden
   kullanılmaz.
 - Biçim: `- [ ] **T<n> (P0–P3)** - <alan> - **Başlık**`. Altında kısa
   **Neden / Kanıt / Bağlı / Doğrula / Kaynak** satırları.
@@ -60,8 +60,14 @@ işler ve güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
   - Bağlı: `PRC-12`; rozet T217 ve T219'a bağlı. Fiyat gizliliği (INV-10) korunur.
   - Doğrula: fiyatsız stoklu ürün toplamı 0 yapmıyor ve sayıda görünüyor; çalışan alış fiyatı
     türevi bir değer görmüyor.
-  - Durum (2026-11-02): değer kısmı kodda: `7fe8770`, CI #92 yeşil. Kalan: ürün sayfasında
-    "Depoya atama bekliyor" rozeti.
+  - Durum (2026-11-02): değer kısmı kodda: `7fe8770`, CI #92 yeşil.
+  - Durum (2026-11-05): rozet geliştirildi, `development`'a commit edildi; dağıtılmadı. Ürün sayfasında
+    depo dağılımı satırı ve T223 formu zaten vardı; eksik olan listede bulmaktı. Stok listesinde
+    rozet ve süzgeç (`PRD-23` K1), Excel aynı koşulla (`awaitingAssignmentCondition`). Kanıt:
+    `awaiting-assignment.test.ts` 7 test; `dogrula`: deposuz koşulu ve "yalnız artı" koşulu
+    kaldırılınca kırmızı; e2e `t221-atama-bekleyen.spec.ts`. Ölçüm 20.000 ürün / 98.000 hareket:
+    ilk sayfa medyan 66 → 84 ms, süzgeç ~160 ms, süzgeç + kritik + arama ~200 ms.
+  - Kalan (açık tutma gerekçesi): toplu manuel kabul testi (T223/T233 ile).
   - Kaynak: K5, CEO-1, CEO-2, 2026-10-27.
 - [ ] **T222 (P1)** - doküman - **Çok depo Dilim 6: Cuma senaryosu, tam kapılar ve belge senkronu**
   - Kapsam: T171 kabul testiyle birlikte; taze sentetik kiracıda Cuma senaryosu (iki depolu
@@ -356,6 +362,13 @@ işler ve güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
   - Bağlı: T218, T171, `DAT-23`, F-02.
   - Doğrula: birden çok depolu kiracıda devirli ürün dosyasının önizlemesi devrin yazılmayacağını ve
     Envanteri Güncelle yolunu gösteriyor; tek depolu ve depolu olmayan kiracıda önizleme değişmiyor.
+  - Durum (2026-11-05): geliştirildi, `development`'a commit edildi; dağıtılmadı. Önizleme depo kuralını
+    yazma kapısından alıyor (`implicitDepot` → `resolveDepot`); çok depoda satır uyarısı ve
+    "atlanacak", sonuç `SKIPPED` (yalnız `DEPOT_REQUIRED`); tek depoda depo adı (`PRD-23` K2, K3).
+    Kanıt: `opening-import.test.ts` (çok depo, tek depo, önizlemeden sonra açılan ikinci depo,
+    deposuz kiracı değişmiyor), `inventory-runs.test.ts`; `dogrula`: uyarı ve SKIPPED kaldırılınca
+    kırmızı; e2e `t221-atama-bekleyen.spec.ts`.
+  - Kalan (açık tutma gerekçesi): toplu manuel kabul testi.
   - Kaynak: Faz 0.3.6, UAT bulgusu, 2026-11-03.
 - [ ] **T235 (P2)** - import - **20.000 satırlık devirli aktarım ~25 dk sürüyor; sekme bu süre boyunca açık kalmalı**
   - Neden: satırlar tek yazma kapısından (`createMovement`) birer birer yazılıyor (`ARC-15`); süre
@@ -380,6 +393,12 @@ işler ve güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
   - Bağlı: T220, `PRD-17`, `DAT-23`.
   - Doğrula: girişte seçenek yok; çıkışta var; sunucu reddi korunuyor (koruma kaldırılmadan yalnız
     arayüz değişiyor).
+  - Durum (2026-11-05): geliştirildi, `development`'a commit edildi; dağıtılmadı. `unassigned-option.tsx`:
+    giriş sebebinde gizli ve `disabled`, çıkıştan girişe geçince seçim temizleniyor; sunucu reddi
+    yerinde (`depots.test.ts`). Kanıt: e2e `t220-depo-hareket.spec.ts` (arayüzden giriş + Atanmamış
+    yolu artık yok; test "girişte seçilemiyor, çıkışta çalışıyor"a döndü); `dogrula`: gizleme ve
+    temizleme kaldırılınca e2e kırmızı.
+  - Kalan (açık tutma gerekçesi): toplu manuel kabul testi.
   - Kaynak: Faz 0.3.6, UAT bulgusu, 2026-11-03.
 - [ ] **T237 (P2)** - web - **Depo seçiminden önceki davranışı anlatan uyarı metinleri güncel değil**
   - Neden: Envanteri Güncelle ekranı "depo seçimi eklenene kadar Giriş / Çıkış ekranından el ile
@@ -391,6 +410,12 @@ işler ve güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
     yalnız eskiyen cümleleri düzeltmek.
   - Bağlı: T219, T220, T234.
   - Doğrula: tarama listesi; düzeltilen ekranlar tarayıcıda (`demo-testi`).
+  - Durum (2026-11-05): geliştirildi, `development`'a commit edildi; dağıtılmadı. Tarama (arayüz metinleri
+    ve kod yorumları, `apps/web/src`, `packages/*/src`): eskiyen 3 metin. Envanter ekranı uyarısı
+    (depo seçimi cümlesi kalktı), envanter satırı notu ve `STOCK_CHANGED` metni (ikisi yalnız
+    yöneticiye; ürün sayfasından depoya atama yolu eklendi, `PRD-23` K4). Kod yorumlarında eskiyen
+    yok. Tarayıcı kontrolü izole e2e ile (envanter ekranı t219/t221 akışlarında açılıyor).
+  - Kalan (açık tutma gerekçesi): toplu manuel kabul testi.
   - Kaynak: Faz 0.3.6, UAT bulgusu, 2026-11-03.
 - [ ] **T238 (P3)** - operasyon - **Lightsail'deki canlı UAT test ürünleri temizlenmedi**
   - Neden: 2026-11-05 canlı UAT'ında barkodlu ve barkodsuz iki test ürünü ve açılış devirleri
@@ -771,6 +796,21 @@ işler ve güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
   - Kaynak: T200 UAT Senaryo 2, 2026-10-20.
 
 ## P3
+
+- [ ] **T240 (P3)** - ci - **`db-reset.test.ts` dry-run senaryoları yük altında bir kez kırmızı yandı; nedeni bilinmiyor**
+  - Neden: yerel kapıda iki "dry-run reddeder ve kesinti yapmaz" senaryosu (large object; demo
+    dışı kiracı) kırmızı yandı. Tekrarlanırsa ve nedeni test değil koruma ise, `db:reset`'in
+    reddetmesi gereken bir durumu yük altında kaçırması anlamına gelir (veri kaybı yolu); bu
+    yüzden "kararsız test" diye geçilmiyor (T109 dersi).
+  - Kanıt: 2026-11-06 ~00:35, tam `pnpm test` koşusu, izole tam E2E'nin hemen ardından (yük
+    altında). Tek başına `db-reset.test.ts` 33/33, `@stok/db` paketi yeniden 327/327 yeşil. Hata
+    mesajı yakalanmadı; neden doğrulanmadı (tahmini: Docker izole projesinin süre/kaynak sınırı).
+    Senaryo `packages/db/src/db-reset.test.ts:298`.
+  - Bağlı: T207 (yük altında core invariant zaman aşımı), T122 (aynı koşudaki cron kırmızısı,
+    saat dilimi; bununla ilgisiz).
+  - Doğrula: tekrar görülürse tam hata çıktısını sakla; zaman aşımı mı, beklenmeyen kabul mü
+    ayır. Beklenmeyen kabul ise P0'a yükselt.
+  - Kaynak: T221/T234/T236/T237 BUILD kapıları, 2026-11-06.
 
 - [ ] **T226 (P3)** - core - **Depo arşivleme ve yeniden adlandırma yok; depoyu kimin açtığı izlenmiyor**
   - Neden: dosyadaki yanlış bir `Ambar` değeri kalıcı bir depo açar; Dilim 1–3'te depo silme,

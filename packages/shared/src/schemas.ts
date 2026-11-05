@@ -756,6 +756,8 @@ export const exportStockSchema = z.object({
   includeArchived: z.boolean().default(false),
   /** Sadece kritik seviyenin altındakiler. Sipariş listesi çıkarmak için. */
   onlyCritical: z.boolean().default(false),
+  /** Ekrandaki "Depoya atama bekleyen" süzgeci (T221); eski kuyruk işlerinde yok, varsayılan kapalı. */
+  awaitingAssignment: z.boolean().default(false),
   category: z.string().trim().max(100).optional(),
 })
 
@@ -773,6 +775,8 @@ export const listStockSchema = z.object({
   category: z.string().trim().max(100).optional(),
   productId: z.string().uuid().optional(),
   onlyCritical: z.boolean().default(false),
+  /** Yalnız artı atanmamış stoğu olan ürünler (T221); deposuz işletmede sonuç boş. */
+  awaitingAssignment: z.boolean().default(false),
   includeArchived: z.boolean().default(false),
   limit: z.number().int().positive().max(200).default(50),
   offset: z.number().int().nonnegative().default(0),

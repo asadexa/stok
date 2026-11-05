@@ -8,7 +8,8 @@ import { type Locator, type Page, expect, test } from '@playwright/test'
  * seçilen depo değişiyor; depoda yetmeyen çıkış anlaşılır mesajla reddediliyor
  * ve form korunuyor; barkodsuz ürün stok koduyla ve ürün sayfasındaki "Hareket
  * gir" ile bulunuyor; deposu bilinmeyen eski stoktan açık seçimle çıkış
- * yapılıyor, girişte reddediliyor; çalışan da depo seçerek çıkış yapabiliyor;
+ * yapılıyor, girişte seçenek görünmüyor ve gönderilemiyor (sunucu reddi
+ * core'da); çalışan da depo seçerek çıkış yapabiliyor;
  * yeni ürün barkodsuz açılabiliyor. Kuralların ayrıntısı core'da
  * (`depots.test.ts`).
  *
@@ -133,7 +134,7 @@ test('iki depolu işletmede yalnız seçilen depo değişiyor; depoda yetmeyen �
   expect(await depoMiktari(page, kod, 'Toplam')).toBe('17 adet')
 })
 
-test('deposu bilinmeyen eski stoktan açık seçimle çıkış; girişte Atanmamış Stok reddediliyor', async ({ page }) => {
+test('deposu bilinmeyen eski stoktan açık seçimle çıkış; girişte Atanmamış Stok seçilemiyor', async ({ page }) => {
   const n = ek()
   await girisYap(page, YONETICI)
   // İşletmede en az iki depo olsun (önceki test koşmamış olabilir).
@@ -141,19 +142,36 @@ test('deposu bilinmeyen eski stoktan açık seçimle çıkış; girişte Atanmam
 
   let form = await urunAc(page, ESKI_STOKLU)
   const atanmamis = /^Atanmamış Stok/
+  const secenek = form.getByRole('radio', { name: atanmamis })
+  const ham = form.locator('input[name="depo"][value="atanmamis"]')
+
+  // Varsayılan sebep giriş (Satın alma): seçenek yok ve gönderilemez.
+  await expect(secenek).toHaveCount(0)
+  await expect(ham).toBeDisabled()
+
+  await form.getByRole('radio', { name: 'Kullanım', exact: true }).check()
+  await expect(secenek).toBeVisible()
   const once = await secenekMiktari(form, atanmamis)
   expect(once).toBeGreaterThan(0)
+
+  // Çıkışta seçip girişe geçince seçim temizleniyor; gerçek depo seçmeden
+  // form gönderilemiyor (zorunlu depo grubu boş). Sunucu reddi core'da
+  // (`depots.test.ts`, UNASSIGNED_OUT_ONLY) korunuyor.
+  await secenek.check()
+  await form.getByRole('radio', { name: 'Diğer giriş', exact: true }).check()
+  await expect(secenek).toHaveCount(0)
+  await expect(ham).not.toBeChecked()
+  await expect(ham).toBeDisabled()
+  expect(
+    await form.locator('input[name="depo"]').first().evaluate((el) => (el as HTMLInputElement).validity.valueMissing),
+  ).toBe(true)
+
+  // Çıkışta Atanmamış Stoktan düşüm çalışıyor (A1).
   await kaydet(form, { sebep: 'Kullanım', depo: atanmamis, miktar: '1' })
   await expect(page.getByRole('status').first()).toBeVisible()
 
   form = await urunAc(page, ESKI_STOKLU)
-  expect(await secenekMiktari(form, atanmamis)).toBe(once - 1)
-
-  await kaydet(form, { sebep: 'Diğer giriş', depo: atanmamis, miktar: '1' })
-  await expect(page.getByRole('alert').first()).toContainText(
-    'Atanmamış Stok yalnız çıkışta seçilebilir; mal kabulü için bir depo seçin',
-  )
-  form = await urunAc(page, ESKI_STOKLU)
+  await form.getByRole('radio', { name: 'Kullanım', exact: true }).check()
   expect(await secenekMiktari(form, atanmamis)).toBe(once - 1)
 })
 

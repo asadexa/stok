@@ -1,6 +1,6 @@
 import { AppError, type Unit, listStockSchema, transferReasonsSqlList } from '@stok/shared'
 import { type Db, currentStock, depots, locations, products, stockMovements, withTenant } from '@stok/db'
-import { and, asc, eq, isNull, or, sql } from 'drizzle-orm'
+import { and, asc, eq, inArray, isNull, or, sql } from 'drizzle-orm'
 import {
   type Actor,
   actorCan,
@@ -51,10 +51,19 @@ export interface StockRow {
   purchasePrice?: number | null
   salePrice?: number | null
   archivedAt: Date | null
+  /**
+   * Depolu işletmede üründe deposu bilinmeyen ARTI eski stok var: "Depoya atama
+   * bekliyor" (T221, PRD-17). Deposuz işletmede her zaman `false`: orada bütün
+   * stok depo bilgisi olmadan tutuluyor ve bu bir bekleyen iş değil. Eksi
+   * atanmamış stok atanamıyor (T239); rozet de çıkmıyor.
+   */
+  awaitingAssignment: boolean
 }
 
 export interface StockPage {
   rows: StockRow[]
+  /** İşletmede en az bir depo var mı; atama süzgeci yalnız o zaman anlamlı (T221). */
+  usesDepots: boolean
   /** Toplam eşleşen satır. Sayfalama arayüzü bunu gösteriyor. */
   total: number
   limit: number
@@ -65,6 +74,24 @@ export interface StockOptions {
   db?: Db
 }
 
+/**
+ * "Depoya atama bekliyor" süzgeci (T221): depolu işletmede deposu bilinmeyen
+ * ARTI eski stoğu olan ürünler. Stok listesi ve Excel dışa aktarımı BU koşulu
+ * kullanıyor; iki yerde ayrı yazılsaydı ekranda 12 ürün görüp Excel'de 13 almak
+ * mümkün olurdu. Deposuz işletmede hiçbir ürün eşleşmiyor: orada atanmamış stok
+ * normal stok, bekleyen bir iş değil. Alt sorgu ilişkisiz ve adları elle
+ * nitelenmiş: ilişkili alt sorguda nitelenmemiş sütun alt sorgunun kendi
+ * tablosuna çözülüyordu (`import.ts`, findExistingProducts notu).
+ */
+export function awaitingAssignmentCondition(tenantId: string) {
+  return sql`EXISTS (SELECT 1 FROM depots WHERE depots.tenant_id = ${tenantId})
+    AND ${products.id} IN (
+      SELECT stock_movements.product_id FROM stock_movements
+       WHERE stock_movements.tenant_id = ${tenantId} AND stock_movements.depot_id IS NULL
+       GROUP BY stock_movements.product_id
+      HAVING SUM(stock_movements.delta) > 0)`
+}
+
 function whereClause(actor: Actor, q: ReturnType<typeof parseListStock>) {
   const search = q.search?.trim()
   return and(
@@ -73,6 +100,8 @@ function whereClause(actor: Actor, q: ReturnType<typeof parseListStock>) {
     q.includeArchived ? undefined : isNull(products.archivedAt),
     q.category ? eq(products.category, q.category) : undefined,
     q.onlyCritical ? sql`COALESCE(${currentStock.qty}, 0) <= ${products.minStock}` : undefined,
+    // Sayım ve sayfa aynı koşulu kullanıyor (bu fonksiyon); süzgeç sayfalamadan önce.
+    q.awaitingAssignment ? awaitingAssignmentCondition(actor.tenantId) : undefined,
     // Arama HEM ada HEM stok koduna bakıyor: admin barkod okuyucuyu klavye
     // gibi kullanıyor ve okuttuğu şey çoğu zaman koddur.
     search
@@ -147,6 +176,29 @@ export async function listStock(
         .limit(q.limit)
         .offset(q.offset)
 
+      // Rozet yalnız bu sayfanın ürünleri için, tek sorguyla (T221). Deposuz
+      // işletmede sorgu hiç çalışmıyor.
+      const [anyDepot] = await tx.select({ id: depots.id }).from(depots).where(eq(depots.tenantId, actor.tenantId)).limit(1)
+      const awaiting = new Set<string>()
+      if (anyDepot && rows.length > 0) {
+        const pending = await tx
+          .select({ productId: stockMovements.productId })
+          .from(stockMovements)
+          .where(
+            and(
+              eq(stockMovements.tenantId, actor.tenantId),
+              isNull(stockMovements.depotId),
+              inArray(
+                stockMovements.productId,
+                rows.map((r) => r.productId),
+              ),
+            ),
+          )
+          .groupBy(stockMovements.productId)
+          .having(sql`SUM(${stockMovements.delta}) > 0`)
+        for (const p of pending) awaiting.add(p.productId)
+      }
+
       const mapped: StockRow[] = rows.map((r) => {
         const qty = r.qty === null ? 0 : scaledToNumber(parseScaled(r.qty))
         const minStock = scaledToNumber(parseScaled(r.minStock))
@@ -164,6 +216,7 @@ export async function listStock(
           locationCode: r.locationCode,
           lastMovementAt: r.lastMovementAt,
           archivedAt: r.archivedAt,
+          awaitingAssignment: awaiting.has(r.productId),
         }
         if (canSeePrices(actor.role)) {
           row.purchasePrice = r.purchasePrice === null ? null : Number(r.purchasePrice)
@@ -172,7 +225,13 @@ export async function listStock(
         return row
       })
 
-      return { rows: mapped, total: Number(countRow?.n ?? 0), limit: q.limit, offset: q.offset }
+      return {
+        rows: mapped,
+        usesDepots: anyDepot !== undefined,
+        total: Number(countRow?.n ?? 0),
+        limit: q.limit,
+        offset: q.offset,
+      }
     },
     options.db,
   )

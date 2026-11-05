@@ -464,6 +464,8 @@ function PreviewPanel({
       {preview.openings > 0 || preview.skippedOpenings > 0 ? (
         <p className="text-sm">
           Açılış stoğu: <span className="font-semibold">{formatCount(preview.openings)}</span> üründe yazılacak
+          {/* Tek depolu işletmede devir sessizce o depoya gidiyor (DAT-23); söyleniyor (T234). */}
+          {preview.openingDepot && preview.openings > 0 ? ` (depo: ${preview.openingDepot})` : ''}
           {preview.skippedOpenings > 0 ? `, ${formatCount(preview.skippedOpenings)} üründe atlanacak` : ''}. Her
           devir ayrı bir “Devir / açılış” hareketi olarak, alış fiyatıyla yazılır.
         </p>

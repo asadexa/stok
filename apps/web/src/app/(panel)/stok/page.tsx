@@ -41,6 +41,7 @@ interface StokParams extends FormParams {
   ara?: string
   kategori?: string
   kritik?: string
+  atama?: string
   arsiv?: string
   atla?: string
   rapor?: string
@@ -64,6 +65,7 @@ export default async function StockPage({
   const params = await searchParams
   const offset = toOffset(params.atla)
   const onlyCritical = params.kritik === '1'
+  const awaitingAssignment = params.atama === '1'
   const includeArchived = params.arsiv === '1'
   const search = params.ara?.trim() || undefined
   const category = params.kategori?.trim() || undefined
@@ -72,7 +74,7 @@ export default async function StockPage({
   const [page, categories] = await Promise.all([
     listStock(
       actor,
-      { search, category, onlyCritical, includeArchived, limit: PAGE_SIZE, offset },
+      { search, category, onlyCritical, awaitingAssignment, includeArchived, limit: PAGE_SIZE, offset },
       { db },
     ),
     listCategories(actor, { db }),
@@ -87,6 +89,7 @@ export default async function StockPage({
     ara: search,
     kategori: category,
     kritik: onlyCritical ? '1' : undefined,
+    atama: awaitingAssignment ? '1' : undefined,
     arsiv: includeArchived ? '1' : undefined,
   }
   const hasFilter = Object.values(filters).some(Boolean)
@@ -99,6 +102,7 @@ export default async function StockPage({
     search,
     category,
     onlyCritical,
+    awaitingAssignment,
     includeArchived,
   }
   const { plan: exportPlan, error: exportError } = canExport
@@ -229,6 +233,20 @@ export default async function StockPage({
           Sadece kritik
         </label>
 
+        {/* Deposuz işletmede kutu yok: orada atanmamış stok normal stok (T221). */}
+        {page.usesDepots ? (
+          <label className="flex h-14 items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              name="atama"
+              value="1"
+              defaultChecked={awaitingAssignment}
+              className="size-5"
+            />
+            Sadece depoya atama bekleyen
+          </label>
+        ) : null}
+
         <label className="flex h-14 items-center gap-2 text-sm">
           <input
             type="checkbox"
@@ -253,6 +271,17 @@ export default async function StockPage({
           </Link>
         ) : null}
       </form>
+
+      {/* Ne yapılacağı yetkiye göre (T221, K4): atamayı yalnız yönetici
+          yapabiliyor (`count:approve`, transferStock). Çalışana yapamayacağı
+          bir işlem söylenmiyor. */}
+      {page.rows.some((r) => r.awaitingAssignment) ? (
+        <p className="mb-4 rounded-control border border-warn bg-warn-soft p-3 text-sm text-warn-soft-ink">
+          {actorCan(actor, 'count:approve')
+            ? '“Depoya atama bekliyor” ürünlerde deposu bilinmeyen eski stok var. Ürün sayfasındaki “Atanmamış stoğu depoya ata” bölümünden bir depoya atayabilirsiniz.'
+            : '“Depoya atama bekliyor” ürünlerde deposu bilinmeyen eski stok var. Depoya atamayı yönetici yapar; gerekirse yöneticinize başvurun.'}
+        </p>
+      ) : null}
 
       <section aria-label="Stok tablosu" className="rounded-card border border-line bg-surface shadow-card">
         {page.rows.length === 0 ? (
@@ -363,7 +392,10 @@ export default async function StockPage({
                           anlatılıyordu; renk körü kullanıcı için o sinyal
                           hiç yoktu. */}
                       <td className="px-4 py-2.5">
-                        <Badge tone={status.tone}>{status.label}</Badge>
+                        <span className="flex flex-wrap gap-1.5">
+                          <Badge tone={status.tone}>{status.label}</Badge>
+                          {row.awaitingAssignment ? <Badge tone="warn">Depoya atama bekliyor</Badge> : null}
+                        </span>
                       </td>
                       <td className="tabular px-4 py-2.5 whitespace-nowrap text-ink-2">
                         {row.lastMovementAt ? formatDateTime(row.lastMovementAt) : '—'}

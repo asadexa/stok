@@ -359,9 +359,14 @@ export interface ImportRunPreview {
   counts: { create: number; update: number; error: number }
   /** Yazılacak açılış stoğu sayısı (devir atlanacak satırlar hariç). */
   openings: number
-  /** Devri atlanacak satır sayısı (üründe hareket var); `warnings` yalnız ilk satırlar. */
+  /**
+   * Devri atlanacak satır sayısı (üründe hareket var ya da işletmede birden
+   * fazla depo var, T234); `warnings` yalnız ilk satırlar.
+   */
   skippedOpenings: number
   notices: string[]
+  /** Tek depolu işletmede devrin yazılacağı depo (T234). */
+  openingDepot?: string
   /** İlk `IMPORT_SAMPLE_SIZE` hatalı satır; tamamı raporda. */
   errors: { rowNumber: number; sku: string; name: string; issues: { column: string; message: string }[] }[]
   /** Hata olmayan ama söylenmesi gereken satırlar ("devir atlanacak"). */
@@ -465,6 +470,7 @@ export async function finalizeImportPreview(
     openings: preview.rows.filter((r) => r.opening && !r.warnings?.length).length,
     skippedOpenings: warned.length,
     notices: run.notices,
+    ...(preview.openingDepot ? { openingDepot: preview.openingDepot } : {}),
     errors: errorRows.slice(0, IMPORT_SAMPLE_SIZE).map((r) => ({
       rowNumber: r.rowNumber,
       sku: r.sku,

@@ -155,6 +155,13 @@ describe('önizleme', () => {
     expect(row.warnings).toEqual(['Devir atlanacak: üründe hareket var; ürün bilgisi güncellenecek'])
   })
 
+  it('deposuz kiracıda önizleme değişmiyor: depo adı yok, çok depo uyarısı yok (T234)', async () => {
+    const p = await plan([HEADER_NO_PRICE, 'VAR-HAREKETSIZ;Hareketsiz Ürün;5'])
+    expect(p.openingDepot).toBeUndefined()
+    expect(p.rows[0]!.warnings).toBeUndefined()
+    expect(p.rows[0]!.opening).toMatchObject({ qty: 5 })
+  })
+
   it('önizleme hiçbir şey yazmıyor', async () => {
     const before = await movementCount()
     await plan([HEADER, `${uniq('NW-')};Kalem;Adet;3;${uniq('bc')};Tekli;1;50`])
@@ -439,7 +446,7 @@ describe('T228: barkodsuz ürün ve devir', () => {
       expect(await otherMovementCount()).toBe(0)
     })
 
-    it('birden çok depolu kiracıda barkodsuz devir yazılmıyor ve bu söyleniyor', async () => {
+    it('birden çok depolu kiracıda devir önizlemede "atlanacak", sonuçta SKIPPED; ürün yine açılıyor (T234)', async () => {
       await admin.client`
         INSERT INTO depots (tenant_id, name) VALUES (${other.tenantId}, 'Merkez'), (${other.tenantId}, 'Şube')
       `
@@ -448,11 +455,70 @@ describe('T228: barkodsuz ürün ve devir', () => {
         Buffer.from(['Stok Kodu;Ürün Adı;Alış Fiyatı;Açılış Stoğu', `${sku};Çok Depo;2;5`].join('\n'), 'utf8'),
         'depo.csv',
       )
-      const result = await commitImport(otherBoss, await previewImport(otherBoss, file, opts), opts)
+      const preview = await previewImport(otherBoss, file, opts)
+      expect(preview.rows[0]!.action).toBe('create')
+      expect(preview.rows[0]!.warnings).toEqual([
+        'Devir atlanacak: işletmede birden fazla depo var; depo bazında stok için Stok → Envanteri güncelle ekranını kullanın; ürün eklenecek',
+      ])
+      expect(preview.openingDepot).toBeUndefined()
 
-      expect(result).toMatchObject({ created: 1, openings: { written: 0, skipped: 0, failed: 1 } })
-      expect(result.notices[0]!.message).toContain('birden fazla depo var')
+      const result = await commitImport(otherBoss, preview, opts)
+
+      expect(result).toMatchObject({ created: 1, openings: { written: 0, skipped: 1, failed: 0 } })
+      expect(result.notices[0]!.message).toBe(
+        'Ürün eklendi, devir atlandı: işletmede birden fazla depo var; depo bazında stok için Stok → Envanteri güncelle ekranını kullanın',
+      )
       expect(await otherMovementCount()).toBe(0)
+    })
+  })
+
+  describe('tek depolu kiracı (T234)', () => {
+    let single: TestTenant
+    let singleBoss: Actor
+
+    beforeAll(async () => {
+      single = await seedTestTenant(admin.db, 'openimp-tek', [])
+      singleBoss = { tenantId: single.tenantId, userId: single.adminUserId, role: 'ADMIN' }
+      await admin.client`INSERT INTO depots (tenant_id, name) VALUES (${single.tenantId}, 'Ana Depo')`
+    })
+
+    const singleFile = (sku: string) =>
+      parseProductFile(
+        Buffer.from(['Stok Kodu;Ürün Adı;Alış Fiyatı;Açılış Stoğu', `${sku};Tek Depo;2;5`].join('\n'), 'utf8'),
+        'tek.csv',
+      )
+
+    async function depotOfOpening(sku: string) {
+      return admin.client<{ name: string | null; delta: string }[]>`
+        SELECT d.name, m.delta::text FROM stock_movements m
+          JOIN products p ON p.id = m.product_id LEFT JOIN depots d ON d.id = m.depot_id
+         WHERE m.tenant_id = ${single.tenantId} AND p.sku = ${sku} AND m.reason = 'OPENING'
+      `
+    }
+
+    it('önizleme depo adını söylüyor, devir o depoya yazılıyor', async () => {
+      const sku = uniq('TEK-')
+      const preview = await previewImport(singleBoss, await singleFile(sku), opts)
+      expect(preview.openingDepot).toBe('Ana Depo')
+      expect(preview.rows[0]!.warnings).toBeUndefined()
+
+      const result = await commitImport(singleBoss, preview, opts)
+      expect(result.openings).toEqual({ written: 1, skipped: 0, failed: 0 })
+      expect(await depotOfOpening(sku)).toEqual([{ name: 'Ana Depo', delta: '5.000' }])
+    })
+
+    it('önizlemeden sonra ikinci depo açılırsa devir yazılmıyor; sonuç gerçeği söylüyor', async () => {
+      const sku = uniq('YARIS-')
+      const preview = await previewImport(singleBoss, await singleFile(sku), opts)
+      expect(preview.openingDepot).toBe('Ana Depo')
+
+      await admin.client`INSERT INTO depots (tenant_id, name) VALUES (${single.tenantId}, 'Sonradan Açılan')`
+      const result = await commitImport(singleBoss, preview, opts)
+
+      expect(result).toMatchObject({ created: 1, openings: { written: 0, skipped: 1, failed: 0 } })
+      expect(result.notices[0]!.message).toContain('devir atlandı: işletmede birden fazla depo var')
+      expect(await depotOfOpening(sku)).toEqual([])
+      expect(await checkStockInvariant(single.tenantId, opts)).toEqual([])
     })
   })
 })

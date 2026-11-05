@@ -1380,6 +1380,32 @@ async function resolveDepot(
   throw new AppError('DEPOT_REQUIRED', 'tenant has several depots; depot is required')
 }
 
+/** Depo verilmeyen hareketin bugün nereye yazılacağı (`resolveDepot` kuralı). */
+export type ImplicitDepot = { kind: 'none' } | { kind: 'single'; name: string } | { kind: 'multi' }
+
+/**
+ * Depo verilmeyen bir hareketin (ör. ürün aktarımının devri) hangi depoya
+ * yazılacağını, yazmadan söyler (T234). Kural `resolveDepot`'un kendisi:
+ * önizleme ayrı bir "depo sayısı" kuralı yazsaydı yazma kapısıyla ayrışabilirdi.
+ * Bu yalnız bir öngörü; karar yine yazma anında `createMovement`'ta veriliyor
+ * (önizlemeden sonra depo açılırsa devir `DEPOT_REQUIRED` ile yazılmaz).
+ */
+export async function implicitDepot(actor: Actor, options: { db?: Db } = {}): Promise<ImplicitDepot> {
+  return withTenant(
+    actor.tenantId,
+    async (tx) => {
+      try {
+        const depot = await resolveDepot(tx, actor.tenantId, undefined)
+        return depot ? { kind: 'single', name: depot.name } : { kind: 'none' }
+      } catch (err) {
+        if (err instanceof AppError && err.code === 'DEPOT_REQUIRED') return { kind: 'multi' }
+        throw err
+      }
+    },
+    options.db,
+  )
+}
+
 /**
  * Ürünün bir depodaki (ya da `null` ile depoya atanmamış) miktarı, defterden.
  * Ayrı bir projeksiyon yok: depo toplamları ile atanmamış miktarın toplamı

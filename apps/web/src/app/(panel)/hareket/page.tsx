@@ -28,6 +28,7 @@ import {
 } from '@/server/form'
 import { currentActor } from '@/server/session'
 import { readSoundEnabled } from '@/server/theme'
+import { UnassignedOption } from './unassigned-option'
 import { PhoneScanPanel } from './phone-scan-panel'
 
 /**
@@ -428,8 +429,9 @@ export default async function MovementEntryPage({
 
               {/* DEPO (T220). Her seçeneğin yanında o depodaki miktar: "depoda
                   yetmiyor" hatasını kaydetmeden önce görmek mümkün. Atanmamış
-                  Stok yalnız üründe öyle bir miktar varsa ve yalnız çıkış için
-                  (A1); girişte sunucu reddediyor (UNASSIGNED_OUT_ONLY). */}
+                  Stok yalnız üründe öyle bir miktar varsa ve yalnız çıkış
+                  sebebi seçiliyken seçilebiliyor (A1, `UnassignedOption`);
+                  sunucu girişi yine reddediyor (UNASSIGNED_OUT_ONLY). */}
               {depotList.length > 0 ? (
                 <fieldset>
                   <legend className="text-sm font-medium">Depo</legend>
@@ -451,15 +453,13 @@ export default async function MovementEntryPage({
                       </label>
                     ))}
                     {unassignedQty > 0 ? (
-                      <label className="flex min-h-[2.75rem] items-center gap-2 border-t border-line pt-1">
-                        <input
-                          type="radio"
-                          name="depo"
-                          value="atanmamis"
-                          required
-                          defaultChecked={selectedDepot === 'atanmamis'}
-                          className="size-5 shrink-0"
-                        />
+                      <UnassignedOption
+                        outReasons={selectableReasons('OUT')}
+                        initialOut={selectableReasons('OUT').includes(
+                          (params.sebep || selectableReasons('IN')[0]) as MovementReason,
+                        )}
+                        defaultChecked={selectedDepot === 'atanmamis'}
+                      >
                         <span>
                           Atanmamış Stok{' '}
                           <span className="text-sm text-ink-2">(yalnız çıkış; deposu bilinmeyen eski stok)</span>
@@ -467,7 +467,7 @@ export default async function MovementEntryPage({
                         <span className="tabular ml-auto text-sm text-ink-2">
                           {formatQty(unassignedQty, found.unit as Unit)}
                         </span>
-                      </label>
+                      </UnassignedOption>
                     ) : null}
                   </div>
                   {depotList.length > 1 ? (
