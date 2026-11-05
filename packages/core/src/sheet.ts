@@ -402,3 +402,43 @@ export function parseTurkishNumber(raw: string): number | undefined {
   const value = Number(cleaned)
   return Number.isFinite(value) ? value : Number.NaN
 }
+
+/** `parseTurkishNumber`'ın temizlediği biçimde düz, eksi olmayan ondalık: "1234" ya da "9.5049". */
+const PLAIN_DECIMAL = /^(\d+)(?:\.(\d+))?$/
+
+/**
+ * Ürün dosyasındaki fiyatı KURUŞA (2 ondalık) yarım yukarı yuvarlar (PRC-15):
+ * 3,0451 → 3,05; 2,9949 → 2,99; 2,9950 → 3,00; 3,0050 → 3,01.
+ *
+ * Hesap METİN ve tamsayı üzerinden (INV-8). Sayıya çevirip `Math.round(x * 100)`
+ * yapılsaydı 3,005 kayan noktada 3,00499… olduğu için 3,00'a inerdi; kural tam
+ * da bu sınırda yanlış çalışırdı.
+ *
+ * Yalnız düz, eksi olmayan ondalık yazım yuvarlanır. Eksi, belirsiz ("1.234"),
+ * üstel ya da bozuk yazım `undefined` döner ve çağıran onu yuvarlamadan normal
+ * doğrulamaya bırakır: yuvarlama hiçbir reddi atlatmanın yolu olmamalı. Üst
+ * sınır da burada değil, yuvarlanan değerin geçtiği şemada (`moneySchema`).
+ * `changed`: kuruştan sonraki basamaklarda sıfır olmayan bir rakam var, yani
+ * kaydedilecek değer dosyadakinden farklı ("9,5000" değişmez).
+ */
+export function roundTurkishPriceToCents(raw: string): { cents: bigint; changed: boolean } | undefined {
+  const text = raw.trim()
+  if (text === '' || AMBIGUOUS_NUMBER.test(text)) return undefined
+  const cleaned = text.includes(',') ? text.replace(/\./g, '').replace(',', '.') : text
+  const match = PLAIN_DECIMAL.exec(cleaned)
+  if (!match) return undefined
+  const whole = match[1]!
+  const frac = match[2] ?? ''
+  const kept = BigInt(whole) * 100n + BigInt(frac.padEnd(2, '0').slice(0, 2))
+  const rest = frac.slice(2)
+  const up = rest !== '' && rest[0]! >= '5'
+  return { cents: kept + (up ? 1n : 0n), changed: /[1-9]/.test(rest) }
+}
+
+/** Kuruş → sayı ("301" → 3.01) ve Türkçe gösterim ("3,01"); ikisi de metinden, kesin. */
+export function centsToNumber(cents: bigint): number {
+  return Number(`${cents / 100n}.${String(cents % 100n).padStart(2, '0')}`)
+}
+export function centsToTurkish(cents: bigint): string {
+  return `${cents / 100n},${String(cents % 100n).padStart(2, '0')}`
+}

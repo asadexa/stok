@@ -84,6 +84,12 @@ Katman kuralları `PROJECT_BRAIN` §5, ilkeler §12. Kayıtlarda yalnız özelli
   - Satır bazlı hata; güncellemede dosyada olmayan sütuna dokunulmaz.
   - Boş fiyat hücresi mevcut alış ve satış fiyatını değiştirmez; `0` fiyatı sıfıra günceller.
     Fiyat sütunu varsa önizleme bunu söyler. Fiyatı silmek ürün formundandır (`PRC-14`).
+  - İkiden fazla ondalıklı alış ve satış fiyatı kuruşa yarım yukarı yuvarlanır (`PRC-15`; metin ve
+    tamsayıyla, `roundTurkishPriceToCents`): önizleme değişecek fiyat hücresi sayısını, satırda
+    dosyadaki ve kaydedilecek değeri ve ERP toplamıyla fark olabileceğini söyler. Pozitif olup
+    0,00'a inen fiyat satır hatası; eksi, belirsiz ve üst sınırı aşan değer yuvarlanmadan reddedilir.
+    Devir yuvarlanmış alış fiyatıyla yazılır. Ürün ve hareket formları ile tedarikçi fiyatı
+    değişmedi (T241; manuel kabul bekliyor).
 - **Neden böyle:** dosyalar çoğu zaman sütunları kayık ve birimleri karışık gelir; önizleme
   zorunlu, hatalar satır bazlı (tek bozuk satır yüzlerce doğru satırı düşürmesin). Eksik sütun
   "temizle" değil "dokunma": yalnız ad ve kod içeren düzeltme dosyası fiyatları silmesin.

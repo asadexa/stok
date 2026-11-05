@@ -471,6 +471,22 @@ function PreviewPanel({
         </p>
       ) : null}
 
+      {/* PRC-15: kaç fiyat HÜCRESİNİN değişeceği (ürün sayısı değil) ve her
+          satırda dosyadaki ile kaydedilecek değer. Fark ERP toplamına yansıyabilir. */}
+      {preview.roundedPriceCells > 0 ? (
+        <>
+          <p className="text-sm">
+            <span className="font-semibold">{formatCount(preview.roundedPriceCells)}</span> fiyat hücresi kuruşa
+            (2 ondalık) yuvarlanacak. Yuvarlama nedeniyle stok değeri ERP’deki tutardan farklı olabilir.
+          </p>
+          <NoteTable
+            title="Yuvarlanacak fiyatlar"
+            rows={preview.roundings}
+            more={preview.roundedPriceRows - preview.roundings.length}
+          />
+        </>
+      ) : null}
+
       {preview.warnings.length > 0 ? (
         <NoteTable
           title="Devri atlanacak satırlar"

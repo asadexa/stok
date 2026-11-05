@@ -7,7 +7,7 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
 **Kurallar**
 
 - ID `T<n>`. Arşivdeki görevler numaralarını korur. Yeni görev en büyük
-  numaradan devam eder — **sıradaki boş numara: T241**. Numara yeniden
+  numaradan devam eder — **sıradaki boş numara: T243**. Numara yeniden
   kullanılmaz.
 - Biçim: `- [ ] **T<n> (P0–P3)** - <alan> - **Başlık**`. Altında kısa
   **Neden / Kanıt / Bağlı / Doğrula / Kaynak** satırları.
@@ -370,6 +370,36 @@ işler ve güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
     kırmızı; e2e `t221-atama-bekleyen.spec.ts`.
   - Kalan (açık tutma gerekçesi): toplu manuel kabul testi.
   - Kaynak: Faz 0.3.6, UAT bulgusu, 2026-11-03.
+- [ ] **T241 (P2)** - import - **ERP ürün dosyasında ikiden fazla ondalıklı fiyat satırı reddediyordu**
+  - Neden: `9,5049` gibi fiyatlar `moneySchema`'nın 2 ondalık kuralına takılıp bütün satırı hata
+    yapıyordu; ürün ne açılıyor ne güncelleniyordu.
+  - Kanıt: kod okuması (`schemas.ts:82–86`, `import.ts` `evaluateRow`); geçmiş kullanıcı bildirimi
+    (30 Ekim ERP testi, 1.268 ürün atlandı; kaynak dosya görülmedi, sayı doğrulanmadı).
+  - Durum (2026-11-06): geliştirildi, `development`'a commit edildi; dağıtılmadı; `PRC-15`. Ürün dosyasında
+    alış ve satış fiyatı kuruşa yarım yukarı (metin/tamsayı, `roundTurkishPriceToCents`); önizlemede
+    hücre sayısı, kaynak → kaydedilecek değer ve ERP farkı notu; 0,00'a inen pozitif fiyat satır
+    hatası. Kanıt: `price-rounding.test.ts` 8, `price-rounding-import.test.ts` 7 test (tek istek ve
+    kayıtlı aktarım yolu; kullanıcı örnekleri, boş hücre, `0`, üst sınır, eksi, belirsiz, devir);
+    `dogrula`: kayan noktalı yuvarlama, sıfır reddi ve hücre sayımı kaldırılınca kırmızı; e2e
+    `birim-ve-devir.spec.ts` PRC-15 senaryosu.
+  - Kalan (açık tutma gerekçesi): toplu manuel kabul testi.
+  - Bağlı: `PRC-12`, `PRC-14`, `PRD-18`, T242.
+  - Kaynak: ERP aktarımı PLAN'ı ve BUILD onayı (B seçeneği), 2026-11-06.
+- [ ] **T242 (P2)** - import - **ERP toplam maliyeti ile uygulamadaki stok değeri farkı açıklanmadı**
+  - Neden: 30 Ekim ERP testinde ERP toplam maliyeti 1.515.714,46 ₺, uygulamadaki değer 40,00 ₺
+    bildirildi. Kaynak dosya ve test anının verisi olmadan neden kesinleştirilemiyor.
+  - Kanıt: geçmiş kullanıcı bildirimi (doğrulanmadı). Kodla doğrulanan mekanizmalar: değer =
+    stok × güncel alış fiyatı, yalnız fiyatı bilinen arşivsiz ürünler (`PRC-12`, `stock.ts:445`);
+    envanter dosyası fiyat yazmaz (`PRD-18`); reddedilen fiyatlı satırlar fiyatsız kalır (T241).
+  - Olası nedenler (kanıt düzeyine göre): fiyatsız ürünler; tanım farkı (ERP büyük olasılıkla
+    Σ `Envanter Tutarı` = miktar × `Ortalama Değer`; maliyet yöntemi `DAT-15` Open); kapsam
+    (malzeme türü, depo, atlanan satır, eksi stok); `Envanter Tutarı (RD)` döviz ve KDV belirsizliği.
+  - Yapılacak: aynı ERP dosyası ve rapor parametreleri (tarih, depo, döviz, değerleme yöntemi)
+    gelince salt okunur mutabakat: dosyada Σ `Envanter Tutarı` depo ve malzeme türüne göre;
+    atlanan satır sayısı; uygulamada fiyatlı/fiyatsız stoklu ürün; örnek ürünlerde miktar ve fiyat.
+    Gerçek veri repoya, fixture'a ve loglara girmez.
+  - Bağlı: T241, `PRC-12`, `DAT-15`, `PRD-18`.
+  - Kaynak: ERP aktarımı PLAN'ı, 2026-11-06.
 - [ ] **T235 (P2)** - import - **20.000 satırlık devirli aktarım ~25 dk sürüyor; sekme bu süre boyunca açık kalmalı**
   - Neden: satırlar tek yazma kapısından (`createMovement`) birer birer yazılıyor (`ARC-15`); süre
     satır sayısıyla doğrusal. Sekme kapanırsa aktarım durur (yeniden yükleme güvenli, `DAT-18`).

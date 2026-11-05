@@ -38,7 +38,15 @@ import {
   type RawRow,
 } from './product-file'
 import { PRODUCT_VERSION, addBarcode, insertProduct, listBarcodes, patchProduct } from './products'
-import { ambiguousNumberMessage, isAmbiguousTurkishNumber, normalizeHeader, parseTurkishNumber } from './sheet'
+import {
+  ambiguousNumberMessage,
+  centsToNumber,
+  centsToTurkish,
+  isAmbiguousTurkishNumber,
+  normalizeHeader,
+  parseTurkishNumber,
+  roundTurkishPriceToCents,
+} from './sheet'
 import { uuidV5 } from './uuid-v5'
 import { issuesOf } from './validate'
 import { z } from 'zod'
@@ -132,6 +140,12 @@ export interface PreviewRow {
   opening?: OpeningPlan
   /** Hata DEĞİL, satır yine işlenir: "devir atlanacak: üründe hareket var". */
   warnings?: string[]
+  /**
+   * Kuruşa yuvarlanan fiyat hücreleri (PRC-15): dosyadaki değer ve kaydedilecek
+   * değer. `warnings`'ten AYRI: oradaki her satır "devri atlanacak" sayılıyor,
+   * yuvarlanan fiyat ise devri engellemiyor.
+   */
+  roundedPrices?: { column: string; from: string; to: string }[]
 }
 
 export interface OpeningPlan {
@@ -309,6 +323,7 @@ function evaluateRow(
 
   const push = (column: keyof ParsedRow | '', message: string) =>
     issues.push({ column: column === '' ? '' : COLUMN_LABELS[column], message })
+  const roundedPrices: NonNullable<PreviewRow['roundedPrices']> = []
 
   if (sku === '') push('sku', 'Stok kodu boş')
   if (name === '') push('name', 'Ürün adı boş')
@@ -358,6 +373,24 @@ function evaluateRow(
     if (Number.isNaN(parsed)) {
       push(field, numberIssue(raw.cells[field] ?? '', 'Sayı olarak okunamadı'))
       continue
+    }
+    // FİYAT KURUŞA YUVARLANIYOR (PRC-15): ERP fiyatları 3-4 ondalıklı gelebiliyor
+    // ve ürün fiyatı kuruşla tutuluyor. Önizleme ve uygulama bu tek değeri
+    // kullanıyor (`data`). Yuvarlanan değer yine şemadan geçiyor: üst sınır,
+    // eksi ve diğer kurallar aşılamıyor. Pozitif olup 0,00'a inen fiyat hata:
+    // yazılsaydı "fiyatı bilinen, değeri sıfır" bir ürün olurdu (PRC-12).
+    if (field !== 'minStock') {
+      const cell = (raw.cells[field] ?? '').trim()
+      const rounded = roundTurkishPriceToCents(cell)
+      if (rounded?.changed) {
+        if (rounded.cents === 0n) {
+          push(field, `${cell} kuruşa yuvarlanınca 0,00 oluyor; fiyat en az 0,01 olmalı`)
+          continue
+        }
+        data[field] = centsToNumber(rounded.cents)
+        roundedPrices.push({ column: COLUMN_LABELS[field], from: cell, to: centsToTurkish(rounded.cents) })
+        continue
+      }
     }
     data[field] = parsed
   }
@@ -482,6 +515,7 @@ function evaluateRow(
     ...(productId ? { productId, productVersion: existingProduct!.version } : {}),
     ...(opening ? { opening } : {}),
     ...(warnings.length > 0 ? { warnings } : {}),
+    ...(roundedPrices.length > 0 ? { roundedPrices } : {}),
   }
 }
 
