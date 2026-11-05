@@ -324,6 +324,8 @@ transfer); T232 (tek ürün sayım düzeltmesi) kapandı.
    T223 (atanmamış stoğu depoya atama; migration 0016) `development`'ta; geliştirme tamamlandı,
    manuel kabul testi ertelendi (T233 ile birlikte yapılacak). `main`'de ve Lightsail'de yok.
    Dağıtımda migrate adımı ve web geri dönüş sınırı var (runbook L.3).
+   T233 (depolar arası transfer; aynı kapı, yeni migration yok) `development`'ta; geliştirme
+   tamamlandı, manuel kabul testi T223'le birlikte yapılacak. `main`'de ve Lightsail'de yok.
 2. **T201 gerçek tedarikçi API'si**: ilk hedef, erişimi sağlanabilen bir sağlayıcıyla uçtan uca.
    Sağlayıcı, kimlik doğrulama ve yaklaşım PLAN'da kanıtla seçilir; gerçek sağlayıcı seçilmeden genel
    entegrasyon iddia edilmez. Çok depo kritik yolunun dışında.

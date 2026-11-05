@@ -14,6 +14,8 @@ import {
   reasonPriceBasis,
   stockTransferSchema,
   toDelta,
+  transferNotePrefix,
+  transferNoteRoom,
   unitDecimals,
 } from '@stok/shared'
 import {
@@ -233,16 +235,20 @@ async function createMovementInner(
 
 /**
  * ============================================================================
- * DEPO TRANSFERİ — İKİNCİ YAZMA KAPISI (T223; T233 aynı kapıyı genişletir)
+ * DEPO TRANSFERİ — İKİNCİ YAZMA KAPISI (T223 atama, T233 depodan depoya)
  *
- * Stoğu değiştiren ikinci ve son fonksiyon, BİLEREK bu modülde (DAT-02,
+ * Stoğu değiştiren ikinci ve son fonksiyon, BİLEREK bu modülde (DAT-26,
  * INV-3): `createMovement` ile aynı ürün kilidini, kiracı bağlamını,
  * idempotency ve yeniden deneme kurallarını kullanıyor. `createMovement`'a
  * seçenek olarak eklenmedi: transfer bir değil İKİ satır yazıyor ve fiyat,
  * barkod, eksi stok dallarının hiçbiri onu ilgilendirmiyor.
  *
- *   kaynak (bu sürümde yalnız atanmamış)  −q   TRANSFER_OUT  depo boş
- *   hedef depo                            +q   TRANSFER_IN   depo dolu
+ *   kaynak: atanmamış (atama) ya da depo  −q   TRANSFER_OUT  depo boş / kaynak depo
+ *   hedef depo (her zaman gerçek depo)    +q   TRANSFER_IN   hedef depo
+ *
+ * Atama ile depodan depoya taşıma aynı yol: atama, kaynağı "atanmamış" olan
+ * transferdir. Ayrı bir fonksiyon yazılsaydı kilit, idempotency ve toplam
+ * kontrolü iki kopyada ayrışabilirdi.
  *
  * İki satır AYNI transaction'da ve aynı `transfer_id` ile; biri yazılamazsa
  * ikisi de yok. Toplam stok değişmiyor; fiyat taşımıyor (PRC-12 değeri aynı).
@@ -253,12 +259,6 @@ async function createMovementInner(
  */
 
 const transferKeys = (key: string) => ({ out: `${key}:out`, in: `${key}:in` })
-
-/** Sabit açıklama + isteğe bağlı kullanıcı notu; toplam hareket notu sınırına sığmalı. */
-export const TRANSFER_NOTE_LIMIT = 500
-export function transferNotePrefix(depotName: string): string {
-  return `Depoya atama: Atanmamış stok → ${depotName}`
-}
 
 export async function transferStock(
   actor: Actor,
@@ -281,7 +281,8 @@ async function transferStockInner(
   alanlar: LogFields,
 ): Promise<StockTransferResponse> {
   requirePermission(actor, 'movement:create')
-  // Atama depo dağılımını değiştiren bir yönetim işlemi; sayım onayıyla aynı rol (K3).
+  // Atama ve depodan depoya taşıma depo dağılımını değiştiren yönetim
+  // işlemleri; sayım onayıyla aynı rol (T223 K3, T233 kullanıcı kararı).
   requirePermission(actor, 'count:approve')
 
   const parsed = stockTransferSchema.safeParse(raw)
@@ -334,9 +335,15 @@ async function writeTransfer(
       name: target.productName,
     })
   }
-  // Depo kiracı içinde doğrulanıyor (FK RLS'i atlıyor): başka kiracının deposu NOT_FOUND.
+  // Depolar kiracı içinde doğrulanıyor (FK RLS'i atlıyor): başka kiracının
+  // deposu NOT_FOUND. Kaynak `null` = atanmamış stok (atama, T223).
   const depot = await resolveDepot(tx, actor.tenantId, input.toDepotId)
   if (!depot) throw new AppError('SERVER_ERROR', 'transfer target depot did not resolve')
+  let from: { id: string; name: string } | null = null
+  if (input.fromDepotId !== null) {
+    from = await resolveDepot(tx, actor.tenantId, input.fromDepotId)
+    if (!from) throw new AppError('SERVER_ERROR', 'transfer source depot did not resolve')
+  }
 
   const qty = scaledFromNumber(input.qty)
   const decimals = unitDecimals(target.unit as Unit)
@@ -347,13 +354,11 @@ async function writeTransfer(
     })
   }
 
-  const prefix = transferNotePrefix(depot.name)
+  const prefix = transferNotePrefix(from?.name ?? null, depot.name)
+  const room = transferNoteRoom(from?.name ?? null, depot.name)
   const note = input.note ? `${prefix}: ${input.note}` : prefix
-  if (note.length > TRANSFER_NOTE_LIMIT) {
-    throw validationError(
-      [{ path: 'note', message: `Not en fazla ${TRANSFER_NOTE_LIMIT - prefix.length - 2} karakter olabilir` }],
-      'VALIDATION_FAILED',
-    )
+  if (input.note && input.note.length > room) {
+    throw validationError([{ path: 'note', message: `Not en fazla ${room} karakter olabilir` }], 'VALIDATION_FAILED')
   }
 
   const before = await lockStockRow(tx, actor.tenantId, target.productId)
@@ -365,15 +370,18 @@ async function writeTransfer(
   if (committed) return committed
 
   // KAYNAK YETERLİLİĞİ KİLİT ALTINDA (K4, K5): okuma ile yazma arasına başka
-  // hareket giremiyor. Eksi atanmamış stokta da (eski `allowNegative`) atama
-  // yok: eksi bir kovadan mal taşınamaz.
-  const unassigned = await sumDelta(tx, actor.tenantId, target.productId, null)
-  if (unassigned < qty) {
-    throw new AppError('INSUFFICIENT_STOCK', `requested ${formatScaled(qty)} > unassigned ${formatScaled(unassigned)}`, {
+  // hareket giremiyor. Bakılan YALNIZ kaynak kova: toplam yetiyor diye Depo
+  // A'da olmayan mal A'dan taşınsaydı A eksiye düşer, toplam doğru göründüğü
+  // için kimse fark etmezdi (DAT-23'teki depo bazlı çıkış kuralının aynısı).
+  // Eksi kaynakta da (eski `allowNegative`) transfer yok: eksi bir kovadan mal
+  // taşınamaz; transferde `allowNegative` seçeneği bilerek yok.
+  const available = await sumDelta(tx, actor.tenantId, target.productId, from?.id ?? null)
+  if (available < qty) {
+    throw new AppError('INSUFFICIENT_STOCK', `requested ${formatScaled(qty)} > source ${formatScaled(available)}`, {
       productId: target.productId,
       name: target.productName,
-      source: 'UNASSIGNED',
-      available: scaledToNumber(unassigned),
+      ...(from ? { source: 'DEPOT', depotId: from.id, depotName: from.name } : { source: 'UNASSIGNED' }),
+      available: scaledToNumber(available),
       requested: scaledToNumber(qty),
     })
   }
@@ -391,7 +399,7 @@ async function writeTransfer(
     ...common,
     delta: formatScaled(-qty),
     reason: 'TRANSFER_OUT',
-    depotId: null,
+    depotId: from?.id ?? null,
     idempotencyKey: keys.out,
   })
   await tx.insert(stockMovements).values({

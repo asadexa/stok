@@ -10,7 +10,8 @@ import { TEST_DB_NAME } from './test/db-name'
 
 /**
  * ============================================================================
- * T223 — ATANMAMIŞ STOĞU DEPOYA ATAMA (`transferStock`)
+ * T223 — ATANMAMIŞ STOĞU DEPOYA ATAMA ve T233 — DEPOLAR ARASI TRANSFER
+ * (ikisi de `transferStock`)
  *
  * Sınananlar: kısmi ve tam atama; iki satır aynı transaction'da ve aynı
  * `transfer_id` ile; toplam, fiyat ve göstergeler değişmiyor; yetersiz ve eksi
@@ -25,7 +26,7 @@ const app = testAppDb(TEST_DB_NAME, 8)
 const admin = testAdminDb(TEST_DB_NAME)
 const opts = { db: app.db }
 
-const PRODUCTS = Array.from({ length: 30 }, (_, i) => ({
+const PRODUCTS = Array.from({ length: 50 }, (_, i) => ({
   sku: `TR-${String(i).padStart(2, '0')}`,
   name: `Transfer Ürünü ${i}`,
   purchasePrice: '5.00',
@@ -83,6 +84,19 @@ function assign(productId: string, qty: number, extra: Record<string, unknown> =
     clientCreatedAt: new Date().toISOString(),
     ...extra,
   }
+}
+
+/** Depodaki stok: depoya yazılmış alış (ya da eski `allowNegative` çıkışı), doğrudan deftere. */
+async function inDepot(productId: string, depotId: string, delta: number, reason = 'PURCHASE') {
+  await admin.client`
+    INSERT INTO stock_movements (tenant_id, product_id, user_id, delta, reason, idempotency_key, depot_id)
+    VALUES (${t.tenantId}, ${productId}, ${t.adminUserId}, ${delta}, ${reason}, ${randomUUID()}, ${depotId})
+  `
+}
+
+/** Depo A → Depo B taşıma isteği (T233). */
+function move(productId: string, qty: number, extra: Record<string, unknown> = {}) {
+  return assign(productId, qty, { fromDepotId: depotA, toDepotId: depotB, ...extra })
 }
 
 async function bucket(productId: string, depotId: string | null): Promise<number> {
@@ -193,10 +207,8 @@ describe('atama', () => {
     expect(await codeOf(transferStock(boss, assign(p.id, 0), opts))).toBe('INVALID_QUANTITY')
     expect(await codeOf(transferStock(boss, assign(p.id, -1), opts))).toBe('INVALID_QUANTITY')
     expect(await codeOf(transferStock(boss, assign(p.id, 2.5), opts))).toBe('INVALID_QUANTITY')
-    // Depodan depoya transfer bu sürümde yok (T233).
-    expect(await codeOf(transferStock(boss, assign(p.id, 1, { fromDepotId: depotB }), opts))).toBe(
-      'VALIDATION_FAILED',
-    )
+    // Hedef atanmamış stok olamaz: geri taşıma yok (PRD-17).
+    expect(await codeOf(transferStock(boss, assign(p.id, 1, { toDepotId: null }), opts))).toBe('VALIDATION_FAILED')
     // Kullanıcı notu tek başına 500'e sığsa da sabit açıklamayla birlikte sığmıyor.
     expect(await codeOf(transferStock(boss, assign(p.id, 1, { note: 'x'.repeat(480) }), opts))).toBe(
       'VALIDATION_FAILED',
@@ -366,5 +378,205 @@ describe('göstergeler', () => {
     })
     // Ayrıntı listesinde ise iki bacak da duruyor.
     expect(dailyAfter.rows.length).toBe(dailyBefore.rows.length + 2)
+  })
+})
+
+describe('depodan depoya (T233)', () => {
+  it('kısmi: A 10 → 6, B +4; tek transaction, tek transfer_id, fiyatsız; atanmamış ve fiyatlar değişmiyor', async () => {
+    const p = fresh()
+    await legacy(p.id, 3)
+    await inDepot(p.id, depotA, 10)
+    const [priceBefore] = await admin.client`SELECT purchase_price, sale_price FROM products WHERE id = ${p.id}`
+
+    const res = await transferStock(boss, move(p.id, 4, { note: 'raf değişimi' }), opts)
+
+    expect(res).toMatchObject({ qty: 4, newQty: 13, duplicate: false })
+    expect(await bucket(p.id, depotA)).toBe(6)
+    expect(await bucket(p.id, depotB)).toBe(4)
+    expect(await bucket(p.id, null)).toBe(3)
+    expect(await getStockQty(boss, p.id, opts)).toBe(13)
+
+    const rows = await transferRows(p.id)
+    expect(rows.map((r) => [r.reason, Number(r.delta), r.depot_id])).toEqual([
+      ['TRANSFER_OUT', -4, depotA],
+      ['TRANSFER_IN', 4, depotB],
+    ])
+    expect(new Set(rows.map((r) => r.transfer_id))).toEqual(new Set([res.transferId]))
+    expect(rows[0]!.xmin).toBe(rows[1]!.xmin)
+    expect(rows.every((r) => r.unit_price === null && r.list_price === null)).toBe(true)
+    expect(rows[0]!.note).toBe('Depo transferi: Depo A → Depo B: raf değişimi')
+    const [priceAfter] = await admin.client`SELECT purchase_price, sale_price FROM products WHERE id = ${p.id}`
+    expect(priceAfter).toEqual(priceBefore)
+    expect(await checkStockInvariant(t.tenantId, opts)).toEqual([])
+  })
+
+  it('tam taşıma: kaynak 0, hedef tamamı', async () => {
+    const p = fresh()
+    await inDepot(p.id, depotA, 10)
+    await transferStock(boss, move(p.id, 10), opts)
+    expect(await bucket(p.id, depotA)).toBe(0)
+    expect(await bucket(p.id, depotB)).toBe(10)
+  })
+
+  it('aynı kaynak ve hedef reddediliyor; hiçbir satır yok', async () => {
+    const p = fresh()
+    await inDepot(p.id, depotA, 10)
+    expect(await codeOf(transferStock(boss, move(p.id, 1, { toDepotId: depotA }), opts))).toBe('VALIDATION_FAILED')
+    expect(await transferRows(p.id)).toEqual([])
+  })
+
+  it('toplam ve atanmamış yetse de kaynak depo yetersizse INSUFFICIENT_STOCK; eksi kaynak da', async () => {
+    const p = fresh()
+    await legacy(p.id, 5)
+    await inDepot(p.id, depotA, 2)
+    await inDepot(p.id, depotB, 10)
+
+    const err = await transferStock(boss, move(p.id, 3), opts).catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(AppError)
+    expect((err as AppError).code).toBe('INSUFFICIENT_STOCK')
+    expect((err as AppError).details).toMatchObject({ source: 'DEPOT', depotId: depotA, available: 2, requested: 3 })
+
+    const n = fresh()
+    await inDepot(n.id, depotB, 10)
+    await inDepot(n.id, depotA, -2, 'SALE')
+    expect(await codeOf(transferStock(boss, move(n.id, 1), opts))).toBe('INSUFFICIENT_STOCK')
+
+    expect(await transferRows(p.id)).toEqual([])
+    expect(await transferRows(n.id)).toEqual([])
+    expect(await bucket(p.id, depotA)).toBe(2)
+  })
+
+  it('çalışan, başka kiracının kaynak/hedef deposu ve ürünü reddediliyor', async () => {
+    const p = fresh()
+    await inDepot(p.id, depotA, 5)
+
+    expect(await codeOf(transferStock(staff, move(p.id, 1), opts))).toBe('FORBIDDEN')
+    expect(await codeOf(transferStock(boss, move(p.id, 1, { fromDepotId: otherDepot }), opts))).toBe('NOT_FOUND')
+    expect(await codeOf(transferStock(boss, move(p.id, 1, { toDepotId: otherDepot }), opts))).toBe('NOT_FOUND')
+    expect(await codeOf(transferStock(boss, move(other.products['TR-01']!.id, 1), opts))).toBe('NOT_FOUND')
+
+    expect(await transferRows(p.id)).toEqual([])
+    expect(await bucket(p.id, depotA)).toBe(5)
+  })
+
+  it('sıralı çift gönderim: ikinci çift yok, aynı sonuç', async () => {
+    const p = fresh()
+    await inDepot(p.id, depotA, 10)
+    const body = move(p.id, 3)
+
+    const first = await transferStock(boss, body, opts)
+    const again = await transferStock(boss, body, opts)
+
+    expect(again).toMatchObject({ transferId: first.transferId, qty: 3, duplicate: true })
+    expect(await transferRows(p.id)).toHaveLength(2)
+    expect(await bucket(p.id, depotA)).toBe(7)
+  })
+
+  it('aynı anahtarla eşzamanlı çift gönderim: tek çift; iki istek aynı transferi dönüyor', async () => {
+    const p = fresh()
+    await inDepot(p.id, depotA, 10)
+    const body = move(p.id, 10)
+
+    let pending: Promise<PromiseSettledResult<Awaited<ReturnType<typeof transferStock>>>[]> | undefined
+    await admin.client.begin(async (sql) => {
+      await sql`SELECT qty FROM current_stock WHERE tenant_id = ${t.tenantId} AND product_id = ${p.id} FOR UPDATE`
+      pending = Promise.allSettled([transferStock(boss, body, opts), transferStock(boss, body, opts)])
+      await waitForBlocked(2)
+    })
+    const results = await pending!
+
+    expect(results.map((r) => r.status)).toEqual(['fulfilled', 'fulfilled'])
+    const values = results.map((r) => (r as PromiseFulfilledResult<Awaited<ReturnType<typeof transferStock>>>).value)
+    expect(values.map((v) => v.duplicate).sort()).toEqual([false, true])
+    expect(await transferRows(p.id)).toHaveLength(2)
+    expect(await bucket(p.id, depotA)).toBe(0)
+    expect(await bucket(p.id, depotB)).toBe(10)
+  })
+
+  it('aynı kaynaktan eşzamanlı iki transfer (7 + 7, kaynak 10): biri geçiyor, diğeri INSUFFICIENT_STOCK', async () => {
+    const p = fresh()
+    await inDepot(p.id, depotA, 10)
+
+    const codes = await Promise.all([
+      codeOf(transferStock(boss, move(p.id, 7), opts)),
+      codeOf(transferStock(boss, move(p.id, 7), opts)),
+    ])
+
+    expect(codes.sort()).toEqual(['INSUFFICIENT_STOCK', null].sort())
+    expect(await bucket(p.id, depotA)).toBe(3)
+    expect(await bucket(p.id, depotB)).toBe(7)
+    expect(await getStockQty(boss, p.id, opts)).toBe(10)
+  })
+
+  it('kilit tutulurken kaynak depodan çıkış COMMIT edilince transfer yetersiz kalıyor', async () => {
+    const p = fresh()
+    await inDepot(p.id, depotA, 10)
+    let pending: Promise<string | null> | undefined
+
+    await admin.client.begin(async (sql) => {
+      await sql`SELECT qty FROM current_stock WHERE tenant_id = ${t.tenantId} AND product_id = ${p.id} FOR UPDATE`
+      await sql`
+        INSERT INTO stock_movements (tenant_id, product_id, user_id, delta, reason, idempotency_key, depot_id)
+        VALUES (${t.tenantId}, ${p.id}, ${t.adminUserId}, -5, 'SALE', ${randomUUID()}, ${depotA})
+      `
+      pending = codeOf(transferStock(boss, move(p.id, 10), opts))
+      await waitForBlocked(1)
+    })
+
+    expect(await pending).toBe('INSUFFICIENT_STOCK')
+    expect(await bucket(p.id, depotA)).toBe(5)
+    expect(await transferRows(p.id)).toEqual([])
+  })
+
+  it('ikinci satır yazılamazsa birincisi de yok (atomiklik); defter = projeksiyon', async () => {
+    const p = fresh()
+    await inDepot(p.id, depotA, 10)
+    const body = move(p.id, 4)
+    await admin.client`
+      INSERT INTO stock_movements (tenant_id, product_id, user_id, delta, reason, idempotency_key)
+      VALUES (${t.tenantId}, ${fresh().id}, ${t.adminUserId}, 1, 'PURCHASE', ${`${body.idempotencyKey}:in`})
+    `
+
+    expect(await codeOf(transferStock(boss, body, opts))).toBe('SERVER_ERROR')
+    expect(await transferRows(p.id)).toEqual([])
+    expect(await bucket(p.id, depotA)).toBe(10)
+    expect(await bucket(p.id, depotB)).toBe(0)
+    expect(await checkStockInvariant(t.tenantId, opts)).toEqual([])
+  })
+
+  it('T223 ataması ve ardından depodan depoya taşıma aynı üründe birlikte çalışıyor', async () => {
+    const p = fresh()
+    await legacy(p.id, 10)
+    await transferStock(boss, assign(p.id, 10), opts)
+    await transferStock(boss, move(p.id, 4), opts)
+
+    expect(await bucket(p.id, null)).toBe(0)
+    expect(await bucket(p.id, depotA)).toBe(6)
+    expect(await bucket(p.id, depotB)).toBe(4)
+    expect((await transferRows(p.id)).map((r) => r.note)).toEqual(
+      expect.arrayContaining(['Depoya atama: Atanmamış stok → Depo A', 'Depo transferi: Depo A → Depo B']),
+    )
+  })
+
+  it('panel, grafik, stok değeri ve gün sonu sayıları transferle değişmiyor', async () => {
+    const p = fresh()
+    await inDepot(p.id, depotA, 10)
+    const [today] = await admin.client<{ day: string }[]>`SELECT current_date::text AS day`
+    const since = new Date(Date.now() - 24 * 3600 * 1000)
+    const panelBefore = await dashboardSummary(boss, since, opts)
+    const dailyBefore = await dailySummary(t.tenantId, today!.day, opts)
+
+    await transferStock(boss, move(p.id, 6), opts)
+
+    const panelAfter = await dashboardSummary(boss, since, opts)
+    const dailyAfter = await dailySummary(t.tenantId, today!.day, opts)
+    expect(panelAfter.today).toEqual(panelBefore.today)
+    expect(panelAfter.activity).toEqual(panelBefore.activity)
+    expect(panelAfter.stockValue).toBe(panelBefore.stockValue)
+    expect({ n: dailyAfter.movementCount, i: dailyAfter.inQty, o: dailyAfter.outQty }).toEqual({
+      n: dailyBefore.movementCount,
+      i: dailyBefore.inQty,
+      o: dailyBefore.outQty,
+    })
   })
 })

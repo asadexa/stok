@@ -452,15 +452,20 @@ işler ve güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
     gerekiyor (çıkış + giriş); aralarında toplam stok yanlış görünür ve iki satır birbirine bağlı
     değil. Sebep listesinde transfer yok (`packages/shared/src/reasons.ts`).
   - Kanıt: kod okuması 2026-10-31 (`movements.ts`, `reasons.ts`); kullanıcı testi bildirimi.
-  - Yapılacak (onaylanmadı): T223'ün onaylı deseni (tek transaction'da kaynaktan −q, hedefe +q;
-    elle seçilemeyen sebep çifti; toplam değişmez, INV-1). T223 ve T233 tek çekirdekle
-    tasarlanmalı: atama, atanmamıştan bir depoya transferdir. Belge/not alanı kullanıcı kararı.
+  - Kapsam (onaylı, 2026-11-05): T223'ün `transferStock` çekirdeği genişletildi (kaynak depo
+    kimliği; kaynak ≠ hedef; hedef her zaman gerçek depo; kaynak yeterliliği yalnız kaynak depoda,
+    kilit altında). Arayüz ürün sayfasında, yalnız yönetici; not isteğe bağlı, belge no yok (`PRD-22`).
   - Bağlı: T223, T232, `PRD-17`, `DAT-21`, `DAT-23`, INV-9 (yeni sebepler tek kaynaktan).
   - Doğrula: kaynak depo yetmezse red; toplam `current_stock` aynı, iki depo doğru; iki satır
     aynı transfer kimliğiyle bağlı; yarıda kalan transfer yok (`dogrula`).
-  - Durum (2026-11-05): ortak çekirdek T223'te geldi (`transferStock`, `TRANSFER_*`, `transfer_id`;
-    `DAT-27`). Kalan: `stockTransferSchema.fromDepotId`'yi depoya açmak, kaynak = hedef reddi,
-    kaynak depo yeterliliği ve transfer arayüzü.
+  - Durum (2026-11-05): geliştirme tamamlandı, `development`'a commit edildi; dağıtılmadı; yeni
+    migration yok. Kanıt: `transfers.test.ts` T233 bölümü 12 test (kısmi/tam, aynı kaynak-hedef
+    reddi, toplam yetse de kaynak depo yetersiz ve eksi kaynak, yetki ve kiracı, sıralı ve eşzamanlı
+    çift gönderim, aynı kaynaktan eşzamanlı iki transfer, kilit altında araya giren çıkış,
+    atomiklik ve defter = projeksiyon, T223 atamasıyla birlikte, göstergeler); `dogrula` 4
+    korumada kırmızı; e2e `t233-depo-transferi.spec.ts` (izole `stok_test_e2e_t233`, tüm paket 45/45).
+  - Kalan (açık tutma gerekçesi): manuel kabul testi; kullanıcı kararıyla ertelendi, T223'le
+    birlikte yapılacak.
   - Kaynak: Faz 0 durum analizi ve kullanıcı testi, 2026-10-31.
 - [ ] **T239 (P3)** - core - **Eksi atanmamış stok depoya atanamıyor ve düzeltilemiyor**
   - Neden: eski, eksiye izin verilmiş bir çıkış (`allowNegative`) depolu işletmede atanmamış kovayı

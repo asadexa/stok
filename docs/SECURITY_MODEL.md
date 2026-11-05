@@ -391,6 +391,12 @@ güncellenir. Yeni tehdit yeni ID alır; ID yeniden kullanılmaz.
     hareket yazılmıyor.
   - Depo adı anahtarı kırpılmış, iç boşlukları teklenmiş `tr_norm` (üretilmiş sütun, kiracı içinde
     tekil); ad 1–100 karakter, kontrol karakteri yok (CHECK).
+  - Depo transferi (atama T223, depodan depoya T233; `DAT-27`): yalnız `transferStock`, `count:approve`
+    istiyor (çalışan FORBIDDEN). Kaynak ve hedef depo kimlikleri kapıda kiracı içinde aranıyor,
+    yoksa NOT_FOUND. `TRANSFER_*` normal hareket şemasından seçilemiyor; "transfer sebebi ⇔
+    `transfer_id` dolu" DB CHECK'i tek bacaklı transferi veritabanında reddediyor. Test:
+    `transfers.test.ts`; `dogrula` (2026-11-05): kaynak depo kiracı araması kaldırılınca başka
+    kiracının deposu NOT_FOUND yerine INSUFFICIENT_STOCK aldı (kırmızı).
 - **Katman:** `packages/core/src/movements.ts`; `packages/shared/src/schemas.ts`, `roles.ts`;
   `packages/db/migrations/0014_depots.sql`.
 - **Test:** `depots.test.ts` (başka kiracının depo, ürün ve aktarım kimliği; çalışan reddi; normal

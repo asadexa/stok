@@ -267,23 +267,48 @@ export const inventoryAdjustmentSchema = z.object({
 export type InventoryAdjustmentInput = z.infer<typeof inventoryAdjustmentSchema>
 
 /**
- * Depo transferi (T223). Bu sürümde kaynak YALNIZ depoya atanmamış stok
- * (`fromDepotId: null`): eski stoğu bir depoya atamak. Depodan depoya
- * transfer T233'te şemayı genişletir; çekirdek aynı kalır.
+ * Depo transferi. Kaynak `null` ise depoya atanmamış eski stoğu bir depoya
+ * atamak (T223), bir depo kimliği ise depodan depoya taşımak (T233). Hedef
+ * her zaman gerçek bir depo: atanmamış stoğa geri taşıma yok (PRD-17, eski
+ * stok tahmin edilmez; geri taşınabilseydi depo bilgisi bilerek silinirdi).
+ * Kaynak ile hedefin aynı olması burada reddediliyor; kabul edilseydi toplamı
+ * değiştirmeyen ama defteri anlamsız bir çiftle dolduran bir yol açık kalırdı.
  */
-export const stockTransferSchema = z.object({
-  idempotencyKey: z.string().uuid(),
-  productId: z.string().uuid(),
-  fromDepotId: z.null(),
-  toDepotId: z.string().uuid(),
-  qty: z
-    .number({ invalid_type_error: 'Miktar sayı olmalı' })
-    .positive('Miktar sıfırdan büyük olmalı')
-    .max(1_000_000, 'Miktar en fazla 1.000.000 olabilir')
-    .refine(hasValidPrecision, { message: `En fazla ${MAX_DECIMALS} ondalık basamak` }),
-  note: z.string().trim().max(500).optional(),
-  clientCreatedAt: z.string().datetime({ offset: true }),
-})
+export const stockTransferSchema = z
+  .object({
+    idempotencyKey: z.string().uuid(),
+    productId: z.string().uuid(),
+    fromDepotId: z.string().uuid().nullable(),
+    toDepotId: z.string().uuid(),
+    qty: z
+      .number({ invalid_type_error: 'Miktar sayı olmalı' })
+      .positive('Miktar sıfırdan büyük olmalı')
+      .max(1_000_000, 'Miktar en fazla 1.000.000 olabilir')
+      .refine(hasValidPrecision, { message: `En fazla ${MAX_DECIMALS} ondalık basamak` }),
+    note: z.string().trim().max(500).optional(),
+    clientCreatedAt: z.string().datetime({ offset: true }),
+  })
+  .refine((t) => t.fromDepotId !== t.toDepotId, {
+    path: ['toDepotId'],
+    message: 'Kaynak ve hedef depo farklı olmalı',
+  })
+
+/**
+ * Transfer hareketlerinin sabit açıklaması + isteğe bağlı kullanıcı notu
+ * toplam bu sınıra sığmalı (hareket notu sınırı). Önek ve kalan not payı
+ * sunucu (red) ve form (`maxLength`) tarafından aynı yerden hesaplanıyor;
+ * iki yerde ayrı yazılsaydı form sunucunun reddedeceği bir notu kabul ederdi.
+ */
+export const TRANSFER_NOTE_LIMIT = 500
+export function transferNotePrefix(fromDepotName: string | null, toDepotName: string): string {
+  return fromDepotName === null
+    ? `Depoya atama: Atanmamış stok → ${toDepotName}`
+    : `Depo transferi: ${fromDepotName} → ${toDepotName}`
+}
+/** Kullanıcı notuna kalan pay; `: ` ayırıcısı da sayılıyor. */
+export function transferNoteRoom(fromDepotName: string | null, toDepotName: string): number {
+  return TRANSFER_NOTE_LIMIT - transferNotePrefix(fromDepotName, toDepotName).length - 2
+}
 
 export type StockTransferInput = z.infer<typeof stockTransferSchema>
 

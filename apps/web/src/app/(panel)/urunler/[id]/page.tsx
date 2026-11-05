@@ -7,6 +7,7 @@ import {
   UNIT_VALUES,
   type Unit,
   formatQty,
+  transferNoteRoom,
 } from '@stok/shared'
 import {
   actorCan,
@@ -20,8 +21,6 @@ import {
   listLocations,
   listProductOffers,
   restoreProduct,
-  TRANSFER_NOTE_LIMIT,
-  transferNotePrefix,
   transferStock,
   updateProduct,
 } from '@stok/core'
@@ -45,6 +44,7 @@ import { currentActor } from '@/server/session'
 import { type AssignDepot, AssignForm } from './assign-form'
 import { type AdjustOption, StockAdjustForm } from './stock-adjust'
 import { SupplierOffers } from './supplier-offers'
+import { TransferForm } from './transfer-form'
 
 /**
  * Sayım düzeltmesinin defterdeki sabit açıklaması (T232, K5). Kullanıcı notu
@@ -94,6 +94,7 @@ interface UrunParams extends FormParams {
   arsiv?: string
   sayim?: string
   atama?: string
+  transfer?: string
 }
 
 export default async function ProductPage({
@@ -144,9 +145,14 @@ export default async function ProductPage({
         id: d.id,
         name: d.name,
         qty: depotQty(d.id),
-        noteMax: TRANSFER_NOTE_LIMIT - transferNotePrefix(d.name).length - 2,
+        noteMax: transferNoteRoom(null, d.name),
       }))
     : []
+  // DEPOLAR ARASI TRANSFER (T233): yalnız yönetici, en az iki depolu
+  // işletmede ve ürünün artı stoğu olan bir depo varken. Eksi ya da sıfır
+  // depo kaynak olarak listelenmiyor; kapı aynı kuralı kilit altında zorluyor.
+  const transferDepots = canAdjust && depotStock ? tenantDepots.map((d) => ({ id: d.id, name: d.name, qty: depotQty(d.id) })) : []
+  const canTransfer = transferDepots.length >= 2 && transferDepots.some((d) => d.qty > 0)
   let adjustOptions: AdjustOption[] = []
   if (canAdjust && !adjustBlocked) {
     adjustOptions = depotStock
@@ -295,6 +301,36 @@ export default async function ProductPage({
     redirect(`/urunler/${id}?atama=kaydedildi`)
   }
 
+  async function moveStock(form: FormData) {
+    'use server'
+    const owner = await currentActor()
+    if (!owner) redirect('/giris')
+
+    try {
+      // Yetki, kiracı, kaynak ≠ hedef, birim, not sınırı ve kilit altındaki
+      // kaynak depo kontrolü `transferStock`'ta (T233); burada yalnız form çevrimi.
+      await transferStock(
+        owner,
+        {
+          idempotencyKey: text(form, 'anahtar'),
+          productId: id,
+          fromDepotId: text(form, 'kaynak'),
+          toDepotId: text(form, 'hedef'),
+          qty: optionalNumber(form, 'miktar'),
+          note: optionalText(form, 'not'),
+          clientCreatedAt: new Date().toISOString(),
+        },
+        { db: appDb() },
+      )
+    } catch (err) {
+      if (err instanceof AppError && err.code === 'INSUFFICIENT_STOCK') {
+        redirect(`/urunler/${id}?transfer=yetersiz`)
+      }
+      redirect(`/urunler/${id}?${errorQuery(err)}`)
+    }
+    redirect(`/urunler/${id}?transfer=kaydedildi`)
+  }
+
   async function toggleArchive(form: FormData) {
     'use server'
     const owner = await currentActor()
@@ -342,6 +378,10 @@ export default async function ProductPage({
         {query.atama === 'kaydedildi' ? <Notice>Stok depoya atandı.</Notice> : null}
         {query.atama === 'yetersiz' ? (
           <Alert>Atanmamış stok bu arada azaldı; atama yazılmadı. Güncel miktara bakıp yeniden deneyin.</Alert>
+        ) : null}
+        {query.transfer === 'kaydedildi' ? <Notice>Stok depolar arasında taşındı.</Notice> : null}
+        {query.transfer === 'yetersiz' ? (
+          <Alert>Kaynak depodaki stok bu arada azaldı; transfer yazılmadı. Güncel miktara bakıp yeniden deneyin.</Alert>
         ) : null}
         {query.sayim === 'degisti' ? (
           <Alert>Stok, sayfa açıldıktan sonra değişti; düzeltme yazılmadı. Güncel miktara bakıp yeniden girin.</Alert>
@@ -438,6 +478,25 @@ export default async function ProductPage({
             action={assignStock}
             depots={assignDepots}
             unassigned={depotStock.unassigned}
+            total={depotStock.total}
+            unit={product.unit as Unit}
+            idempotencyKey={randomUUID()}
+          />
+        </section>
+      ) : null}
+
+      {canTransfer && depotStock ? (
+        <section
+          aria-label="Depolar arası transfer"
+          className="mb-6 max-w-2xl rounded-card border border-line bg-surface shadow-card"
+        >
+          <h2 className="border-b border-line px-4 py-3 font-semibold">Depolar arası transfer</h2>
+          <p className="px-4 pt-3 text-sm text-ink-2">
+            Malı bir depodan ötekine taşıyın. Toplam stok ve fiyatlar değişmez.
+          </p>
+          <TransferForm
+            action={moveStock}
+            depots={transferDepots}
             total={depotStock.total}
             unit={product.unit as Unit}
             idempotencyKey={randomUUID()}
