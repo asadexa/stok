@@ -4,23 +4,33 @@ Yalnız BUGÜNÜN gerçeği. Her merge'te ya da durum değiştiğinde güncellen
 satırlar silinir (tarihçe git'te). Ayrıntı yazılmaz: işler → `TODOS.md`,
 kararlar → `DECISIONS.md`, model → `PROJECT_BRAIN.md`.
 
-**Tarih:** 2026-11-03 · **Depo:** `KeremGerede/stok` (eski adres `asadexa/stok` GitHub'da
+**Tarih:** 2026-11-05 · **Depo:** `KeremGerede/stok` (eski adres `asadexa/stok` GitHub'da
 yönlendiriliyor) · **Çalışma branch'i:** `development` · **Kararlı dal:** `main` (varsayılan dal).
-`main` = `6ac17a7` (PR #16, squash); `development` bu commit'i merge ile içeriyor, uygulama kodu
-iki dalda aynı. Dal modeli `OPS-13`: `master` fast-forward ile ilerletilip `main` olarak yeniden
+`main` = `development` = `7f04c2d` (PR #19, merge commit; CI #116 ve #117 yeşil, üç iş). Dal modeli `OPS-13`: `master` fast-forward ile ilerletilip `main` olarak yeniden
 adlandırıldı; `development` → `main` PR'ları merge commit ile birleşir. Ruleset'ler: `main` PR, üç zorunlu CI işi, silme ve force-push yasağı; `development`
 silme ve force-push yasağı; `backup/*` silme ve force-push yasağı. Yedek dallar
 `backup/master-pre-migration` (`dac05ff`) ve `backup/development-pre-migration` (`5199069`).
 
 ## Deploy
 
-**AWS Lightsail staging/demo (kullanıcı bildirimi, 2026-11-03; `OPS-14`):** uygulama Lightsail'de
-çalışıyor; müşteri üretim ortamı değil. Sunucuda Git HEAD `f64e716`, yerel `development` dalında,
-`origin/development`'ı izliyor; detached değil (kullanıcının sunucu terminalinden doğrulaması).
-Çalışan Docker imajının kaynak commit'i **kanıtlanmadı** (imajda commit etiketi yok); sunucuda
-otomatik çekme ya da dağıtım olmadığı **kanıtlanmadı**. Kalan sunucu doğrulamaları GitHub
-geçişinden sonra. Bu repoda dağıtım kaydı, sürüm etiketi ya da deploy iş akışı yok. Otomatik şifreli S3 yedeği üzerinde çalışma sürüyor, tamamlanmadı. Üretim (gerçek
-müşteri verisi) yok; önkoşullar TODOS T42. Vercel/Supabase hesabı yok.
+**AWS Lightsail staging/demo (`OPS-14`):** müşteri üretim ortamı değil. Stok ve Dosya Sistemi
+aynı sunucuda.
+
+Dağıtım 2026-11-05 (kullanıcı bildirimi; sunucu bu repodan doğrulanamıyor):
+- Dağıtılan commit `7f04c2d`. Sunucunun Git HEAD'i bu commit'e detached olarak sabitlendi
+  (SSH üzerinden doğrulandı); runbook L.3'teki `git checkout <commit>` yoluyla aynı.
+- Çalışan imaj `stok-web:7f04c2d` (ID `8c8e6285cf2b`). Geri dönüş imajı
+  `stok-web:rollback-20261105` (ID `32114e6af428`).
+- Sunucudaki altı Docker konteyneri healthy.
+- Dağıtım öncesi şifreli S3 yedeği alındı. `f64e716..7f04c2d` arasında migration yok.
+- Canlı UAT: barkodlu ve barkodsuz iki ürün aktarıldı; açılış stoğu 2 adet. Aynı CSV ikinci kez
+  aktarıldı: yeni ürün ve mükerrer devir oluşmadı, stok 2 adette kaldı (T228).
+- **Canlı test ürünleri temizlenmedi** (T238).
+
+Açık kalanlar: ayrı S3 okuma hesabıyla kurtarma kontrolü ve ilk zamanlanmış günlük yedeğin
+(5 Kasım 04.30 TSİ) doğrulanması (T129); derlemenin Google Fonts bağımlılığı (T230). Sunucuda
+otomatik çekme ya da dağıtım olmadığı bu repoda kayıtlı değil. Repoda sürüm etiketi ya da deploy
+iş akışı yok. Üretim (gerçek müşteri verisi) yok; önkoşullar TODOS T42. Vercel/Supabase hesabı yok.
 
 **Docker staging hazırlığı (S1, 2026-10-28):** AWS Lightsail staging
 (T144) için `Dockerfile`, `compose.production.yml` ve `.env.production.example` hazır.

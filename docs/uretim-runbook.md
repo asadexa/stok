@@ -126,6 +126,13 @@ gunzip -c stok-<etiket>.tar.gz | docker load    # .env.production'da STOK_IMAGE_
 
 ### L.3 Sürüm güncellemesi
 
+- **Kaynak:** yalnız `main`'deki, üç CI işi yeşil bir commit (`OPS-13`): `development` → PR →
+  `main` → CI → Lightsail. `<yeni-commit>` bu commit'tir.
+- **Geri dönüş imajı:** yeni derleme mevcut etiketi ezecekse (ör. `local`) önce mevcut imajı
+  ayrı etiketle: `docker tag stok-web:<mevcut> stok-web:rollback-<tarih>`.
+- **Migration:** `git diff <eski>..<yeni> -- packages/db/migrations` boşsa migrate adımı ve
+  `tools` derlemesi atlanabilir.
+
 ```bash
 cd /opt/citech/stok
 git fetch && git checkout <yeni-commit>

@@ -189,8 +189,8 @@ işler ve güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
   - İlerleme (2026-10-28): S4.0 (log döndürme) ve S4.1 (`citech-infra` Caddy yapılandırması,
     yerelde doğrulandı) tamam; sunucuya kurulmadı. Kalan: genel DNS delegasyonunun düzelmesi,
     sunucuda Caddy kurulumu ve XFF'in sunucuda yeniden doğrulanması (runbook L.4).
-  - Durum (2026-11-02, kullanıcı bildirimi): uygulama AWS Lightsail'de çalışıyor; sunucuda çalışan
-    commit doğrulanmadı. Otomatik şifreli S3 yedeği üzerinde çalışma sürüyor; tamamlanmadı.
+  - Durum (2026-11-05, kullanıcı bildirimi): Lightsail'de `7f04c2d` (`stok-web:7f04c2d`) çalışıyor;
+    dağıtım ve canlı UAT `CURRENT_STATE` "Deploy"da. Yedek ve kurtarma kalanı T129'da.
   - Kanıt (ölçüm, ortak Stok + Dosya Sistemi benchmarkı 2026-10-27; Linux container, ortak 2 vCPU,
     `3db7d81`): Stok boşta app ~100–150 MB, PG ~50–130 MB; 3 kullanıcılı normal kullanımda app
     ≤ 370 MB; 3 eşzamanlı Excel'de app kernel bellek tepesi 864 MB; aktarımda PG ≤ 407 MB. İki ürünün
@@ -326,6 +326,9 @@ işler ve güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
     platform loglarında; hata takibi (Sentry vb.) yok. HEALTH_ALARM SMTP'ye bağlı:
     SMTP bozuksa onu haber verecek alarm da gidemiyor. Geri yükleme tatbikatı hiç
     yapılmadı (runbook §7).
+  - Durum (2026-11-05, kullanıcı bildirimi): Lightsail'de şifreli S3 yedeği alınıyor; izole
+    ortamda geri yükleme testleri geçti. Kalan: ayrı S3 okuma hesabıyla kurtarma kontrolü; ilk
+    zamanlanmış günlük yedeğin (5 Kasım 04.30 TSİ) doğrulanması; uptime izleme ve hata takibi.
   - Bağlı: T42.
 
 - [ ] **T167 (P1)** - güvenlik - **Telefon tarama pilotunun tüneli bütün uygulamayı internete açıyor**
@@ -404,6 +407,16 @@ işler ve güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
   - Bağlı: T219, T220, T234.
   - Doğrula: tarama listesi; düzeltilen ekranlar tarayıcıda (`demo-testi`).
   - Kaynak: Faz 0.3.6, UAT bulgusu, 2026-11-03.
+- [ ] **T238 (P3)** - operasyon - **Lightsail'deki canlı UAT test ürünleri temizlenmedi**
+  - Neden: 2026-11-05 canlı UAT'ında barkodlu ve barkodsuz iki test ürünü ve açılış devirleri
+    (2 adet) yazıldı. Ortam staging/demo (`OPS-14`), ama sentetik veri birikirse gerçek veriyle
+    karışabilir.
+  - Sınır: defter append-only (INV-1); hareket silinmez. Temizlik yöntemi (ürünü pasifleştirme,
+    düzeltme hareketi ya da ortamı sıfırlama) kullanıcı kararıdır. Sıfırlama veri siler: onaysız
+    yapılmaz.
+  - Bağlı: T228, T144.
+  - Doğrula: seçilen yöntemden sonra test ürünleri listede yok ya da pasif; defter = projeksiyon.
+  - Kaynak: canlı UAT, 2026-11-05.
 - [ ] **T230 (P2)** - altyapı - **`next build` derleme anında Google Fonts'a bağımlı; ağ aksarsa derleme düşüyor**
   - Neden: `apps/web/src/app/layout.tsx` yazı tiplerini `next/font/google` ile alıyor; Next
     derlemede dosyaları fonts.gstatic.com'dan indiriyor. İndirme aksayınca Turbopack yanıltıcı
@@ -1097,6 +1110,9 @@ _(Bu dosyada açılıp kapanan görevler buraya iner. T1–T119'un kapanış kay
     up`, Windows Docker Desktop'ta da). Bilerek değişmeyenler (kullanıcı kararı): `backup.test.ts`'teki
     `waitForQuery` korunuyor; geliştirme `docker-compose.yml` sağlık kontrolü hâlâ soketten soruyor
     (hiçbir betik o durumu beklemiyor, bugün etkisiz; hizalanması ayrı iş).
+  - Canlı (2026-11-05, kullanıcı bildirimi): düzeltme `7f04c2d` ile Lightsail'de; konteynerler
+    healthy. Değişen betik yalnız geliştirme ve CI yolunda koşuyor; üretim compose kendi sağlık
+    kontrolünü kullanıyor. Bu yüzden canlıda ayrıca doğrulanacak davranış yok.
   - Kaynak: WS-1.3a CI #72 analizi, 2026-10-16; CI #113, 2026-11-04.
 
 - [x] **T228 (P2)** - import - **Ürün aktarımında barkodu isteğe bağlı yapmak: barkodsuz yeni satırın Açılış Stoğu sessizce düşüyor**
@@ -1115,6 +1131,9 @@ _(Bu dosyada açılıp kapanan görevler buraya iner. T1–T119'un kapanış kay
     ve XLSX dahil); `dogrula` üç korumayı kaldırınca 8, 8 ve 2 test kırmızı. Manuel kabul testi
     (kullanıcı, yerel demo, 2026-11-04): barkodsuz ürün oluştu, devir 7 adet yazıldı, aynı dosyanın
     tekrarı ikinci devir yazmadı, stok koduyla 2 adet çıkış 7 → 5.
+  - Canlı UAT (kullanıcı, Lightsail, `7f04c2d`, 2026-11-05): barkodlu ve barkodsuz iki ürün
+    aktarıldı, açılış stoğu 2 adet. Aynı CSV'nin tekrarı yeni ürün ve mükerrer devir üretmedi; stok
+    2 adette kaldı. Test ürünleri temizlenmedi (T238).
   - Kaynak: CEO Review bulgu 4 ve CEO-4, 2026-10-27; 30 Ekim 2026 ERP testi (3.541 barkodsuz satır).
 
 - [x] **T218 (P1)** - core - **Çok depo Dilim 2: envanter dosyası aktarımı ve ilk kurulum (arayüz yok)**
