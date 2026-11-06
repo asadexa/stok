@@ -455,9 +455,8 @@ export default async function MovementEntryPage({
                     {unassignedQty > 0 ? (
                       <UnassignedOption
                         outReasons={selectableReasons('OUT')}
-                        initialOut={selectableReasons('OUT').includes(
-                          (params.sebep || selectableReasons('IN')[0]) as MovementReason,
-                        )}
+                        // Sebep seçili değilse çıkış da değil: seçenek gizli (T243).
+                        initialOut={selectableReasons('OUT').includes(params.sebep as MovementReason)}
                         defaultChecked={selectedDepot === 'atanmamis'}
                       >
                         <span>
@@ -645,7 +644,7 @@ function ReasonGroup({
   title: string
   tone: 'giris' | 'cikis'
   reasons: MovementReason[]
-  /** Hatadan sonra geri gelen seçim; yoksa ilk giriş sebebi. */
+  /** Hatadan sonra geri gelen seçim; yoksa hiçbir sebep seçili değil (T243). */
   selected?: string
 }) {
   const color = tone === 'giris' ? 'text-giris' : 'text-cikis'
@@ -656,21 +655,21 @@ function ReasonGroup({
         {title}
       </p>
       <div className="mt-2 space-y-1">
-        {reasons.map((reason, index) => (
+        {reasons.map((reason) => (
           <label key={reason} className="flex min-h-[2.75rem] items-center gap-2">
             <input
               type="radio"
               name="sebep"
               value={reason}
-              // İlk giriş sebebi varsayılan: mal kabulü en sık yapılan iş.
-              // Hata dönüşünde kullanıcının seçtiği sebep korunuyor —
-              // yoksa "sapma sebebi seçin" uyarısından sonra işlem
-              // sessizce "Satın alma"ya döner ve satış kaydı kaybolurdu.
-              defaultChecked={
-                selected === undefined || selected === ''
-                  ? tone === 'giris' && index === 0
-                  : selected === reason
-              }
+              // VARSAYILAN SEBEP YOK (T243, PRD-24). "Satın alma" hazır
+              // seçiliyken odak miktardaydı: miktar yazıp Enter'a basan
+              // kullanıcı çıkışı giriş olarak kaydedebiliyordu (satışta 5
+              // adet stoğu 5 artırır, fark 10) ve defterde düzeltme yok
+              // (T127). `required` grup, sebep seçilmeden göndermeyi
+              // tarayıcıda durduruyor; sunucu da sebepsiz isteği reddediyor.
+              // Hata dönüşünde kullanıcının seçtiği sebep korunuyor;
+              // başarılı kayıttan sonra hatırlanmıyor (K1).
+              defaultChecked={selected === reason}
               required
               className="size-5"
             />

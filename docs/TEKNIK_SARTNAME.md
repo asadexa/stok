@@ -154,9 +154,12 @@ Katman kuralları `PROJECT_BRAIN` §5, ilkeler §12. Kayıtlarda yalnız özelli
 - **Depo arayüzü (Dilim 4, `1b759a6`, T220; manuel kabul 2026-11-03):** hareket formu depo soruyor
   (depo yoksa eskisi gibi, tek depo önceden seçili, birden çok depoda zorunlu; seçenekte o depodaki
   miktar). Çıkışta Atanmamış Stok kaynağı (`fromUnassigned`; yalnız çıkış, yalnız mevcut atanmamış
-  miktardan, `allowNegative` aşamaz). Giriş sebebi seçiliyken seçenek gizli ve `disabled`, çıkıştan
-  girişe geçince seçim temizlenir (`unassigned-option.tsx`; sunucu reddi `UNASSIGNED_OUT_ONLY`
-  yerinde; T236, manuel kabul bekliyor). Barkodsuz ürün stok koduyla ya da ürün sayfasından
+  miktardan, `allowNegative` aşamaz). Çıkış sebebi seçilene kadar seçenek gizli ve `disabled`,
+  çıkıştan girişe geçince seçim temizlenir (`unassigned-option.tsx`; sunucu reddi
+  `UNASSIGNED_OUT_ONLY` yerinde; T236, manuel kabul bekliyor). Formda varsayılan sebep yok:
+  her okutmada hiçbir sebep seçili gelmez, sebep seçilmeden Enter ya da Kaydet hareket yazmaz;
+  hata dönüşünde seçim korunur, başarılı kayıttan sonra hatırlanmaz (`PRD-24`; T243, manuel kabul
+  bekliyor). Barkodsuz ürün stok koduyla ya da ürün sayfasından
   `?urunId=` ile harekete geçer. Eski stoğun depoya atanması (T223) ve depolar arası transfer
   (T233) ürün sayfasında, ikinci yazma kapısı `transferStock` ile (`DAT-26`, `DAT-27`, F-15); tek
   ürün sayım düzeltmesi de ürün sayfasında (T232, `PRD-20`).

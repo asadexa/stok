@@ -145,7 +145,7 @@ test('deposu bilinmeyen eski stoktan açık seçimle çıkış; girişte Atanmam
   const secenek = form.getByRole('radio', { name: atanmamis })
   const ham = form.locator('input[name="depo"][value="atanmamis"]')
 
-  // Varsayılan sebep giriş (Satın alma): seçenek yok ve gönderilemez.
+  // Açılışta sebep seçili değil (T243), yani çıkış da değil: seçenek yok ve gönderilemez.
   await expect(secenek).toHaveCount(0)
   await expect(ham).toBeDisabled()
 

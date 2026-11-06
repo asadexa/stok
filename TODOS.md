@@ -7,7 +7,7 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
 **Kurallar**
 
 - ID `T<n>`. Arşivdeki görevler numaralarını korur. Yeni görev en büyük
-  numaradan devam eder — **sıradaki boş numara: T243**. Numara yeniden
+  numaradan devam eder — **sıradaki boş numara: T244**. Numara yeniden
   kullanılmaz.
 - Biçim: `- [ ] **T<n> (P0–P3)** - <alan> - **Başlık**`. Altında kısa
   **Neden / Kanıt / Bağlı / Doğrula / Kaynak** satırları.
@@ -36,6 +36,26 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
   - Bağlı: T140. Kaynak: devralma denetimi 2026-10-08.
 
 ## P1
+
+- [ ] **T243 (P1)** - web - **Giriş / Çıkış formunda "Satın alma" varsayılan seçili; çıkış yanlışlıkla giriş yazılabiliyordu**
+  - Neden: `ReasonGroup` ilk giriş sebebini seçili getiriyordu, odak miktardaydı ve "Satın alma"
+    fiyatsız da kaydediliyor (`resolvePrice` yalnız devirde fiyat ister). Miktar + Enter, satışı
+    giriş olarak yazabiliyordu: 5 adet satış stoğu 5 artırır, fark 10. Başarılı kayıttan sonra form
+    her okutmada yine "Satın alma" ile açılıyordu. Defterde düzeltme akışı yok (T127).
+  - Kanıt: kullanıcı geri bildirimi; kod okuması (`hareket/page.tsx` `ReasonGroup`, `save`
+    yönlendirmesi yalnız `urun/onceki/yeni` taşıyor; `movements.ts` `resolvePrice`).
+  - Durum (2026-11-06): geliştirildi, `development`'a commit edildi; dağıtılmadı; `PRD-24`. Varsayılan
+    seçim kaldırıldı; `required` radyo grubu sebepsiz gönderimi tarayıcıda durduruyor; hata
+    dönüşünde seçim korunuyor; başarılı kayıttan sonra hatırlanmıyor (K1); Atanmamış Stok seçeneği
+    çıkış seçilene kadar gizli. Kanıt: e2e `t243-sebep-secimi.spec.ts` (boş açılış, Enter ve Kaydet
+    stok değiştirmiyor, hata dönüşü SALE ve 999'u koruyor, satış 10 → 7, yeni okutma boş);
+    `movements.test.ts` sebepsiz istek (boş ve hiç olmayan) reddi, stok aynı; `dogrula`: varsayılan
+    geri konunca e2e kırmızı. `t220-depo-hareket.spec.ts` Atanmamış Stok davranışı yeşil.
+  - Kalan (açık tutma gerekçesi): toplu manuel kabul testi.
+  - Kapsam dışı: T127 (ters hareket), T137 (güvenlik başlıkları), adres çubuğundan hata metni
+    üretilmesi bulgusu (kayıtlı değil; ayrı ele alınacak).
+  - Bağlı: `PRD-24`, T236, T220, `PRC-05`.
+  - Kaynak: kullanıcı geri bildirimi ve T243 PLAN/BUILD onayı, 2026-11-06.
 
 Yol haritasının üstü (kullanıcı kararı 2026-10-27, A2 ve CEO-8; 2026-10-22 sırasının üstüne):
 (1) **çok depolu stok ve Envanteri Güncelle** (`PRD-17`, `PRD-18`; F-15): Dilim 1–4 bitti
