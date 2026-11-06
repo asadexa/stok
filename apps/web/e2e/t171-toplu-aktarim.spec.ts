@@ -111,7 +111,7 @@ test('boş fiyat hücresi fiyatı korur; fiyat ürün formundan temizlenir (PRC-
 
   // Fiyat sütunu var, hücreler boş: önizleme kuralı söylüyor, fiyatlar kalıyor.
   const onizleme = await onizle(page, [baslik, `${kod};Fiyat Ürünü ${n};Adet;;;`])
-  await expect(onizleme).toContainText('Boş fiyat hücreleri mevcut fiyatları değiştirmez.')
+  await expect(onizleme).toContainText('Boş hücreler mevcut değerleri değiştirmez (Alış Fiyatı, Satış Fiyatı).')
   await uygula()
 
   await page.goto(`/stok?ara=${encodeURIComponent(kod)}`)

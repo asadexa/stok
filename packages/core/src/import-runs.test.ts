@@ -75,6 +75,9 @@ async function upload(lines: string[], { chunk = 1_000, actor = boss } = {}) {
       totalRows: file.rows.length,
       columns: file.columns,
       ignoredQtyColumns: file.ignoredQtyColumns ?? [],
+      // Ekranın gönderdiği gibi (wizard `startMeta`, T247).
+      unreadColumns: file.unreadColumns ?? [],
+      duplicateColumns: file.duplicateColumns ?? [],
     },
     opts,
   )
@@ -175,15 +178,29 @@ describe('yükleme ve önizleme', () => {
     expect(await counts(tenant.tenantId)).toEqual(before)
   })
 
-  it('boş fiyat hücresi notu kayıt yolunda dönüyor: kayda yazılıp önizlemede veriliyor (PRC-14)', async () => {
+  it('boş hücre notu kayıt yolunda dönüyor: kayda yazılıp önizlemede veriliyor (PRC-14, DAT-28)', async () => {
     // Ekranın kullandığı yol bu: not `startImportRun`'da saklanıyor,
     // `finalizeImportPreview` saklananı döndürüyor (yeniden hesaplamıyor).
-    const note = 'Boş fiyat hücreleri mevcut fiyatları değiştirmez. Bir ürünün fiyatını silmek için ürün sayfasını kullanın.'
+    const note = 'Boş hücreler mevcut değerleri değiştirmez'
     const withPrice = await upload([HEADER, newRow()])
     const withoutPrice = await upload(['Stok Kodu;Ürün Adı', `${uniq('NP-')};Fiyatsız`])
 
-    expect(withPrice.preview.notices).toContain(note)
-    expect(withoutPrice.preview.notices).not.toContain(note)
+    expect(withPrice.preview.notices.some((n) => n.startsWith(note))).toBe(true)
+    expect(withoutPrice.preview.notices.some((n) => n.startsWith(note))).toBe(false)
+  })
+
+  it('okunmayan ve tekrar eden başlıklar kayıt yolunda önizleme notu oluyor (T247)', async () => {
+    const { preview } = await upload([
+      'Malzeme Kodu;Malzeme Açıklaması;Birim;Barkod;Ortalama Değer;Barkod;Envanter Tutarı',
+      `${uniq('OK-')};Okunmayan Sütunlu;AD;${uniq('bc')};9,5;${uniq('bc')};95`,
+    ])
+    expect(preview.notices).toContain('Okunan sütunlar: Stok Kodu, Ürün Adı, Birim, Barkod.')
+    expect(preview.notices).toContain(
+      'Okunmayan sütunlar: Ortalama Değer, Envanter Tutarı. Bu sütunlardaki veriler aktarılmaz; tanınan sütun adları şablonda.',
+    )
+    expect(preview.notices).toContain(
+      '"Barkod" sütunu okunmadı: aynı bilgi dosyada daha önceki bir sütunda var, yalnız ilki okunur.',
+    )
   })
 
   it('parçalara bölünmüş dosyada da mükerrer stok kodu yakalanıyor (önizleme bütün dosyada)', async () => {
@@ -360,6 +377,51 @@ describe('çakışma (K3)', () => {
       SELECT name FROM products WHERE tenant_id = ${tenant.tenantId} AND sku = ${sku}
     `
     expect(product!.name).toBe('Önce Gelen')
+  })
+
+  it('boş Kategori ve Marka hücresi kayıtlı aktarımda da mevcut değeri koruyor (DAT-28)', async () => {
+    const sku = uniq('KB-')
+    const head = 'Stok Kodu;Ürün Adı;Kategori;Marka'
+    await runToEnd((await upload([head, `${sku};Ürün;Kırtasiye;Marka A`])).runId)
+    await runToEnd((await upload([head, `${sku};Ürün Yeni;;`])).runId)
+    const [product] = await admin.client<{ name: string; category: string | null; brand: string | null }[]>`
+      SELECT name, category, brand FROM products WHERE tenant_id = ${tenant.tenantId} AND sku = ${sku}
+    `
+    expect(product).toEqual({ name: 'Ürün Yeni', category: 'Kırtasiye', brand: 'Marka A' })
+  })
+
+  it('başka ürüne ait barkod kayıtlı aktarımın önizlemesinde Hatalı; ürün açılmıyor (T247)', async () => {
+    const taken = uniq('bc')
+    await runToEnd((await upload([HEADER, `${uniq('SH-')};Sahibi;Adet;3;${taken};`])).runId)
+    const sku = uniq('BK-')
+    const { runId, preview } = await upload([HEADER, `${sku};Barkodu Alınmış;Adet;3;${taken};`])
+    expect(preview.counts).toMatchObject({ create: 0, error: 1 })
+    expect(preview.errors[0]!.issues[0]!.message).toContain('başka bir üründe kayıtlı')
+    await runToEnd(runId)
+    expect(await rowStatuses(runId)).toEqual(['INVALID'])
+  })
+
+  it('güncellemede barkod önizlemeden sonra başkasına geçtiyse satır Çakışma, ürün güncellendiği söyleniyor, devir yok (T247)', async () => {
+    const sku = uniq('KC-')
+    await runToEnd((await upload([HEADER, `${sku};Eski Ad;Adet;3;;`])).runId)
+    const taken = uniq('bc')
+    const { runId, preview } = await upload([HEADER, `${sku};Yeni Ad;Adet;3;${taken};10`])
+    expect(preview.counts).toMatchObject({ update: 1, error: 0 })
+
+    await runToEnd((await upload([HEADER, `${uniq('KC-')};Araya Giren;Adet;3;${taken};`])).runId)
+    const done = await runToEnd(runId)
+
+    expect(done.rows).toMatchObject({ conflict: 1, updated: 0 })
+    const [line] = await importRunReport(boss, runId, opts)
+    expect(line).toMatchObject({
+      status: 'Çakışma',
+      message: expect.stringMatching(/^Ürün bilgisi güncellendi; barkod eklenemedi: .*Devir yazılmadı\.$/),
+    })
+    const [product] = await admin.client<{ name: string }[]>`
+      SELECT name FROM products WHERE tenant_id = ${tenant.tenantId} AND sku = ${sku}
+    `
+    expect(product!.name).toBe('Yeni Ad')
+    expect(await openingCount(sku)).toBe(0)
   })
 })
 

@@ -54,6 +54,8 @@ import {
   COLUMN_LABELS,
   IMPORT_FIELDS,
   IMPORT_FILE_BYTES_LIMIT,
+  IMPORT_HEADER_LIST_LIMIT,
+  IMPORT_HEADER_TEXT_LIMIT,
   IMPORT_ROW_LIMIT,
   type ImportField,
   type ParsedRow,
@@ -235,6 +237,10 @@ const startSchema = z
     totalRows: z.number().int().min(1).max(IMPORT_ROW_LIMIT),
     columns: z.array(z.enum(IMPORT_FIELDS as [ImportField, ...ImportField[]])).max(IMPORT_FIELDS.length),
     ignoredQtyColumns: z.array(z.string().max(200)).max(50).default([]),
+    // T247: okunmayan ve tekrar eden başlıklar; yalnız BAŞLIK, hücre değeri değil.
+    // Eski istemci göndermiyor: varsayılan boş, not çıkmıyor.
+    unreadColumns: z.array(z.string().max(IMPORT_HEADER_TEXT_LIMIT)).max(IMPORT_HEADER_LIST_LIMIT).default([]),
+    duplicateColumns: z.array(z.string().max(IMPORT_HEADER_TEXT_LIMIT)).max(IMPORT_HEADER_LIST_LIMIT).default([]),
   })
   .refine((v) => v.columns.includes('sku') && v.columns.includes('name'), {
     message: 'Stok Kodu ve Ürün Adı sütunları gerekli',
@@ -266,7 +272,7 @@ export async function startImportRun(
           fileBytes: input.fileBytes,
           totalRows: input.totalRows,
           columns: input.columns,
-          notices: importNotices(input.ignoredQtyColumns, input.columns),
+          notices: importNotices(input.ignoredQtyColumns, input.columns, input.unreadColumns, input.duplicateColumns),
         })
         .returning({ id: importRuns.id })
       return row!.id

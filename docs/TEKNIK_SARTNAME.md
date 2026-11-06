@@ -82,8 +82,17 @@ Katman kuralları `PROJECT_BRAIN` §5, ilkeler §12. Kayıtlarda yalnız özelli
     `GET /api/rapor/aktarim?kayit=`): hatalı, yazılamayan, çakışan, belirsiz, işlenmeyen satırlar
     ve devir notları.
   - Satır bazlı hata; güncellemede dosyada olmayan sütuna dokunulmaz.
-  - Boş fiyat hücresi mevcut alış ve satış fiyatını değiştirmez; `0` fiyatı sıfıra günceller.
-    Fiyat sütunu varsa önizleme bunu söyler. Fiyatı silmek ürün formundandır (`PRC-14`).
+  - Boş hücre mevcut değeri değiştirmez: alış ve satış fiyatı (`PRC-14`), kritik seviye, kategori,
+    marka ve görsel (`DAT-28`, T247). `0` fiyatı sıfıra günceller. İlgili sütun varsa önizleme
+    hangi sütunlarda boş hücrenin korunduğunu söyler. Silmek ürün formundandır.
+  - Okunmayan sütunlar (eş ad listesinde olmayan başlıklar, ör. "Ortalama Değer") ve aynı alana
+    eşlenen ikinci başlık önizlemede adıyla söylenir; o zaman okunan sütunlar da listelenir.
+    Sunucuya yalnız başlıklar gider (T247).
+  - Barkod çakışması önizlemede satır hatası: barkod başka bir ürünün aktif barkoduysa ya da
+    dosyada iki farklı stok koduna verilmişse. Ürünün kendi barkodu ve arşivli barkod çakışma
+    değil. Önizlemeden sonra başkası barkodu alırsa: yeni ürün satırı yazılamaz; güncellemede ürün
+    bilgisi yazılmış olur, rapor "Ürün bilgisi güncellendi; barkod eklenemedi" der (kayıtlı
+    aktarımda `Çakışma`) ve devir denenmez (T247).
   - İkiden fazla ondalıklı alış ve satış fiyatı kuruşa yarım yukarı yuvarlanır (`PRC-15`; metin ve
     tamsayıyla, `roundTurkishPriceToCents`): önizleme değişecek fiyat hücresi sayısını, satırda
     dosyadaki ve kaydedilecek değeri ve ERP toplamıyla fark olabileceğini söyler. Pozitif olup
@@ -117,7 +126,7 @@ Katman kuralları `PROJECT_BRAIN` §5, ilkeler §12. Kayıtlarda yalnız özelli
   (`<x:workbook>`, .NET Open XML SDK ve ChatGPT çıktısı) okuyamıyor; bu parçaların öneki ExcelJS'ten
   önce JSZip ile atılıyor.
 - **Kararlar:** `ARC-15` (ADR-007), `DAT-18` (açılış stoğu), `DAT-20` (belirsiz sayı), `PRC-05`
-  (devirde fiyat zorunlu).
+  (devirde fiyat zorunlu), `PRC-14` ve `DAT-28` (boş hücre).
 - **Dosyalar:** `packages/core/src/product-file.ts`, `sheet.ts` (tarayıcıda da çalışır),
   `import.ts` (önizleme, `applyRow`), `import-runs.ts`; `packages/shared/src/import-runs.ts`;
   `packages/db/migrations/0013_import_runs.sql`; `apps/web/src/app/(panel)/urunler/aktar/`

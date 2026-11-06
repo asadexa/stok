@@ -97,7 +97,7 @@ describe('önizleme', () => {
     expect(p.rows[0]!.opening).toBeUndefined()
     expect(p.notices).toEqual([
       '"Miktar" sütunu açılış stoğu olarak okunmadı. Açılış stoğu girmek için sütunun adı "Açılış Stoğu" olmalı.',
-      'Boş fiyat hücreleri mevcut fiyatları değiştirmez. Bir ürünün fiyatını silmek için ürün sayfasını kullanın.',
+      'Boş hücreler mevcut değerleri değiştirmez (Alış Fiyatı). Bir değeri silmek ya da değiştirmek için ürün sayfasını kullanın.',
     ])
   })
 

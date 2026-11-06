@@ -107,15 +107,16 @@ function parseInWorker(kind: ParseKind, file: File): Promise<ParseResult | null>
 
 /**
  * Aktarım kaydını açan özet: dosyanın kendisi değil, tarayıcının okuduğu
- * sütunlar. Envanterde okunmayan sütunların yalnız BAŞLIKLARI gidiyor.
+ * sütunlar. Okunmayan sütunların yalnız BAŞLIKLARI gidiyor (envanter; ürün
+ * aktarımında T247).
  */
 function startMeta(parsed: ParsedOk, fileName: string, fileBytes: number) {
   if (parsed.kind === 'INVENTORY') {
     const { rows, columns, unreadColumns } = parsed.file
     return { fileName, fileBytes, totalRows: rows.length, columns, unreadColumns }
   }
-  const { rows, columns, ignoredQtyColumns } = parsed.file
-  return { fileName, fileBytes, totalRows: rows.length, columns, ignoredQtyColumns }
+  const { rows, columns, ignoredQtyColumns, unreadColumns, duplicateColumns } = parsed.file
+  return { fileName, fileBytes, totalRows: rows.length, columns, ignoredQtyColumns, unreadColumns, duplicateColumns }
 }
 
 const NO_ROWS: Record<ParseKind, string> = {

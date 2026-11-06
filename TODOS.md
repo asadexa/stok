@@ -7,7 +7,7 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
 **Kurallar**
 
 - ID `T<n>`. Arşivdeki görevler numaralarını korur. Yeni görev en büyük
-  numaradan devam eder — **sıradaki boş numara: T247**. Numara yeniden
+  numaradan devam eder — **sıradaki boş numara: T248**. Numara yeniden
   kullanılmaz.
 - Biçim: `- [ ] **T<n> (P0–P3)** - <alan> - **Başlık**`. Altında kısa
   **Neden / Kanıt / Bağlı / Doğrula / Kaynak** satırları.
@@ -415,6 +415,41 @@ işler ve güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
     kırmızı; e2e `t221-atama-bekleyen.spec.ts`.
   - Kalan (açık tutma gerekçesi): toplu manuel kabul testi.
   - Kaynak: Faz 0.3.6, UAT bulgusu, 2026-11-03.
+- [ ] **T247 (P2)** - import - **Ürün aktarımı sessiz kayıplar: boş hücre değeri siliyor, okunmayan sütun ve barkod çakışması önizlemede görünmüyor**
+  - Neden: (1) güncellemede boş Kategori, Marka ve Görsel hücresi mevcut değeri siliyordu
+    (`raw.cells.category || null` → `updatePatch`); fiyat ve eşikte boş hücre "dokunma" idi.
+    (2) Eş ad listesinde olmayan sütunlar (ör. "Birim Fiyat", "Ortalama Değer") ve aynı alana
+    eşlenen ikinci başlık sessizce atlanıyordu; önizleme okunan ve okunmayan sütunları
+    göstermiyordu. (3) Başka ürüne ait aktif barkod ve dosyada iki stok koduna verilmiş aynı
+    barkod önizlemeden "eklenecek" diye geçiyor, kayıtta başarısız oluyordu. (4) Güncellemede
+    ürün yazılıp barkod eklenemeyince satır "yazılamadı" görünüyordu; ürün değişmiş oluyordu.
+  - Kanıt: kod okuması (`import.ts` `evaluateRow`, `updatePatch`, `applyRow`;
+    `product-file.ts` `mapColumns`); `import.test.ts` "kayıt sırasında çıkan çakışma" testi
+    önizlemeden önce var olan barkodu kayıtta yakalıyordu. Toplu ürün aktarımı PLAN'ı, 2026-11-06.
+  - Durum (2026-11-06): geliştirildi, commit edilmedi; şema değişikliği yok; K1 kararı: boş hücre
+    korunur (`DAT-28`). (1) Boş Kategori, Marka ve Görsel hücresi güncellemede dokunulmuyor.
+    (2) Okunmayan ve tekrar eden başlıklar önizleme notu; o zaman okunan sütunlar da yazılıyor;
+    yalnız başlıklar sunucuya gidiyor. (3) Başka ürüne ait aktif barkod ve dosyada iki stok koduna
+    verilmiş barkod önizlemede satır hatası (iki yol: tek istek ve kayıtlı aktarım). (4)
+    Güncellemede barkod önizlemeden sonra başkasına geçerse rapor "Ürün bilgisi güncellendi; barkod
+    eklenemedi …" (kayıtlı aktarımda `Çakışma`), devir denenmiyor. Kanıt: `import.test.ts` ve
+    `import-runs.test.ts` yeni testler (K1 iki yolda, sütun notları iki yolda, barkod sahibi,
+    dosya içi aynı barkod, arşivli barkod, kısmi yazım iki yolda); e2e
+    `t247-aktarim-sessiz-kayip.spec.ts` (izole, 3/3); `t171-toplu-aktarim.spec.ts` yeni not metni.
+    `dogrula`: barkod sahibi denetimi kaldırılınca 3, dosya içi barkod denetimi kaldırılınca 1,
+    boş kategori eski davranışa dönünce 2, okunmayan sütun listesi boşalınca 2, kısmi yazım
+    açıklaması kaldırılınca 2 test kırmızı; hepsi geri kondu (`cmp`).
+  - Kalan riskler (bilerek bırakıldı): (a) tek istekli yolda (`commitImport`) kısmi yazım satırı
+    "yazılamadı" sayılıyor, doğru bilgi yalnız mesajda; kayıtlı aktarım "Çakışma" diyor. Ayrı satır
+    durumu migration gerektirirdi. (b) Önizleme ile kayıt arasında başkası barkodu alabilir: önizleme
+    bunu göremez; satır kayıtta başarısız olur ve rapor dürüstçe söyler, ama önizleme sayıları o
+    satır için yanlış kalır.
+  - Kalan (açık tutma gerekçesi): toplu manuel kabul testi.
+  - Kapsam dışı: birim değişikliği (K2), ABD sayı biçimi, çok sayfalı dosya, güncelleme
+    ayrıntısı, performans (T235), ERP fiyatı ve mutabakat (K3, T242), T244–T246.
+  - Bağlı: `PRC-14`, `DAT-28`, F-02, T242, T213.
+  - Kaynak: kullanıcı kararı K1 ve BUILD onayı, 2026-11-06.
+
 - [ ] **T241 (P2)** - import - **ERP ürün dosyasında ikiden fazla ondalıklı fiyat satırı reddediyordu**
   - Neden: `9,5049` gibi fiyatlar `moneySchema`'nın 2 ondalık kuralına takılıp bütün satırı hata
     yapıyordu; ürün ne açılıyor ne güncelleniyordu.
