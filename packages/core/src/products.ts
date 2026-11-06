@@ -6,6 +6,7 @@ import {
   type Unit,
   addBarcodeSchema,
   createProductSchema,
+  productThresholdSchema,
   unitDecimals,
   updateProductSchema,
 } from '@stok/shared'
@@ -346,6 +347,44 @@ export async function patchProduct(
             })
           }
         }
+        throw new AppError('NOT_FOUND', `product ${productId} not found`, { productId })
+      }
+    },
+    options.db,
+  )
+}
+
+/**
+ * Yalnız kritik eşiği yazar (T244, PRD-25). Çalışanın `product:setThreshold`
+ * iznine karşılık gelen TEK yol.
+ *
+ * `patchProduct`'a "girdi yalnız minStock ise dar izin yeter" koşulu
+ * eklenmedi: yetki o zaman girdinin içeriğine bağlanırdı ve `patchProduct`'a
+ * eklenecek her yeni alan bu kontrolü yeniden düşünmeyi gerektirirdi; biri
+ * unutulduğunda çalışan o alanı da yazardı. Burada yazılabilen alan yapısal
+ * olarak tek kolon; şema da fazla alanı reddediyor (`strict`).
+ *
+ * Arşivli ürünün eşiği de yazılabiliyor: arşivli ürün uyarı üretmiyor, ekran
+ * formu orada göstermiyor; sunucuda ayrıca yasaklamak bir koruma eklemezdi.
+ */
+export async function setProductThreshold(
+  actor: Actor,
+  productId: string,
+  raw: unknown,
+  options: ProductOptions = {},
+): Promise<void> {
+  requirePermission(actor, 'product:setThreshold')
+  const input = parseOrThrow(productThresholdSchema, raw)
+
+  await withTenant(
+    actor.tenantId,
+    async (tx) => {
+      const updated = await tx
+        .update(products)
+        .set({ minStock: qty(input.minStock) })
+        .where(and(eq(products.tenantId, actor.tenantId), eq(products.id, productId)))
+        .returning({ id: products.id })
+      if (updated.length === 0) {
         throw new AppError('NOT_FOUND', `product ${productId} not found`, { productId })
       }
     },

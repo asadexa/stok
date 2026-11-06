@@ -7,6 +7,7 @@ import {
   UNIT_VALUES,
   type Unit,
   formatQty,
+  isOutOfStock,
   transferNoteRoom,
 } from '@stok/shared'
 import {
@@ -21,12 +22,14 @@ import {
   listLocations,
   listProductOffers,
   restoreProduct,
+  setProductThreshold,
   transferStock,
   updateProduct,
 } from '@stok/core'
 import { appDb } from '@stok/db'
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
+import { MIN_STOCK_HINT } from '@/components/badge'
 import { Alert, Notice, SelectField, SubmitButton, TextField } from '@/components/field'
 import { formatDate, formatMoney } from '@/lib/format'
 import {
@@ -95,6 +98,7 @@ interface UrunParams extends FormParams {
   sayim?: string
   atama?: string
   transfer?: string
+  esik?: string
 }
 
 export default async function ProductPage({
@@ -116,6 +120,11 @@ export default async function ProductPage({
   if (!product) notFound()
 
   const canEdit = actor.role === 'ADMIN'
+  // Çalışanın dar eşik formu (T244, PRD-25). Yönetici eşiği tam ürün
+  // formundan yazıyor; ikinci bir form ona aynı alanı iki kez gösterirdi.
+  // Arşivli ürün uyarı üretmediği için form orada yok.
+  const canSetThreshold =
+    !canEdit && actorCan(actor, 'product:setThreshold') && !product.archivedAt
   const locations = canEdit ? await listLocations(actor, { db }) : []
   // Depo kullanmayan işletmede `null`: bölüm hiç basılmıyor (T219).
   const depotStock = await getProductDepotStock(actor, product.productId, { db })
@@ -331,6 +340,21 @@ export default async function ProductPage({
     redirect(`/urunler/${id}?transfer=kaydedildi`)
   }
 
+  async function saveThreshold(form: FormData) {
+    'use server'
+    const owner = await currentActor()
+    if (!owner) redirect('/giris')
+
+    try {
+      // Yalnız eşik gidiyor; servis başka alanı reddediyor (`strict`).
+      // Boş alan 0 = "takip yok", yöneticinin ürün formuyla aynı.
+      await setProductThreshold(owner, id, { minStock: numberOr(form, 'minStok', 0) }, { db: appDb() })
+    } catch (err) {
+      redirect(`/urunler/${id}?${errorQuery(err)}`)
+    }
+    redirect(`/urunler/${id}?esik=kaydedildi`)
+  }
+
   async function toggleArchive(form: FormData) {
     'use server'
     const owner = await currentActor()
@@ -380,6 +404,7 @@ export default async function ProductPage({
           <Alert>Atanmamış stok bu arada azaldı; atama yazılmadı. Güncel miktara bakıp yeniden deneyin.</Alert>
         ) : null}
         {query.transfer === 'kaydedildi' ? <Notice>Stok depolar arasında taşındı.</Notice> : null}
+        {query.esik === 'kaydedildi' ? <Notice>Kritik eşik kaydedildi.</Notice> : null}
         {query.transfer === 'yetersiz' ? (
           <Alert>Kaynak depodaki stok bu arada azaldı; transfer yazılmadı. Güncel miktara bakıp yeniden deneyin.</Alert>
         ) : null}
@@ -409,8 +434,10 @@ export default async function ProductPage({
         <Stat
           label="Eldeki stok"
           value={formatQty(product.qty, product.unit as Unit)}
-          tone={product.critical ? 'kritik' : 'normal'}
-          suffix={product.critical ? '⚠ kritik' : undefined}
+          tone={product.critical || isOutOfStock(product.qty) ? 'kritik' : 'normal'}
+          suffix={
+            isOutOfStock(product.qty) ? '⚠ stok yok' : product.critical ? '⚠ kritik' : undefined
+          }
         />
         <Stat label="Kritik eşik" value={formatQty(product.minStock, product.unit as Unit)} />
         <Stat
@@ -418,6 +445,24 @@ export default async function ProductPage({
           value={product.lastMovementAt ? formatDate(product.lastMovementAt) : 'Hiç'}
         />
       </section>
+
+      {canSetThreshold ? (
+        <form
+          action={saveThreshold}
+          aria-label="Kritik eşik"
+          className="mb-6 max-w-2xl space-y-4 rounded-card border border-line bg-surface shadow-card p-5"
+        >
+          <h2 className="font-semibold">Kritik eşik</h2>
+          <TextField
+            name="minStok"
+            label="Kritik eşik"
+            type="number"
+            defaultValue={String(product.minStock)}
+            hint={MIN_STOCK_HINT}
+          />
+          <SubmitButton>Eşiği kaydet</SubmitButton>
+        </form>
+      ) : null}
 
       {/* DEPO DAĞILIMI (T219, PRD-17) — salt okunur. Depoya atanmamış eski
           stok ayrı satırda: gizlenseydi depoların toplamı ürünün toplamını
@@ -573,6 +618,7 @@ export default async function ProductPage({
               label="Kritik eşik"
               type="number"
               defaultValue={String(product.minStock)}
+              hint={MIN_STOCK_HINT}
             />
             <SelectField
               name="konum"

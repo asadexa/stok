@@ -28,6 +28,8 @@
  * ============================================================================
  */
 
+import { isCriticalStock, isOutOfStock } from '@stok/shared'
+
 export type BadgeTone = 'ok' | 'warn' | 'crit' | 'neutral'
 
 const TONE: Record<BadgeTone, string> = {
@@ -104,14 +106,23 @@ export function Badge({
  * detayı). Üçüne ayrı yazılsaydı biri `<=` diğeri `<` kullanır ve tam
  * eşikteki ürün bir ekranda kritik, diğerinde normal görünürdü.
  *
- * `<=` kullanılıyor: eşik "en az bu kadar olmalı" demek, yani eşiğe eşit
- * olan ürün zaten sınırda ve uyarılmalı. `listStock` da aynı karşılaştırmayı
- * yapıyor (stock.ts: `COALESCE(qty,0) <= min_stock`).
+ * Kural `@stok/shared` `isOutOfStock` / `isCriticalStock`'tan (T244); sunucu
+ * aynı kuralın SQL yarısını kullanıyor (`stock-rules.ts`). Eşiğe eşit ürün
+ * kritik: eşik "en az bu kadar olmalı" demek. Stoğu biten ürün kritik değil,
+ * "Stok yok".
  */
+/**
+ * Kritik eşik alanının açıklaması (T244). Yeni ürün formu, yöneticinin ürün
+ * formu ve çalışanın eşik formu AYNI metni gösteriyor; kural değişirse tek
+ * yerden değişsin.
+ */
+export const MIN_STOCK_HINT =
+  'Stok bu sayıya ya da altına inince ürün kritik sayılır; 0 yazarsanız takip edilmez. Stoğu biten ürün “Stok yok” bölümünde görünür.'
+
 export function stockStatus(qty: number, minStock: number, archived = false) {
   if (archived) return { tone: 'neutral' as BadgeTone, label: 'Arşiv' }
-  if (qty <= 0) return { tone: 'crit' as BadgeTone, label: 'Stok yok' }
-  if (qty <= minStock) return { tone: 'crit' as BadgeTone, label: 'Kritik' }
+  if (isOutOfStock(qty)) return { tone: 'crit' as BadgeTone, label: 'Stok yok' }
+  if (isCriticalStock(qty, minStock)) return { tone: 'crit' as BadgeTone, label: 'Kritik' }
   // Eşiğin %50 üstüne kadar "düşük": eşiğe değmeden önce sipariş vermek
   // için zaman tanıyor. Eşiğe değdiği anda uyarmak, malı ancak biterken
   // haber vermek demek.

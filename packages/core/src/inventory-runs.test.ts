@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import { depots, withTenant } from '@stok/db'
 import { type TestTenant, seedOpeningStock, seedTestTenant, testAdminDb, testAppDb } from '@stok/db/testing'
-import { AppError, errorText } from '@stok/shared'
+import { AppError, DEFAULT_MIN_STOCK, errorText } from '@stok/shared'
+import { sql } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { Actor } from './authz'
 import {
@@ -243,6 +244,12 @@ describe('ilk kurulum: tek dosyadan ürün, depo ve stok', () => {
     expect(await total(tenant, 'ILK-A')).toBe(12)
     expect(await qtyIn(tenant, 'ILK-B', 'Merkez Depo')).toBe(2.5)
     expect(await qtyIn(tenant, 'ILK-D', 'Merkez Depo')).toBe(3)
+    // Dosyayla açılan ürün yeni ürün varsayılan eşiğini alıyor (T244, PRD-25).
+    const [{ min } = { min: '' }] = await admin.db.execute<{ min: string }>(sql`
+      SELECT min_stock::text AS min FROM products
+       WHERE tenant_id = ${tenant.tenantId} AND sku = 'ILK-A'
+    `)
+    expect(Number(min)).toBe(DEFAULT_MIN_STOCK)
     expect(await total(tenant, 'ILK-C')).toBe(0)
 
     const products = await admin.client<{ sku: string; unit: string; purchase: string | null; sale: string | null }[]>`

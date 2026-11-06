@@ -25,6 +25,12 @@ describe('çalışanın yapamadıkları (tehdit S6, S7)', () => {
     expect(can('STAFF', 'barcode:create')).toBe(false)
   })
 
+  it('kritik eşiği dar izinle değiştirebilir, genel ürün güncellemesi kapalı kalır (T244, PRD-25)', () => {
+    expect(can('STAFF', 'product:setThreshold')).toBe(true)
+    expect(can('ADMIN', 'product:setThreshold')).toBe(true)
+    expect(can('STAFF', 'product:update')).toBe(false)
+  })
+
   it('alış fiyatı ve maliyet göremez', () => {
     expect(can('STAFF', 'price:read')).toBe(false)
   })

@@ -7,7 +7,7 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
 **Kurallar**
 
 - ID `T<n>`. Arşivdeki görevler numaralarını korur. Yeni görev en büyük
-  numaradan devam eder — **sıradaki boş numara: T244**. Numara yeniden
+  numaradan devam eder — **sıradaki boş numara: T247**. Numara yeniden
   kullanılmaz.
 - Biçim: `- [ ] **T<n> (P0–P3)** - <alan> - **Başlık**`. Altında kısa
   **Neden / Kanıt / Bağlı / Doğrula / Kaynak** satırları.
@@ -36,6 +36,31 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
   - Bağlı: T140. Kaynak: devralma denetimi 2026-10-08.
 
 ## P1
+
+- [ ] **T244 (P1)** - core - **Stoğu 0 olan ürün kritik sayılıyordu; "Stok yok" ayrı değildi, çalışan eşiği değiştiremiyordu**
+  - Neden: kritik kuralı `COALESCE(qty, 0) <= min_stock` dokuz yerde ayrı yazılıydı. Eşiği 0
+    olan ve stoğu biten her ürün kritik sayılıyordu; zil, panel ve kritik stok e-postası tükenmiş
+    ürünlerle doluyordu. Yeni ürünün varsayılan eşiği 0'dı. Eşiği yalnız yönetici
+    (`product:update`) değiştirebiliyordu.
+  - Kanıt: kullanıcı geri bildirimi; kod okuması (`stock.ts`, `exports.ts`, `cron.ts`,
+    `badge.tsx`, `roles.ts`).
+  - Durum (2026-11-06): geliştirildi, commit edilmedi; `PRD-25`; şema değişikliği yok. Kural tek
+    kaynakta (`stock-levels.ts`, `stock-rules.ts`): stok ≤ 0 "Stok yok", 0 < stok ≤ eşik "Kritik".
+    Panelde "Stok yok" kartı, stok listesinde "Sadece stok yok" süzgeci (Excel aynı koşul). Yeni
+    ürün eşiği 3 (form, API, ürün dosyası, envanter dosyası). Çalışan ürün sayfasındaki dar formla
+    eşiği değiştirir (`product:setThreshold`, `setProductThreshold`). Kanıt: `stock-levels.test.ts`
+    (örnek tablosu; liste, satır bayrağı, zil, panel, kategori, Excel, gün sonu raporu ve e-posta
+    aynı küme; stok yok kümesi; sıralama; varsayılan; çalışan izni, fazla alan, kiracı);
+    `import.test.ts` ve `inventory-runs.test.ts` varsayılan eşik; `role-matrix.test.ts` satır 13;
+    e2e `t244-kritik-stok.spec.ts` (izole, 3/3) ve tam izole e2e 51/51. `dogrula`: "stok > 0"
+    kaldırılınca 6 test, zil eski kurala dönünce 2, varsayılan 0'a dönünce 4, STAFF izni kapanınca
+    7, `.strict()` kaldırılınca 1, STAFF `product:update` açılınca 2 test kırmızı; hepsi geri kondu.
+  - Kalan (açık tutma gerekçesi): toplu manuel kabul testi.
+  - Kapsam dışı: mevcut ürünlere toplu eşik yazma, birime göre varsayılan, eşik değişiklik kaydı
+    (T245), T170.
+  - Bağlı: `PRD-25`, S6, F-07, T245.
+  - Kaynak: kullanıcı geri bildirimi ve T244 PLAN v3 onayı (K1: yalnız yeni ürünler; K2: dar
+    izin; K3: kayıt yok), 2026-11-06.
 
 - [ ] **T243 (P1)** - web - **Giriş / Çıkış formunda "Satın alma" varsayılan seçili; çıkış yanlışlıkla giriş yazılabiliyordu**
   - Neden: `ReasonGroup` ilk giriş sebebini seçili getiriyordu, odak miktardaydı ve "Satın alma"
@@ -847,6 +872,24 @@ işler ve güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
 
 ## P3
 
+- [ ] **T246 (P3)** - db - **Demo seed çıktısındaki "Kritik seviyedeki ürün" sayısı uygulamanın kuralından farklı**
+  - Neden: `packages/db/src/seed.ts:583` `cs.qty < p.min_stock` sayıyor; uygulama `PRD-25` ile
+    0 < stok ≤ eşik sayıyor (eşiğe eşit ürün kritik, stoğu biten değil). Yalnız kurulum konsol
+    çıktısı; ekran ve e-posta etkilenmiyor. `@stok/db` core'daki kuralı içe aktaramıyor (katman yönü).
+  - Kanıt: kod okuması, T244 BUILD sırasında (2026-11-06).
+  - Doğrula: seed çıktısındaki sayı, aynı veride paneldeki "Kritik seviyede" sayısına eşit olmalı.
+  - Kaynak: T244 BUILD, 2026-11-06.
+
+- [ ] **T245 (P3)** - core - **Ürün alanlarındaki değişikliklerin (kritik eşik dahil) kim/ne zaman kaydı yok**
+  - Neden: şemada ürün değişiklik geçmişi (audit) tablosu yok. T244 ile çalışan da kritik eşiği
+    değiştirebiliyor; eşiği kimin ne zaman değiştirdiği izlenemiyor. Yönetici düzenlemeleri de
+    bugün kaydedilmiyor. Eşik stok defterini değiştirmez, yalnız uyarıyı etkiler; bu yüzden P3.
+  - Kanıt: `packages/db/src/schema.ts` içinde audit tablosu yok; `patchProduct` ve
+    `setProductThreshold` yalnız `products` satırını güncelliyor.
+  - Bağlı: T244 (K3: kayıt tutulmasın kararı), `PRD-25`.
+  - Doğrula: değişiklik kaydı eklenirse çalışan eşik değişikliği kullanıcı ve zamanla görünmeli.
+  - Kaynak: T244 PLAN v3, K3 kararı, 2026-11-06.
+
 - [ ] **T240 (P3)** - ci - **`db-reset.test.ts` dry-run senaryoları yük altında bir kez kırmızı yandı; nedeni bilinmiyor**
   - Neden: yerel kapıda iki "dry-run reddeder ve kesinti yapmaz" senaryosu (large object; demo
     dışı kiracı) kırmızı yandı. Tekrarlanırsa ve nedeni test değil koruma ise, `db:reset`'in
@@ -1089,7 +1132,8 @@ değil. Kayıtlarda "Ürün kararı" onaylı kapsamdır; "Teknik not" henüz ona
   eşik `products.min_stock` (`packages/db/src/schema.ts:157-158`, ürün formunda "Kritik eşik"),
   kritik liste `/stok?kritik=1`, panel uyarısı ve "Kritik stok" listesi
   (`apps/web/src/app/(panel)/panel/page.tsx:65-80,286-297`), bildirim zili (`alert-bell.tsx`),
-  kritik stok e-postası (`packages/core/src/cron.ts:283`). Açık kalan: T170.
+  kritik stok e-postası (`packages/core/src/cron.ts:283`). Açık kalan: T170. Not (2026-11-06):
+  kritik kuralı T244 ile değişti; stoğu biten ürün "Stok yok" bölümünde, kritik sayılmıyor (`PRD-25`).
 - Değerlendirilecek: T178 (seri barkod okutma). Mevcut hâli yeterli, iş açılmadı: barkoddan
   hızlı ürün tanımlama.
 - Ertelendi: T179 (tükenme tahmini), T180 (geçmiş tarihli stok), T181 (web'de PIN geçişi), T156

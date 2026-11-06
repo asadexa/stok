@@ -1,6 +1,6 @@
 import { type Unit, formatQty, reasonLabel } from '@stok/shared'
 import type { MovementReason } from '@stok/shared'
-import { dashboardSummary, listMovements, listStock } from '@stok/core'
+import { type StockPage, dashboardSummary, listMovements, listStock } from '@stok/core'
 import { appDb } from '@stok/db'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
@@ -36,6 +36,69 @@ import { currentActor } from '@/server/session'
  * ============================================================================
  */
 
+/**
+ * Sağ raydaki ürün listesi kartı: "Kritik stok" ve "Stok yok" (T244). İkisi
+ * aynı biçimde; ayrı kopyalansaydı biri değişip diğeri eski kalırdı. Liste
+ * boşsa kart hiç çizilmiyor. Başlıktaki sayı ilk 5 satır değil, süzgecin
+ * toplamı (`/stok` bağlantısıyla aynı küme).
+ */
+function StockListCard({
+  label,
+  title,
+  href,
+  page,
+}: {
+  label: string
+  title: string
+  href: string
+  page: StockPage
+}) {
+  if (page.rows.length === 0) return null
+  return (
+    <section aria-label={label} className="rounded-card border border-line bg-surface shadow-card">
+      <div className="flex items-center border-b border-line px-4 py-3.5">
+        <h2 className="font-display text-base font-semibold">
+          {title} <span className="tabular text-ink-3">({numFmt.format(page.total)})</span>
+        </h2>
+        <Link href={href} className="ml-auto text-[13px] font-medium text-accent">
+          Tümü
+        </Link>
+      </div>
+      <ul>
+        {page.rows.map((row) => {
+          const status = stockStatus(Number(row.qty), Number(row.minStock))
+          return (
+            <li
+              key={row.productId}
+              className="flex items-center gap-3 border-t border-line px-4 py-3 first:border-t-0"
+            >
+              <ProductThumb name={row.name} imageUrl={row.imageUrl} />
+              <span className="min-w-0 flex-1">
+                <Link
+                  href={`/urunler/${row.productId}`}
+                  className="block truncate leading-tight font-medium underline-offset-2 hover:underline"
+                >
+                  {row.name}
+                </Link>
+                <span className="block font-mono text-[11.5px] leading-tight text-ink-3">
+                  {row.sku}
+                </span>
+              </span>
+              <span className="shrink-0 text-right">
+                <Badge tone={status.tone}>{status.label}</Badge>
+                <span className="tabular mt-1 block text-[12.5px] text-ink-3">
+                  {formatQty(row.qty, row.unit as Unit)} / en az{' '}
+                  {formatQty(row.minStock, row.unit as Unit)}
+                </span>
+              </span>
+            </li>
+          )
+        })}
+      </ul>
+    </section>
+  )
+}
+
 /** Kullanıcının gününün başlangıcı. "Bugün" sunucunun saat diliminde değil. */
 function startOfToday(): Date {
   const now = new Date()
@@ -50,10 +113,14 @@ export default async function DashboardPage() {
   if (!actor) redirect('/giris')
 
   const db = appDb()
-  const [summary, recent, critical] = await Promise.all([
+  const [summary, recent, critical, outOfStock] = await Promise.all([
     dashboardSummary(actor, startOfToday(), { db }),
     listMovements(actor, { limit: 8 }, { db }),
     listStock(actor, { onlyCritical: true, limit: 5 }, { db }),
+    // Stoğu biten ürünler kritik sayılmıyor (T244, PRD-25): ayrı kart, sayısı
+    // `listStock`'un toplamından. Zile ve uyarı şeridine EKLENMİYOR; eşiği 0
+    // olan tükenmiş ürünler eskiden zili ve kritik e-postasını dolduruyordu.
+    listStock(actor, { onlyOutOfStock: true, limit: 5 }, { db }),
   ])
 
   const isAdmin = actor.role === 'ADMIN'
@@ -134,7 +201,7 @@ export default async function DashboardPage() {
           value={numFmt.format(summary.criticalCount)}
           unit="ürün"
           tone="crit"
-          foot="Eşiğin altına düşenler"
+          foot="Eşiğe ya da altına inenler · stok yok hariç"
           href="/stok?kritik=1"
           icon={
             <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -292,50 +359,18 @@ export default async function DashboardPage() {
 
         {/* ── SAĞ RAY ───────────────────────────────────────────── */}
         <div className="flex min-w-0 flex-col gap-4">
-          {critical.rows.length > 0 ? (
-            <section
-              aria-label="Kritik ürünler"
-              className="rounded-card border border-line bg-surface shadow-card"
-            >
-              <div className="flex items-center border-b border-line px-4 py-3.5">
-                <h2 className="font-display text-base font-semibold">Kritik stok</h2>
-                <Link href="/stok?kritik=1" className="ml-auto text-[13px] font-medium text-accent">
-                  Tümü
-                </Link>
-              </div>
-              <ul>
-                {critical.rows.map((row) => {
-                  const status = stockStatus(Number(row.qty), Number(row.minStock))
-                  return (
-                    <li
-                      key={row.productId}
-                      className="flex items-center gap-3 border-t border-line px-4 py-3 first:border-t-0"
-                    >
-                      <ProductThumb name={row.name} imageUrl={row.imageUrl} />
-                      <span className="min-w-0 flex-1">
-                        <Link
-                          href={`/urunler/${row.productId}`}
-                          className="block truncate leading-tight font-medium underline-offset-2 hover:underline"
-                        >
-                          {row.name}
-                        </Link>
-                        <span className="block font-mono text-[11.5px] leading-tight text-ink-3">
-                          {row.sku}
-                        </span>
-                      </span>
-                      <span className="shrink-0 text-right">
-                        <Badge tone={status.tone}>{status.label}</Badge>
-                        <span className="tabular mt-1 block text-[12.5px] text-ink-3">
-                          {formatQty(row.qty, row.unit as Unit)} / en az{' '}
-                          {formatQty(row.minStock, row.unit as Unit)}
-                        </span>
-                      </span>
-                    </li>
-                  )
-                })}
-              </ul>
-            </section>
-          ) : null}
+          <StockListCard
+            label="Kritik ürünler"
+            title="Kritik stok"
+            href="/stok?kritik=1"
+            page={critical}
+          />
+          <StockListCard
+            label="Stoğu olmayan ürünler"
+            title="Stok yok"
+            href="/stok?stokyok=1"
+            page={outOfStock}
+          />
 
           {summary.categories.length > 0 ? (
             <section

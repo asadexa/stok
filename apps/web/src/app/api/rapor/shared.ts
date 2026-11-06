@@ -34,6 +34,7 @@ export function stockQuery(params: URLSearchParams): Record<string, unknown> {
     search: trimmed(params, 'ara'),
     category: trimmed(params, 'kategori'),
     onlyCritical: flag(params, 'kritik'),
+    onlyOutOfStock: flag(params, 'stokyok'),
     awaitingAssignment: flag(params, 'atama'),
     includeArchived: flag(params, 'arsiv'),
   }

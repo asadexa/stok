@@ -41,6 +41,7 @@ interface StokParams extends FormParams {
   ara?: string
   kategori?: string
   kritik?: string
+  stokyok?: string
   atama?: string
   arsiv?: string
   atla?: string
@@ -65,6 +66,7 @@ export default async function StockPage({
   const params = await searchParams
   const offset = toOffset(params.atla)
   const onlyCritical = params.kritik === '1'
+  const onlyOutOfStock = params.stokyok === '1'
   const awaitingAssignment = params.atama === '1'
   const includeArchived = params.arsiv === '1'
   const search = params.ara?.trim() || undefined
@@ -74,7 +76,16 @@ export default async function StockPage({
   const [page, categories] = await Promise.all([
     listStock(
       actor,
-      { search, category, onlyCritical, awaitingAssignment, includeArchived, limit: PAGE_SIZE, offset },
+      {
+        search,
+        category,
+        onlyCritical,
+        onlyOutOfStock,
+        awaitingAssignment,
+        includeArchived,
+        limit: PAGE_SIZE,
+        offset,
+      },
       { db },
     ),
     listCategories(actor, { db }),
@@ -89,6 +100,7 @@ export default async function StockPage({
     ara: search,
     kategori: category,
     kritik: onlyCritical ? '1' : undefined,
+    stokyok: onlyOutOfStock ? '1' : undefined,
     atama: awaitingAssignment ? '1' : undefined,
     arsiv: includeArchived ? '1' : undefined,
   }
@@ -102,6 +114,7 @@ export default async function StockPage({
     search,
     category,
     onlyCritical,
+    onlyOutOfStock,
     awaitingAssignment,
     includeArchived,
   }
@@ -231,6 +244,18 @@ export default async function StockPage({
             className="size-5"
           />
           Sadece kritik
+        </label>
+
+        {/* Stoğu biten ürün kritik sayılmıyor (T244); ayrı süzgeçle bulunuyor. */}
+        <label className="flex h-14 items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            name="stokyok"
+            value="1"
+            defaultChecked={onlyOutOfStock}
+            className="size-5"
+          />
+          Sadece stok yok
         </label>
 
         {/* Deposuz işletmede kutu yok: orada atanmamış stok normal stok (T221). */}

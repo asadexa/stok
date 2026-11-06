@@ -70,9 +70,14 @@ güncellenir. Yeni tehdit yeni ID alır; ID yeniden kullanılmaz.
 - **Koruma:** rol matrisi tek kaynak (`packages/shared/src/roles.ts`), her yazma
   yolunda sunucuda `requirePermission`; sayfalar da yetkisiz rolü yönlendirir;
   çalışanın `userId` filtresi yok sayılır; `allowNegative` yalnız yöneticide.
-  Yönetici kendini düşüremez, son aktif yönetici korunur.
+  Yönetici kendini düşüremez, son aktif yönetici korunur. Çalışanın tek ürün
+  yazma yetkisi kritik eşik (`product:setThreshold`, `PRD-25`): ayrı servis
+  (`setProductThreshold`) yalnız `min_stock` kolonunu yazar, şema fazla alanı
+  reddeder (`strict`); `product:update` çalışana kapalı. Eşik değişikliğinin
+  kaydı yok (T245).
 - **Katman:** `packages/core/src/authz.ts`, `users.ts`, `apps/web` sayfaları.
 - **Test:** `role-matrix.test.ts`, `route-authz.test.ts`, `users.test.ts`,
+  `stock-levels.test.ts` (eşik izni: genel güncelleme reddi, fazla alan, kiracı),
   `e2e/t38-kritik-akislar.spec.ts` (çalışan yönetim ekranlarına giremiyor).
 
 ### S7 — Alış fiyatının çalışana görünmesi

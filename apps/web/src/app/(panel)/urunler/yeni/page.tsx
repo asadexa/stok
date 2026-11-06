@@ -1,13 +1,13 @@
-import { UNITS, UNIT_VALUES } from '@stok/shared'
+import { DEFAULT_MIN_STOCK, UNITS, UNIT_VALUES } from '@stok/shared'
 import { actorCan, createProduct, listLocations } from '@stok/core'
 import { appDb } from '@stok/db'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
+import { MIN_STOCK_HINT } from '@/components/badge'
 import { Alert, SelectField, SubmitButton, TextField } from '@/components/field'
 import {
   errorQuery,
   messageFrom,
-  numberOr,
   optionalNumber,
   optionalText,
   text,
@@ -77,7 +77,9 @@ export default async function NewProductPage({
           imageUrl: optionalText(form, 'gorsel'),
           purchasePrice: optionalNumber(form, 'alis'),
           salePrice: optionalNumber(form, 'satis'),
-          minStock: numberOr(form, 'minStok', 0),
+          // Boş alan şemanın varsayılanına (DEFAULT_MIN_STOCK) düşüyor; 0
+          // yalnız açıkça yazılırsa "takip yok" (T244).
+          minStock: optionalNumber(form, 'minStok'),
           locationId: optionalText(form, 'konum'),
           // Barkod isteğe bağlı (PRD-19): boşsa ürün barkodsuz açılıyor;
           // sahte ya da iç barkod üretilmiyor. Hareket ürün kimliğiyle.
@@ -158,8 +160,8 @@ export default async function NewProductPage({
             name="minStok"
             label="Kritik eşik"
             type="number"
-            defaultValue="0"
-            hint="Bu sayının altına düşünce panelde uyarı çıkar."
+            defaultValue={String(DEFAULT_MIN_STOCK)}
+            hint={MIN_STOCK_HINT}
           />
           <SelectField
             name="konum"

@@ -332,8 +332,9 @@ transfer); T232 (tek ürün sayım düzeltmesi) kapandı.
    değişikliği yok). ERP ürün dosyasında fiyatın kuruşa yuvarlanması (T241, `PRC-15`) geliştirildi
    (`development`'ta; `main`'de ve Lightsail'de yok). ERP toplam farkı kaynak dosya olmadan açıklanamıyor (T242).
    Giriş / Çıkış formunda varsayılan sebep kaldırıldı (T243, `PRD-24`; `development`'ta, `main`'de
-   ve Lightsail'de yok). Toplu manuel kabul (T223, T233, T221, T234, T236, T237, T241, T243) bekliyor;
-   başlatılmadı.
+   ve Lightsail'de yok). Kritik stok ve "Stok yok" ayrıldı, yeni ürün eşiği 3, çalışan eşiği dar
+   izinle değiştirir (T244, `PRD-25`; geliştirildi, commit edilmedi; şema değişikliği yok). Toplu
+   manuel kabul (T223, T233, T221, T234, T236, T237, T241, T243, T244) bekliyor; başlatılmadı.
 2. **T201 gerçek tedarikçi API'si**: ilk hedef, erişimi sağlanabilen bir sağlayıcıyla uçtan uca.
    Sağlayıcı, kimlik doğrulama ve yaklaşım PLAN'da kanıtla seçilir; gerçek sağlayıcı seçilmeden genel
    entegrasyon iddia edilmez. Çok depo kritik yolunun dışında.

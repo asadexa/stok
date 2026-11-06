@@ -68,6 +68,29 @@ const decimalsOf = (n: number) => {
 const hasValidPrecision = (n: number) => decimalsOf(n) <= MAX_DECIMALS
 
 /**
+ * Kritik eşik. Ürün oluşturma, ürün güncelleme ve çalışanın dar eşik izni
+ * (T244) AYNI doğrulayıcıyı kullanıyor: ayrı yazılsaydı çalışan formu
+ * yöneticinin reddedildiği bir değeri yazabilirdi.
+ */
+const minStockSchema = z
+  .number()
+  .nonnegative()
+  .finite()
+  .max(1_000_000)
+  .refine(hasValidPrecision, { message: `En fazla ${MAX_DECIMALS} ondalık basamak` })
+
+/**
+ * Yeni ürünün kritik eşiği (T244, PRD-25). Yalnız YENİ ürünlere uygulanır:
+ * form, ürün dosyası (sütun yok ya da hücre boş), envanter dosyasıyla açılan
+ * ürün ve API bu şemanın varsayılanından geçiyor. Mevcut ürünlerin eşiği
+ * değişmez; veritabanı varsayılanı (0) da değişmedi, uygulama değeri her
+ * eklemede açıkça yazıyor. Birimden bağımsız tek sayı: 3 kg ile 3 adet farklı
+ * şey demek, ama birime göre varsayılan ek bir ayar olurdu ve istenmedi.
+ * 0 bilinçli bir seçim olarak kalır: "takip yok".
+ */
+export const DEFAULT_MIN_STOCK = 3
+
+/**
  * Para: NUMERIC(12,2). Basamak sınırı BURADA da zorlanıyor çünkü
  * PostgreSQL fazlasını sessizce yuvarlar — 19,999 TL girip 20,00 TL
  * kaydedilmesini kullanıcı ancak raporda fark ederdi.
@@ -400,13 +423,7 @@ export const createProductSchema = z.object({
   imageUrl: imageUrlSchema,
   purchasePrice: moneySchema.optional(),
   salePrice: moneySchema.optional(),
-  minStock: z
-    .number()
-    .nonnegative()
-    .finite()
-    .max(1_000_000)
-    .refine(hasValidPrecision, { message: `En fazla ${MAX_DECIMALS} ondalık basamak` })
-    .default(0),
+  minStock: minStockSchema.default(DEFAULT_MIN_STOCK),
   locationId: z.string().uuid().optional(),
   // Barkod isteğe bağlı (S3): barkodsuz ürün ürün kimliğiyle hareket alıyor
   // (`createMovementSchema.productId`). Ürün formu ve ürün aktarımı bugün yine
@@ -455,17 +472,22 @@ export const updateProductSchema = z.object({
   imageUrl: imageUrlSchema.nullable(),
   purchasePrice: moneySchema.nullable().optional(),
   salePrice: moneySchema.nullable().optional(),
-  minStock: z
-    .number()
-    .nonnegative()
-    .finite()
-    .max(1_000_000)
-    .refine(hasValidPrecision, { message: `En fazla ${MAX_DECIMALS} ondalık basamak` })
-    .optional(),
+  minStock: minStockSchema.optional(),
   locationId: z.string().uuid().nullable().optional(),
 })
 
 export type UpdateProductInput = z.infer<typeof updateProductSchema>
+
+/**
+ * Yalnız kritik eşik (T244, PRD-25): `product:setThreshold` iznini taşıyan
+ * çalışanın yazabildiği TEK alan. `strict`: fazladan gelen bir alan (`name`,
+ * `purchasePrice`) sessizce atılmıyor, istek reddediliyor. Atılsaydı çağıran
+ * kaydettiğini sanır, `updateProductSchema`'ya geçen bir değişiklik ise dar
+ * iznin kapsamını sessizce genişletebilirdi.
+ */
+export const productThresholdSchema = z.object({ minStock: minStockSchema }).strict()
+
+export type ProductThresholdInput = z.infer<typeof productThresholdSchema>
 
 /**
  * ============================================================================
@@ -756,6 +778,8 @@ export const exportStockSchema = z.object({
   includeArchived: z.boolean().default(false),
   /** Sadece kritik seviyenin altındakiler. Sipariş listesi çıkarmak için. */
   onlyCritical: z.boolean().default(false),
+  /** Ekrandaki "Sadece stok yok" süzgeci (T244); eski kuyruk işlerinde yok, varsayılan kapalı. */
+  onlyOutOfStock: z.boolean().default(false),
   /** Ekrandaki "Depoya atama bekleyen" süzgeci (T221); eski kuyruk işlerinde yok, varsayılan kapalı. */
   awaitingAssignment: z.boolean().default(false),
   category: z.string().trim().max(100).optional(),
@@ -775,6 +799,8 @@ export const listStockSchema = z.object({
   category: z.string().trim().max(100).optional(),
   productId: z.string().uuid().optional(),
   onlyCritical: z.boolean().default(false),
+  /** Yalnız stoğu 0 ya da eksi olan ürünler (T244). */
+  onlyOutOfStock: z.boolean().default(false),
   /** Yalnız artı atanmamış stoğu olan ürünler (T221); deposuz işletmede sonuç boş. */
   awaitingAssignment: z.boolean().default(false),
   includeArchived: z.boolean().default(false),

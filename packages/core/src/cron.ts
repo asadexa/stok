@@ -15,6 +15,7 @@ import { systemHealth } from './health'
 import { checkStockInvariant } from './movements'
 import { pruneTenantImportRuns } from './import-runs'
 import { pruneAttempts } from './rate-limit'
+import { criticalStockCondition } from './stock-rules'
 
 /**
  * ============================================================================
@@ -166,7 +167,8 @@ export async function dailySummary(
           FROM products p
           LEFT JOIN current_stock cs
                  ON cs.tenant_id = p.tenant_id AND cs.product_id = p.id
-         WHERE p.archived_at IS NULL AND COALESCE(cs.qty, 0) <= p.min_stock
+         WHERE p.archived_at IS NULL
+           AND ${criticalStockCondition(sql`cs.qty`, sql`p.min_stock`)}
       `)
 
       // Depo transferi giriş/çıkış değil, yer değişikliği (T223): sayılarda yok,
@@ -297,7 +299,11 @@ export async function lowStockProducts(
           FROM products p
           LEFT JOIN current_stock cs
                  ON cs.tenant_id = p.tenant_id AND cs.product_id = p.id
-         WHERE p.archived_at IS NULL AND COALESCE(cs.qty, 0) <= p.min_stock
+         WHERE p.archived_at IS NULL
+           -- Stoğu biten ürün bu e-postada YOK (T244): "Stok yok" ayrı bir
+           -- bölüm. Dahil edilseydi eşiği 0 olan her tükenmiş ürün her gün
+           -- maile girer, gerçek kritik ürünler listede kaybolurdu.
+           AND ${criticalStockCondition(sql`cs.qty`, sql`p.min_stock`)}
          ORDER BY (COALESCE(cs.qty, 0) - p.min_stock), p.name
       `),
     options.db,

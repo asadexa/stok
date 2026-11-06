@@ -1,4 +1,10 @@
-import { AppError, type Unit, listStockSchema, transferReasonsSqlList } from '@stok/shared'
+import {
+  AppError,
+  type Unit,
+  isCriticalStock,
+  listStockSchema,
+  transferReasonsSqlList,
+} from '@stok/shared'
 import { type Db, currentStock, depots, locations, products, stockMovements, withTenant } from '@stok/db'
 import { and, asc, eq, inArray, isNull, or, sql } from 'drizzle-orm'
 import {
@@ -10,6 +16,7 @@ import {
 } from './authz'
 import { lookupBarcode } from './movements'
 import { parseScaled, scaledToNumber } from './numeric'
+import { criticalStockCondition, outOfStockCondition } from './stock-rules'
 import { parseOrThrow } from './validate'
 
 /**
@@ -43,8 +50,8 @@ export interface StockRow {
   unit: Unit
   qty: number
   minStock: number
-  /** Miktar kritik eşiğin altında mı. Sunucu hesaplıyor: iki ayrı yerde
-   *  hesaplanırsa tablo ile uyarı sayacı ayrışır. */
+  /** Stok 0'dan büyük ve kritik eşiğe eşit ya da altında mı (T244). Sunucu
+   *  hesaplıyor: iki ayrı yerde hesaplanırsa tablo ile uyarı sayacı ayrışır. */
   critical: boolean
   locationCode: string | null
   lastMovementAt: Date | null
@@ -99,7 +106,8 @@ function whereClause(actor: Actor, q: ReturnType<typeof parseListStock>) {
     q.productId ? eq(products.id, q.productId) : undefined,
     q.includeArchived ? undefined : isNull(products.archivedAt),
     q.category ? eq(products.category, q.category) : undefined,
-    q.onlyCritical ? sql`COALESCE(${currentStock.qty}, 0) <= ${products.minStock}` : undefined,
+    q.onlyCritical ? criticalStockCondition() : undefined,
+    q.onlyOutOfStock ? outOfStockCondition() : undefined,
     // Sayım ve sayfa aynı koşulu kullanıyor (bu fonksiyon); süzgeç sayfalamadan önce.
     q.awaitingAssignment ? awaitingAssignmentCondition(actor.tenantId) : undefined,
     // Arama HEM ada HEM stok koduna bakıyor: admin barkod okuyucuyu klavye
@@ -161,7 +169,8 @@ export async function listStock(
         .leftJoin(locations, eq(locations.id, products.locationId))
         .where(whereClause(actor, q))
         // Kritik olanlar önce: patronun ekrana bakınca sorduğu ilk soru
-        // "bir sorun var mı" (PLAN.md Bölüm 11).
+        // "bir sorun var mı" (PLAN.md Bölüm 11). Stoğu bitenler hemen ardından
+        // (T244): kritik sayılmıyorlar ama sipariş listesinin parçası.
         //
         // İkincil sıra `name` değil `name_norm`: veritabanı collation'ı
         // `C.UTF-8` (CI ve yerel container) ve orada sıralama BAYT
@@ -170,7 +179,8 @@ export async function listStock(
         // `name_norm` zaten `tr_norm(name)` ile üretilmiş stored generated
         // column, yani bedava ve collation'dan bağımsız.
         .orderBy(
-          sql`(COALESCE(${currentStock.qty}, 0) <= ${products.minStock}) DESC`,
+          sql`${criticalStockCondition()} DESC`,
+          sql`${outOfStockCondition()} DESC`,
           asc(products.nameNorm),
         )
         .limit(q.limit)
@@ -212,7 +222,7 @@ export async function listStock(
           unit: r.unit as Unit,
           qty,
           minStock,
-          critical: qty <= minStock,
+          critical: isCriticalStock(qty, minStock),
           locationCode: r.locationCode,
           lastMovementAt: r.lastMovementAt,
           archivedAt: r.archivedAt,
@@ -391,8 +401,8 @@ export interface AlertSummary {
  * sorgularını koşturmak olurdu.
  *
  * Kritik sayımı `listStock(onlyCritical)` ve `dashboardSummary` ile AYNI
- * karşılaştırmayı kullanıyor (`COALESCE(qty,0) <= min_stock`). Üçü ayrı
- * yazılsaydı zil "3" derken tablo iki satır gösterebilirdi.
+ * koşulu kullanıyor (`criticalStockCondition`, T244). Üçü ayrı yazılsaydı zil
+ * "3" derken tablo iki satır gösterebilirdi. Stoğu biten ürün zile girmiyor.
  */
 export async function alertSummary(
   actor: Actor,
@@ -410,7 +420,7 @@ export async function alertSummary(
           LEFT JOIN current_stock cs
                  ON cs.tenant_id = p.tenant_id AND cs.product_id = p.id
          WHERE p.archived_at IS NULL
-           AND COALESCE(cs.qty, 0) <= p.min_stock
+           AND ${criticalStockCondition(sql`cs.qty`, sql`p.min_stock`)}
       `)
 
       const summary: AlertSummary = { criticalCount: Number(critical?.n ?? 0) }
@@ -504,7 +514,7 @@ export async function categorySummary(
         SELECT NULLIF(btrim(p.category), '')                          AS value,
                count(*)::text                                          AS products,
                count(*) FILTER (
-                 WHERE COALESCE(cs.qty, 0) <= p.min_stock
+                 WHERE ${criticalStockCondition(sql`cs.qty`, sql`p.min_stock`)}
                )::text                                                 AS critical,
                COALESCE(SUM(COALESCE(cs.qty, 0)), 0)::text             AS qty,
                ${VALUE_SQL}::text                                      AS value_sum,
@@ -650,7 +660,7 @@ export async function dashboardSummary(
           and(
             eq(products.tenantId, actor.tenantId),
             isNull(products.archivedAt),
-            sql`COALESCE(${currentStock.qty}, 0) <= ${products.minStock}`,
+            criticalStockCondition(),
           ),
         )
 

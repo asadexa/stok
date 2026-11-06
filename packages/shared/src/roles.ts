@@ -34,6 +34,7 @@ export function roleLabel(role: Role): string {
 export const PERMISSIONS = [
   'product:create',
   'product:update',
+  'product:setThreshold',
   'product:archive',
   'product:read',
   'barcode:create',
@@ -58,6 +59,7 @@ type PermissionSet = Readonly<Record<Permission, boolean>>
 const ADMIN_PERMISSIONS: PermissionSet = {
   'product:create': true,
   'product:update': true,
+  'product:setThreshold': true,
   'product:archive': true,
   'product:read': true,
   'barcode:create': true,
@@ -82,6 +84,11 @@ const STAFF_PERMISSIONS: PermissionSet = {
   'stock:read': true,
   'movement:read:own': true,
   'count:start': true,
+  // Kritik eşiği rafın başındaki kişi biliyor (T244, PRD-25). Yalnız eşik:
+  // `setProductThreshold` tek kolonu yazar, stok defterine ve fiyata
+  // dokunmaz; yanlış eşik en fazla bir uyarıyı erken ya da geç yakar.
+  // `product:update` verilseydi ad, birim ve fiyat da açılırdı.
+  'product:setThreshold': true,
 
   // Yapamadıkları ve NEDEN yapamadıkları:
   'product:create': false, // yeni ürün tanımı admin işi, yanlış tanım stoğu bozar

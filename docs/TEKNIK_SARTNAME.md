@@ -207,8 +207,15 @@ Katman kuralları `PROJECT_BRAIN` §5, ilkeler §12. Kayıtlarda yalnız özelli
 ### F-07 — Panel, stok listesi, kritik stok ve bildirim
 - **İhtiyaç:** "bir sorun var mı?" sorusuna tek bakışta cevap.
 - **Akış:** panel uyarılar → bugün → son hareketler; ürün bazlı `min_stock` eşiği; bildirim zili ve e-posta.
+  Kritik: 0 < stok ≤ eşik; "Stok yok": stok ≤ 0, ayrı panel kartı ve "Sadece stok yok" süzgeci; zil,
+  kritik sayılar ve kritik stok e-postası stok yok ürünlerini saymaz. Kural tek kaynakta
+  (`packages/shared/src/stock-levels.ts`, `packages/core/src/stock-rules.ts`). Yeni ürünün eşiği 3
+  (yalnız yeni ürünler); çalışan eşiği ürün sayfasındaki dar formdan değiştirir (`PRD-25`; T244,
+  manuel kabul bekliyor).
 - **Neden böyle:** yönetici önce sorunu görmeli, sonra tabloyu; tasarım ilkeleri `PROJECT_BRAIN` §13.
-- **Dosyalar:** `apps/web/src/app/(panel)/panel/`, `stok/`, `apps/web/src/components/alert-bell.tsx`.
+- **Dosyalar:** `apps/web/src/app/(panel)/panel/`, `stok/`, `apps/web/src/components/alert-bell.tsx`,
+  `components/badge.tsx`, `urunler/[id]/` (eşik formu), `packages/core/src/products.ts`
+  (`setProductThreshold`).
 - **Sınırlar:** push bildirimi yok; tükenme tahmini ertelendi (T179). Panel ve kategori değeri
   yalnız alış fiyatı bilinen ürünleri topluyor, fiyatı olmayan stoklu ürün sayısını gösteriyor
   (`PRC-12`; `7fe8770`, T221). Stok listesi yalnız toplamı gösteriyor; depo dağılımı ürün

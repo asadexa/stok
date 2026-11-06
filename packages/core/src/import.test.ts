@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { type TestTenant, seedTestTenant, testAdminDb, testAppDb } from '@stok/db/testing'
+import { DEFAULT_MIN_STOCK } from '@stok/shared'
 import ExcelJS from 'exceljs'
 import JSZip from 'jszip'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -553,6 +554,40 @@ describe('uygulama', () => {
     const row = (await listStock(boss, { search: sku }, opts)).rows[0]!
     expect(row.purchasePrice).toBeNull()
     expect(row.salePrice).toBeNull()
+    // "Kritik Seviye" sütunu yok: yeni ürün varsayılan eşiği alıyor (T244).
+    expect(row.minStock).toBe(DEFAULT_MIN_STOCK)
+  })
+
+  it('yeni üründe Kritik Seviye boş: varsayılan eşik; açıkça 0: takip yok (T244)', async () => {
+    const empty = uniq('KSB-')
+    const zero = uniq('KS0-')
+    const result = await commitImport(
+      boss,
+      await preview([
+        'Stok Kodu,Ürün Adı,Barkod,Kritik Seviye',
+        `${empty},Boş Eşik,${uniq('bc')},`,
+        `${zero},Sıfır Eşik,${uniq('bc')},0`,
+      ]),
+      opts,
+    )
+    expect(result.created).toBe(2)
+    expect((await listStock(boss, { search: empty }, opts)).rows[0]!.minStock).toBe(DEFAULT_MIN_STOCK)
+    expect((await listStock(boss, { search: zero }, opts)).rows[0]!.minStock).toBe(0)
+  })
+
+  it('mevcut ürünün eşiği boş Kritik Seviye hücresiyle değişmiyor (T244)', async () => {
+    const sku = uniq('KSM-')
+    await commitImport(
+      boss,
+      await preview(['Stok Kodu,Ürün Adı,Barkod,Kritik Seviye', `${sku},Ürün,${uniq('bc')},7`]),
+      opts,
+    )
+    await commitImport(
+      boss,
+      await preview(['Stok Kodu,Ürün Adı,Kritik Seviye', `${sku},Ürün Yeni Ad,`]),
+      opts,
+    )
+    expect((await listStock(boss, { search: sku }, opts)).rows[0]!.minStock).toBe(7)
   })
 
   it('güncellemede yeni barkod ekleniyor, mevcut olan iki kez eklenmiyor', async () => {
