@@ -158,6 +158,16 @@ const MATRIX: MatrixRow[] = [
     staff: false,
     servis: 'suppliers.ts',
   },
+  {
+    // T244 ile eklendi (PRD-25). Çalışan yalnız kritik eşiği yazar; ürünün
+    // diğer alanları `product:update` (1. satır) ile yasak kalıyor. Servis
+    // yolunun reddi ve tek kolon sınırı products-threshold.test.ts'te.
+    islem: 'Kritik eşiği değiştir',
+    permissions: ['product:setThreshold'],
+    admin: true,
+    staff: true,
+    servis: 'setProductThreshold',
+  },
 ]
 
 function expectForbidden(fn: () => void, permission: Permission) {
@@ -199,8 +209,8 @@ describe('T47 - matrisin satırları (plandaki 11 + PRD-14), tek boğazdan', () 
     },
   )
 
-  it('matris planın 11 satırını ve tedarikçi satırını (PRD-14) kapsıyor', () => {
-    expect(MATRIX).toHaveLength(12)
+  it('matris planın 11 satırını, tedarikçi (PRD-14) ve eşik (PRD-25) satırlarını kapsıyor', () => {
+    expect(MATRIX).toHaveLength(13)
   })
 
   it('her yetki en az bir matris satırında geçiyor', () => {

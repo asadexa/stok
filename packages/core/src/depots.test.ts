@@ -354,7 +354,7 @@ describe('envanter düzeltmesi (COUNT_ADJUST)', () => {
     expect(err.code).toBe('STOCK_CHANGED')
     expect(err.details).toMatchObject({ reason: 'UNASSIGNED', unassigned: 6 })
     expect(errorText(err.code, err.details)).toBe(
-      'Bu üründe depoya atama bekleyen stok var; envanter satırı yazılmadı',
+      'Bu üründe depoya atama bekleyen stok var; envanter satırı yazılmadı. Önce ürün sayfasından depoya atayın',
     )
     expect(await depotQty(p.id, null)).toBe(6)
     expect(await depotQty(p.id, d1)).toBe(0)
@@ -447,6 +447,114 @@ describe('envanter düzeltmesi (COUNT_ADJUST)', () => {
       expect(await pending).toBe('STOCK_CHANGED')
       expect(await depotQty(p.id, d1)).toBe(7)
     })
+  })
+})
+
+describe('deposuz envanter düzeltmesi (T232, DAT-24)', () => {
+  // Deposu olmayan işletmede bütün stok atanmamış; hedef toplam stok.
+  const plainCount = (productId: string, expectedQty: number, targetQty: number, key = randomUUID()) => ({
+    ...count(productId, d1, expectedQty, targetQty, key),
+    depotId: null,
+  })
+  /** Kendi ürünü: üstteki testler aynı kiracının hazır ürünlerine hareket yazıyor. */
+  async function own(actor: Actor) {
+    const barcode = `bc-${randomUUID().slice(0, 12)}`
+    const created = await createProduct(
+      actor,
+      { sku: `DZ-${randomUUID().slice(0, 8)}`, name: 'Düzeltme Ürünü', barcodes: [{ barcode }] },
+      opts,
+    )
+    return { id: created.productId, barcode }
+  }
+
+  it('10 → 7: tek COUNT_ADJUST_DOWN, deposu boş, fiyatsız; toplam 7', async () => {
+    const p = await own(plainBoss)
+    await createMovement(plainBoss, move({ barcode: p.barcode }, 'PURCHASE', 10), opts)
+
+    const res = await createMovement(plainBoss, plainCount(p.id, 10, 7), inv)
+
+    expect(res).toMatchObject({ delta: -3, newQty: 7, duplicate: false })
+    expect((await ledger(p.id)).at(-1)).toMatchObject({ reason: 'COUNT_ADJUST_DOWN', depot_id: null, unit_price: null })
+    expect(await getStockQty(plainBoss, p.id, opts)).toBe(7)
+  })
+
+  it('sayfadan sonra stok değiştiyse STOCK_CHANGED; eski miktara göre yazılmıyor', async () => {
+    const p = await own(plainBoss)
+    await createMovement(plainBoss, move({ barcode: p.barcode }, 'PURCHASE', 10), opts)
+    await createMovement(plainBoss, move({ barcode: p.barcode }, 'SALE', 2), opts)
+
+    const err = await errorOf(createMovement(plainBoss, plainCount(p.id, 10, 5), inv))
+
+    expect(err.code).toBe('STOCK_CHANGED')
+    expect(err.details).toMatchObject({ reason: 'DEPOT_QTY', expected: 10, actual: 8 })
+    expect(await getStockQty(plainBoss, p.id, opts)).toBe(8)
+  })
+
+  it('çift gönderim: aynı anahtar tek hareket; fark 0 ve çalışan reddediliyor', async () => {
+    const p = await own(plainBoss)
+    await createMovement(plainBoss, move({ barcode: p.barcode }, 'PURCHASE', 4), opts)
+    const key = randomUUID()
+
+    await createMovement(plainBoss, plainCount(p.id, 4, 9, key), inv)
+    const again = await createMovement(plainBoss, plainCount(p.id, 4, 9, key), inv)
+    expect(again.duplicate).toBe(true)
+
+    expect(await codeOf(createMovement(plainBoss, plainCount(p.id, 9, 9), inv))).toBe('VALIDATION_FAILED')
+    const plainStaff: Actor = { tenantId: plain.tenantId, userId: plain.staffUserId, role: 'STAFF' }
+    expect(await codeOf(createMovement(plainStaff, plainCount(p.id, 9, 1), inv))).toBe('FORBIDDEN')
+
+    expect((await ledger(p.id)).filter((m) => m.reason.startsWith('COUNT_ADJUST'))).toHaveLength(1)
+    expect(await getStockQty(plainBoss, p.id, opts)).toBe(9)
+  })
+
+  it('depolu işletmede depo boş geçilemiyor: tek depoda da, çok depoda da DEPOT_REQUIRED', async () => {
+    // Tek depoda `resolveDepot` depoyu kendisi seçerdi: sayım, kullanıcının
+    // gördüğü toplam yerine o depoya yazılırdı.
+    const s = await own(singleBoss)
+    await createMovement(singleBoss, move({ barcode: s.barcode }, 'PURCHASE', 6), opts)
+    const one = await errorOf(createMovement(singleBoss, plainCount(s.id, 6, 2), inv))
+    expect(one.code).toBe('DEPOT_REQUIRED')
+    expect(errorText(one.code, one.details)).toBe('Bu işletmede depo var; stok düzeltmesi için depo seçilmeli')
+
+    const m = fresh()
+    expect(await codeOf(createMovement(boss, plainCount(m.id, 0, 2), inv))).toBe('DEPOT_REQUIRED')
+
+    expect((await ledger(s.id)).filter((r) => r.reason.startsWith('COUNT_ADJUST'))).toHaveLength(0)
+    expect(await ledger(m.id)).toEqual([])
+  })
+
+  it('yarış: depo henüz COMMIT edilmeden yapılan deposuz düzeltme, sonraki depo sayımıyla çift sayılmıyor', async () => {
+    // Deposuz düzeltme depo yokken yazılıyor; o sırada başka bir işlem (ör.
+    // envanter dosyası) depoyu açıyor ama henüz COMMIT etmedi. Düzeltmenin
+    // stoğu atanmamış kalıyor; yeni deponun sayım satırı atanmamış stok
+    // yüzünden yazılmıyor (STOCK_CHANGED UNASSIGNED). Toplam şişmiyor.
+    const race = await seedTestTenant(admin.db, 'depo-yaris', PRODUCTS.slice(0, 2))
+    const raceBoss: Actor = { tenantId: race.tenantId, userId: race.adminUserId, role: 'ADMIN' }
+    const p = race.products['DP-00']!
+    await createMovement(raceBoss, move({ barcode: p.barcode }, 'PURCHASE', 10), opts)
+
+    let newDepot = ''
+    await admin.client.begin(async (sql) => {
+      const [row] = await sql<{ id: string }[]>`
+        INSERT INTO depots (tenant_id, name) VALUES (${race.tenantId}, 'Yeni Depo') RETURNING id
+      `
+      newDepot = row!.id
+      // Depo COMMIT edilmedi: düzeltme onu göremiyor ve atanmamış stoğa yazıyor.
+      const res = await createMovement(raceBoss, plainCount(p.id, 10, 7), inv)
+      expect(res).toMatchObject({ delta: -3, newQty: 7 })
+    })
+
+    const err = await errorOf(createMovement(raceBoss, count(p.id, newDepot, 0, 7), inv))
+    expect(err.code).toBe('STOCK_CHANGED')
+    expect(err.details).toMatchObject({ reason: 'UNASSIGNED', unassigned: 7 })
+
+    // Depo artık görünüyor: ikinci deposuz düzeltme reddediliyor.
+    expect(await codeOf(createMovement(raceBoss, plainCount(p.id, 7, 5), inv))).toBe('DEPOT_REQUIRED')
+
+    expect(await getStockQty(raceBoss, p.id, opts)).toBe(7)
+    expect(await depotQty(p.id, null)).toBe(7)
+    expect(await depotQty(p.id, newDepot)).toBe(0)
+    expect(await checkStockInvariant(race.tenantId, opts)).toEqual([])
   })
 })
 

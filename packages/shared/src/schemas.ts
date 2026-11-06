@@ -68,6 +68,29 @@ const decimalsOf = (n: number) => {
 const hasValidPrecision = (n: number) => decimalsOf(n) <= MAX_DECIMALS
 
 /**
+ * Kritik eşik. Ürün oluşturma, ürün güncelleme ve çalışanın dar eşik izni
+ * (T244) AYNI doğrulayıcıyı kullanıyor: ayrı yazılsaydı çalışan formu
+ * yöneticinin reddedildiği bir değeri yazabilirdi.
+ */
+const minStockSchema = z
+  .number()
+  .nonnegative()
+  .finite()
+  .max(1_000_000)
+  .refine(hasValidPrecision, { message: `En fazla ${MAX_DECIMALS} ondalık basamak` })
+
+/**
+ * Yeni ürünün kritik eşiği (T244, PRD-25). Yalnız YENİ ürünlere uygulanır:
+ * form, ürün dosyası (sütun yok ya da hücre boş), envanter dosyasıyla açılan
+ * ürün ve API bu şemanın varsayılanından geçiyor. Mevcut ürünlerin eşiği
+ * değişmez; veritabanı varsayılanı (0) da değişmedi, uygulama değeri her
+ * eklemede açıkça yazıyor. Birimden bağımsız tek sayı: 3 kg ile 3 adet farklı
+ * şey demek, ama birime göre varsayılan ek bir ayar olurdu ve istenmedi.
+ * 0 bilinçli bir seçim olarak kalır: "takip yok".
+ */
+export const DEFAULT_MIN_STOCK = 3
+
+/**
  * Para: NUMERIC(12,2). Basamak sınırı BURADA da zorlanıyor çünkü
  * PostgreSQL fazlasını sessizce yuvarlar — 19,999 TL girip 20,00 TL
  * kaydedilmesini kullanıcı ancak raporda fark ederdi.
@@ -247,7 +270,9 @@ export type CreateMovementInput = z.infer<typeof createMovementSchema>
 export const inventoryAdjustmentSchema = z.object({
   idempotencyKey: z.string().uuid(),
   productId: z.string().uuid(),
-  depotId: z.string().uuid(),
+  // `null` yalnız HİÇ deposu olmayan işletmede geçerli: hedef o zaman toplam
+  // (depoya atanmamış) stok (T232, DAT-24). Depolu işletmede kapı reddediyor.
+  depotId: z.string().uuid().nullable(),
   expectedQty: z
     .number({ invalid_type_error: 'Miktar sayı olmalı' })
     .min(-1_000_000_000)
@@ -263,6 +288,62 @@ export const inventoryAdjustmentSchema = z.object({
 })
 
 export type InventoryAdjustmentInput = z.infer<typeof inventoryAdjustmentSchema>
+
+/**
+ * Depo transferi. Kaynak `null` ise depoya atanmamış eski stoğu bir depoya
+ * atamak (T223), bir depo kimliği ise depodan depoya taşımak (T233). Hedef
+ * her zaman gerçek bir depo: atanmamış stoğa geri taşıma yok (PRD-17, eski
+ * stok tahmin edilmez; geri taşınabilseydi depo bilgisi bilerek silinirdi).
+ * Kaynak ile hedefin aynı olması burada reddediliyor; kabul edilseydi toplamı
+ * değiştirmeyen ama defteri anlamsız bir çiftle dolduran bir yol açık kalırdı.
+ */
+export const stockTransferSchema = z
+  .object({
+    idempotencyKey: z.string().uuid(),
+    productId: z.string().uuid(),
+    fromDepotId: z.string().uuid().nullable(),
+    toDepotId: z.string().uuid(),
+    qty: z
+      .number({ invalid_type_error: 'Miktar sayı olmalı' })
+      .positive('Miktar sıfırdan büyük olmalı')
+      .max(1_000_000, 'Miktar en fazla 1.000.000 olabilir')
+      .refine(hasValidPrecision, { message: `En fazla ${MAX_DECIMALS} ondalık basamak` }),
+    note: z.string().trim().max(500).optional(),
+    clientCreatedAt: z.string().datetime({ offset: true }),
+  })
+  .refine((t) => t.fromDepotId !== t.toDepotId, {
+    path: ['toDepotId'],
+    message: 'Kaynak ve hedef depo farklı olmalı',
+  })
+
+/**
+ * Transfer hareketlerinin sabit açıklaması + isteğe bağlı kullanıcı notu
+ * toplam bu sınıra sığmalı (hareket notu sınırı). Önek ve kalan not payı
+ * sunucu (red) ve form (`maxLength`) tarafından aynı yerden hesaplanıyor;
+ * iki yerde ayrı yazılsaydı form sunucunun reddedeceği bir notu kabul ederdi.
+ */
+export const TRANSFER_NOTE_LIMIT = 500
+export function transferNotePrefix(fromDepotName: string | null, toDepotName: string): string {
+  return fromDepotName === null
+    ? `Depoya atama: Atanmamış stok → ${toDepotName}`
+    : `Depo transferi: ${fromDepotName} → ${toDepotName}`
+}
+/** Kullanıcı notuna kalan pay; `: ` ayırıcısı da sayılıyor. */
+export function transferNoteRoom(fromDepotName: string | null, toDepotName: string): number {
+  return TRANSFER_NOTE_LIMIT - transferNotePrefix(fromDepotName, toDepotName).length - 2
+}
+
+export type StockTransferInput = z.infer<typeof stockTransferSchema>
+
+export interface StockTransferResponse {
+  transferId: string
+  productId: string
+  productName: string
+  qty: number
+  /** Toplam stok; transfer onu değiştirmez. */
+  newQty: number
+  duplicate: boolean
+}
 
 export const createMovementResponseSchema = z.object({
   movementId: z.string().uuid(),
@@ -342,13 +423,7 @@ export const createProductSchema = z.object({
   imageUrl: imageUrlSchema,
   purchasePrice: moneySchema.optional(),
   salePrice: moneySchema.optional(),
-  minStock: z
-    .number()
-    .nonnegative()
-    .finite()
-    .max(1_000_000)
-    .refine(hasValidPrecision, { message: `En fazla ${MAX_DECIMALS} ondalık basamak` })
-    .default(0),
+  minStock: minStockSchema.default(DEFAULT_MIN_STOCK),
   locationId: z.string().uuid().optional(),
   // Barkod isteğe bağlı (S3): barkodsuz ürün ürün kimliğiyle hareket alıyor
   // (`createMovementSchema.productId`). Ürün formu ve ürün aktarımı bugün yine
@@ -397,17 +472,22 @@ export const updateProductSchema = z.object({
   imageUrl: imageUrlSchema.nullable(),
   purchasePrice: moneySchema.nullable().optional(),
   salePrice: moneySchema.nullable().optional(),
-  minStock: z
-    .number()
-    .nonnegative()
-    .finite()
-    .max(1_000_000)
-    .refine(hasValidPrecision, { message: `En fazla ${MAX_DECIMALS} ondalık basamak` })
-    .optional(),
+  minStock: minStockSchema.optional(),
   locationId: z.string().uuid().nullable().optional(),
 })
 
 export type UpdateProductInput = z.infer<typeof updateProductSchema>
+
+/**
+ * Yalnız kritik eşik (T244, PRD-25): `product:setThreshold` iznini taşıyan
+ * çalışanın yazabildiği TEK alan. `strict`: fazladan gelen bir alan (`name`,
+ * `purchasePrice`) sessizce atılmıyor, istek reddediliyor. Atılsaydı çağıran
+ * kaydettiğini sanır, `updateProductSchema`'ya geçen bir değişiklik ise dar
+ * iznin kapsamını sessizce genişletebilirdi.
+ */
+export const productThresholdSchema = z.object({ minStock: minStockSchema }).strict()
+
+export type ProductThresholdInput = z.infer<typeof productThresholdSchema>
 
 /**
  * ============================================================================
@@ -698,6 +778,10 @@ export const exportStockSchema = z.object({
   includeArchived: z.boolean().default(false),
   /** Sadece kritik seviyenin altındakiler. Sipariş listesi çıkarmak için. */
   onlyCritical: z.boolean().default(false),
+  /** Ekrandaki "Sadece stok yok" süzgeci (T244); eski kuyruk işlerinde yok, varsayılan kapalı. */
+  onlyOutOfStock: z.boolean().default(false),
+  /** Ekrandaki "Depoya atama bekleyen" süzgeci (T221); eski kuyruk işlerinde yok, varsayılan kapalı. */
+  awaitingAssignment: z.boolean().default(false),
   category: z.string().trim().max(100).optional(),
 })
 
@@ -715,6 +799,10 @@ export const listStockSchema = z.object({
   category: z.string().trim().max(100).optional(),
   productId: z.string().uuid().optional(),
   onlyCritical: z.boolean().default(false),
+  /** Yalnız stoğu 0 ya da eksi olan ürünler (T244). */
+  onlyOutOfStock: z.boolean().default(false),
+  /** Yalnız artı atanmamış stoğu olan ürünler (T221); deposuz işletmede sonuç boş. */
+  awaitingAssignment: z.boolean().default(false),
   includeArchived: z.boolean().default(false),
   limit: z.number().int().positive().max(200).default(50),
   offset: z.number().int().nonnegative().default(0),

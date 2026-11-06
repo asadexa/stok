@@ -8,10 +8,14 @@ import {
   createMovementSchema,
   inventoryAdjustmentSchema,
   listMovementsSchema,
+  type StockTransferResponse,
   priceOverrideRequiresReason,
   reasonLabel,
   reasonPriceBasis,
+  stockTransferSchema,
   toDelta,
+  transferNotePrefix,
+  transferNoteRoom,
   unitDecimals,
 } from '@stok/shared'
 import {
@@ -122,7 +126,8 @@ interface CreateMovementOptions {
 
 /** Envanter düzeltmesinin kilit altında sınanan değerleri (ölçekli). */
 interface InventoryCheck {
-  depotId: string
+  /** `null`: deposuz işletme, hedef depoya atanmamış (= toplam) stok. */
+  depotId: string | null
   expected: bigint
   target: bigint
 }
@@ -230,6 +235,237 @@ async function createMovementInner(
 
 /**
  * ============================================================================
+ * DEPO TRANSFERİ — İKİNCİ YAZMA KAPISI (T223 atama, T233 depodan depoya)
+ *
+ * Stoğu değiştiren ikinci ve son fonksiyon, BİLEREK bu modülde (DAT-26,
+ * INV-3): `createMovement` ile aynı ürün kilidini, kiracı bağlamını,
+ * idempotency ve yeniden deneme kurallarını kullanıyor. `createMovement`'a
+ * seçenek olarak eklenmedi: transfer bir değil İKİ satır yazıyor ve fiyat,
+ * barkod, eksi stok dallarının hiçbiri onu ilgilendirmiyor.
+ *
+ *   kaynak: atanmamış (atama) ya da depo  −q   TRANSFER_OUT  depo boş / kaynak depo
+ *   hedef depo (her zaman gerçek depo)    +q   TRANSFER_IN   hedef depo
+ *
+ * Atama ile depodan depoya taşıma aynı yol: atama, kaynağı "atanmamış" olan
+ * transferdir. Ayrı bir fonksiyon yazılsaydı kilit, idempotency ve toplam
+ * kontrolü iki kopyada ayrışabilirdi.
+ *
+ * İki satır AYNI transaction'da ve aynı `transfer_id` ile; biri yazılamazsa
+ * ikisi de yok. Toplam stok değişmiyor; fiyat taşımıyor (PRC-12 değeri aynı).
+ * Satırların idempotency anahtarları istek anahtarından türüyor (`:out`,
+ * `:in`): aynı istek ikinci kez gelirse ilk satır bulunuyor ve ikinci çift
+ * yazılmıyor (INV-6). `transfer_id` istek anahtarının kendisi.
+ * ============================================================================
+ */
+
+const transferKeys = (key: string) => ({ out: `${key}:out`, in: `${key}:in` })
+
+export async function transferStock(
+  actor: Actor,
+  raw: unknown,
+  options: { db?: Db } = {},
+): Promise<StockTransferResponse> {
+  const alanlar: LogFields = { tenantId: actor.tenantId, userId: actor.userId, source: 'web' }
+  return logged(
+    'transfer',
+    alanlar,
+    () => transferStockInner(actor, raw, options, alanlar),
+    (result) => ({ productId: result.productId, delta: String(result.qty), duplicate: result.duplicate }),
+  )
+}
+
+async function transferStockInner(
+  actor: Actor,
+  raw: unknown,
+  options: { db?: Db },
+  alanlar: LogFields,
+): Promise<StockTransferResponse> {
+  requirePermission(actor, 'movement:create')
+  // Atama ve depodan depoya taşıma depo dağılımını değiştiren yönetim
+  // işlemleri; sayım onayıyla aynı rol (T223 K3, T233 kullanıcı kararı).
+  requirePermission(actor, 'count:approve')
+
+  const parsed = stockTransferSchema.safeParse(raw)
+  if (!parsed.success) {
+    const issues = issuesOf(parsed.error)
+    throw validationError(issues, issues.every((i) => i.path === 'qty') ? 'INVALID_QUANTITY' : 'VALIDATION_FAILED')
+  }
+  const input = parsed.data
+  alanlar.reason = 'TRANSFER'
+  alanlar.idempotencyKey = input.idempotencyKey
+
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await withTenant(actor.tenantId, (tx) => writeTransfer(tx, actor, input), options.db)
+    } catch (err) {
+      // Eşzamanlı aynı istek: kazananın çiftini dön. Bulunamazsa (ör. yalnız
+      // `:in` anahtarı başka satırda) transaction geri alındı, kısmi kayıt yok.
+      if (isUniqueViolation(err, 'movements_tenant_idem_uq')) {
+        const found = await withTenant(
+          actor.tenantId,
+          (tx) => findTransfer(tx, actor.tenantId, input.idempotencyKey),
+          options.db,
+        )
+        if (found) return found
+        throw new AppError('SERVER_ERROR', 'transfer key conflict without a matching transfer', {
+          idempotencyKey: input.idempotencyKey,
+        })
+      }
+      if (isDeadlock(err) && attempt < MAX_ATTEMPTS) continue
+      if (isDeadlock(err)) {
+        throw new AppError('SERIALIZATION_FAILURE', `deadlock after ${attempt} attempts`, { attempts: attempt })
+      }
+      throw err
+    }
+  }
+}
+
+async function writeTransfer(
+  tx: Tx,
+  actor: Actor,
+  input: z.infer<typeof stockTransferSchema>,
+): Promise<StockTransferResponse> {
+  const duplicate = await findTransfer(tx, actor.tenantId, input.idempotencyKey)
+  if (duplicate) return duplicate
+
+  const target = await resolveProduct(tx, actor.tenantId, input.productId)
+  if (target.archivedAt !== null) {
+    throw new AppError('PRODUCT_ARCHIVED', `product ${target.productId} is archived`, {
+      productId: target.productId,
+      name: target.productName,
+    })
+  }
+  // Depolar kiracı içinde doğrulanıyor (FK RLS'i atlıyor): başka kiracının
+  // deposu NOT_FOUND. Kaynak `null` = atanmamış stok (atama, T223).
+  const depot = await resolveDepot(tx, actor.tenantId, input.toDepotId)
+  if (!depot) throw new AppError('SERVER_ERROR', 'transfer target depot did not resolve')
+  let from: { id: string; name: string } | null = null
+  if (input.fromDepotId !== null) {
+    from = await resolveDepot(tx, actor.tenantId, input.fromDepotId)
+    if (!from) throw new AppError('SERVER_ERROR', 'transfer source depot did not resolve')
+  }
+
+  const qty = scaledFromNumber(input.qty)
+  const decimals = unitDecimals(target.unit as Unit)
+  if (!fitsDecimals(qty, decimals)) {
+    throw new AppError('INVALID_QUANTITY', `qty ${formatScaled(qty)} does not fit unit ${target.unit}`, {
+      unit: target.unit,
+      decimals,
+    })
+  }
+
+  const prefix = transferNotePrefix(from?.name ?? null, depot.name)
+  const room = transferNoteRoom(from?.name ?? null, depot.name)
+  const note = input.note ? `${prefix}: ${input.note}` : prefix
+  if (input.note && input.note.length > room) {
+    throw validationError([{ path: 'note', message: `Not en fazla ${room} karakter olabilir` }], 'VALIDATION_FAILED')
+  }
+
+  const before = await lockStockRow(tx, actor.tenantId, target.productId)
+
+  // Kilit altında ikinci bakış: aynı anahtarlı eşzamanlı istek kilidi bırakıp
+  // COMMIT ettiyse onun çifti artık görünür. Bakılmasaydı ikinci istek
+  // "yetersiz stok" alırdı; aynı istek iki farklı cevap almış olurdu.
+  const committed = await findTransfer(tx, actor.tenantId, input.idempotencyKey)
+  if (committed) return committed
+
+  // KAYNAK YETERLİLİĞİ KİLİT ALTINDA (K4, K5): okuma ile yazma arasına başka
+  // hareket giremiyor. Bakılan YALNIZ kaynak kova: toplam yetiyor diye Depo
+  // A'da olmayan mal A'dan taşınsaydı A eksiye düşer, toplam doğru göründüğü
+  // için kimse fark etmezdi (DAT-23'teki depo bazlı çıkış kuralının aynısı).
+  // Eksi kaynakta da (eski `allowNegative`) transfer yok: eksi bir kovadan mal
+  // taşınamaz; transferde `allowNegative` seçeneği bilerek yok.
+  const available = await sumDelta(tx, actor.tenantId, target.productId, from?.id ?? null)
+  if (available < qty) {
+    throw new AppError('INSUFFICIENT_STOCK', `requested ${formatScaled(qty)} > source ${formatScaled(available)}`, {
+      productId: target.productId,
+      name: target.productName,
+      ...(from ? { source: 'DEPOT', depotId: from.id, depotName: from.name } : { source: 'UNASSIGNED' }),
+      available: scaledToNumber(available),
+      requested: scaledToNumber(qty),
+    })
+  }
+
+  const keys = transferKeys(input.idempotencyKey)
+  const common = {
+    tenantId: actor.tenantId,
+    productId: target.productId,
+    userId: actor.userId,
+    note,
+    transferId: input.idempotencyKey,
+    clientCreatedAt: new Date(input.clientCreatedAt),
+  }
+  await tx.insert(stockMovements).values({
+    ...common,
+    delta: formatScaled(-qty),
+    reason: 'TRANSFER_OUT',
+    depotId: from?.id ?? null,
+    idempotencyKey: keys.out,
+  })
+  await tx.insert(stockMovements).values({
+    ...common,
+    delta: formatScaled(qty),
+    reason: 'TRANSFER_IN',
+    depotId: depot.id,
+    idempotencyKey: keys.in,
+  })
+
+  // Toplam değişmemeli; değiştiyse projeksiyon ile defter ayrıştı (INV-1).
+  const after = await readStockQty(tx, actor.tenantId, target.productId)
+  if (after !== before) {
+    throw new AppError('SERVER_ERROR', 'transfer changed the total stock', {
+      before: scaledToNumber(before),
+      after: scaledToNumber(after),
+    })
+  }
+
+  return {
+    transferId: input.idempotencyKey,
+    productId: target.productId,
+    productName: target.productName,
+    qty: scaledToNumber(qty),
+    newQty: scaledToNumber(after),
+    duplicate: false,
+  }
+}
+
+/** Aynı istek anahtarlı transferin çifti; ilk satırı (`:out`) aranıyor. */
+async function findTransfer(
+  tx: Tx,
+  tenantId: string,
+  key: string,
+): Promise<StockTransferResponse | undefined> {
+  const [row] = await tx
+    .select({
+      productId: stockMovements.productId,
+      productName: products.name,
+      delta: stockMovements.delta,
+      qty: currentStock.qty,
+    })
+    .from(stockMovements)
+    .innerJoin(products, eq(products.id, stockMovements.productId))
+    .leftJoin(
+      currentStock,
+      and(eq(currentStock.tenantId, stockMovements.tenantId), eq(currentStock.productId, stockMovements.productId)),
+    )
+    .where(and(eq(stockMovements.tenantId, tenantId), eq(stockMovements.idempotencyKey, transferKeys(key).out)))
+    .limit(1)
+  if (!row) return undefined
+  const delta = parseScaled(row.delta)
+  return {
+    transferId: key,
+    productId: row.productId,
+    productName: row.productName,
+    qty: scaledToNumber(-delta),
+    newQty: scaledToNumber(row.qty ? parseScaled(row.qty) : 0n),
+    duplicate: true,
+  }
+}
+
+// ---------------------------------------------------------------------------
+
+/**
+ * ============================================================================
  * BİRİM HASSASİYETİ — EFEKTİF MİKTARDA (T130)
  *
  * Kural YAZILAN sayıya bakıyor: girilen miktar × barkod çarpanı, ürünün
@@ -317,7 +553,7 @@ function parseInventoryInput(raw: unknown): {
     input: {
       idempotencyKey: adj.idempotencyKey,
       productId: adj.productId,
-      depotId: adj.depotId,
+      ...(adj.depotId !== null ? { depotId: adj.depotId } : {}),
       qty: scaledToNumber(diff < 0n ? -diff : diff),
       reason: diff > 0n ? 'COUNT_ADJUST_UP' : 'COUNT_ADJUST_DOWN',
       ...(adj.note ? { note: adj.note } : {}),
@@ -362,6 +598,16 @@ async function writeMovement(
   // Atanmamış Stok (A1) bir depo değil: seçildiyse hareket depoya atanmamış
   // kovadan düşüyor, depo çözümü hiç yapılmıyor.
   const depot = input.fromUnassigned ? null : await resolveDepot(tx, actor.tenantId, input.depotId)
+
+  // DEPOSUZ ENVANTER DÜZELTMESİ yalnız hiç deposu olmayan işletmede. Depo
+  // kimliği verilmeyince `resolveDepot` tek depoyu kendisi seçiyor (DAT-23);
+  // burada izin verilseydi sayım, kullanıcının gördüğü toplam yerine o depoya
+  // yazılırdı. İki ve daha çok depoda `resolveDepot` zaten DEPOT_REQUIRED.
+  if (flags.inventory && flags.inventory.depotId === null && depot !== null) {
+    throw new AppError('DEPOT_REQUIRED', 'tenant has a depot; inventory adjustment needs one', {
+      reason: 'INVENTORY_HAS_DEPOT',
+    })
+  }
 
   const effectiveQty = effectiveQuantity(input.qty, target.qtyMultiplier, target.unit as Unit)
   const delta = toDelta(1, input.reason) === 1 ? effectiveQty : -effectiveQty
@@ -435,8 +681,10 @@ async function writeMovement(
     }
     // DEPOYA ATANMAMIŞ STOK. Eski stoğun hangi depoda olduğu bilinmiyor;
     // yanına depo sayımı yazılsaydı aynı mal iki kez sayılırdı (toplam
-    // şişerdi). Ürün önce depoya atanmalı; satır yazılmıyor.
-    const unassigned = await sumDelta(tx, actor.tenantId, target.productId, null)
+    // şişerdi). Ürün önce depoya atanmalı; satır yazılmıyor. Deposuz
+    // düzeltmede hedef zaten atanmamış miktarın kendisi: yukarıda sınandı.
+    const unassigned =
+      flags.inventory.depotId === null ? 0n : await sumDelta(tx, actor.tenantId, target.productId, null)
     if (unassigned !== 0n) {
       throw new AppError('STOCK_CHANGED', `unassigned stock ${formatScaled(unassigned)}`, {
         reason: 'UNASSIGNED',
@@ -1130,6 +1378,32 @@ async function resolveDepot(
   if (rows.length === 0) return null
   if (rows.length === 1) return rows[0]!
   throw new AppError('DEPOT_REQUIRED', 'tenant has several depots; depot is required')
+}
+
+/** Depo verilmeyen hareketin bugün nereye yazılacağı (`resolveDepot` kuralı). */
+export type ImplicitDepot = { kind: 'none' } | { kind: 'single'; name: string } | { kind: 'multi' }
+
+/**
+ * Depo verilmeyen bir hareketin (ör. ürün aktarımının devri) hangi depoya
+ * yazılacağını, yazmadan söyler (T234). Kural `resolveDepot`'un kendisi:
+ * önizleme ayrı bir "depo sayısı" kuralı yazsaydı yazma kapısıyla ayrışabilirdi.
+ * Bu yalnız bir öngörü; karar yine yazma anında `createMovement`'ta veriliyor
+ * (önizlemeden sonra depo açılırsa devir `DEPOT_REQUIRED` ile yazılmaz).
+ */
+export async function implicitDepot(actor: Actor, options: { db?: Db } = {}): Promise<ImplicitDepot> {
+  return withTenant(
+    actor.tenantId,
+    async (tx) => {
+      try {
+        const depot = await resolveDepot(tx, actor.tenantId, undefined)
+        return depot ? { kind: 'single', name: depot.name } : { kind: 'none' }
+      } catch (err) {
+        if (err instanceof AppError && err.code === 'DEPOT_REQUIRED') return { kind: 'multi' }
+        throw err
+      }
+    },
+    options.db,
+  )
 }
 
 /**

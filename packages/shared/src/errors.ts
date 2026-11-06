@@ -108,7 +108,10 @@ export const ERROR_CODES = {
     retryable: false,
     // Birden çok depo varken hangisinden çıkıldığını sunucu tahmin edemez;
     // tahmin etseydi stok yanlış depodan düşerdi.
-    tr: () => 'Bu işletmede birden fazla depo var; hareket için depo seçilmeli',
+    tr: (d) =>
+      d.reason === 'INVENTORY_HAS_DEPOT'
+        ? 'Bu işletmede depo var; stok düzeltmesi için depo seçilmeli'
+        : 'Bu işletmede birden fazla depo var; hareket için depo seçilmeli',
   },
   UNASSIGNED_OUT_ONLY: {
     http: 400,
@@ -122,10 +125,11 @@ export const ERROR_CODES = {
     retryable: false,
     // Envanter güncellemesi: önizlemeden sonra depoda hareket oldu ya da üründe
     // depoya atanmamış stok var. Dosyadaki değer sessizce yazılsaydı aradaki
-    // satış ya da mal kabulü kaybolurdu.
+    // satış ya da mal kabulü kaybolurdu. Bu hatayı yalnız yönetici alır
+    // (envanter düzeltmesi `count:approve` ister); depoya atama yolu da onun.
     tr: (d) =>
       d.reason === 'UNASSIGNED'
-        ? 'Bu üründe depoya atama bekleyen stok var; envanter satırı yazılmadı'
+        ? 'Bu üründe depoya atama bekleyen stok var; envanter satırı yazılmadı. Önce ürün sayfasından depoya atayın'
         : 'Depodaki miktar önizlemeden sonra değişti; dosyadaki değer yazılmadı',
   },
   INVALID_QUANTITY: {

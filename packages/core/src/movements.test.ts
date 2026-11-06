@@ -248,6 +248,18 @@ describe('createMovement - BOŞ yolu: doğrulama', () => {
     await expectAppError(call(boss, req({ reason: 'HEDIYE' })), 'VALIDATION_FAILED')
   })
 
+  it('sebepsiz istek reddedilir, stok değişmez (T243: formda varsayılan sebep yok)', async () => {
+    // Web formu sebep seçilmeden göndermiyor; o koruma tarayıcıda. Bu test
+    // sunucunun da tek başına reddettiğini kanıtlıyor: boş ya da hiç olmayan
+    // sebep sessizce bir varsayılana (ör. "Satın alma") dönmüyor.
+    const before = await getStockQty(boss, tenant.products['KAL-001']!.id, { db: app.db })
+    await expectAppError(call(boss, req({ reason: '' })), 'VALIDATION_FAILED')
+    const body = req()
+    delete (body as Record<string, unknown>).reason
+    await expectAppError(call(boss, body), 'VALIDATION_FAILED')
+    expect(await getStockQty(boss, tenant.products['KAL-001']!.id, { db: app.db })).toBe(before)
+  })
+
   it('cihaz saati olmadan istek kabul edilmez', async () => {
     const body = req()
     delete (body as Record<string, unknown>).clientCreatedAt

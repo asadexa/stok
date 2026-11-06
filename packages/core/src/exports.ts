@@ -33,6 +33,8 @@ import {
 import { type JobRecord, enqueueJob, requesterEmail } from './jobs'
 import { type MailTransport, XLSX_CONTENT_TYPE } from './mail'
 import { parseScaled, scaledToNumber } from './numeric'
+import { awaitingAssignmentCondition } from './stock'
+import { criticalStockCondition, outOfStockCondition } from './stock-rules'
 import { parseOrThrow } from './validate'
 
 /**
@@ -115,7 +117,9 @@ function stockWhere(actor: Actor, q: ExportStockInput) {
     eq(products.tenantId, actor.tenantId),
     q.includeArchived ? undefined : isNull(products.archivedAt),
     q.category ? eq(products.category, q.category) : undefined,
-    q.onlyCritical ? sql`COALESCE(${currentStock.qty}, 0) <= ${products.minStock}` : undefined,
+    q.onlyCritical ? criticalStockCondition() : undefined,
+    q.onlyOutOfStock ? outOfStockCondition() : undefined,
+    q.awaitingAssignment ? awaitingAssignmentCondition(actor.tenantId) : undefined,
     // `listStock` ile BİREBİR aynı koşul (tr_norm, hem ad hem stok kodu).
     // İki yerde farklı yazılsaydı ekranda 12 satır görüp Excel'de 13 satır
     // almak mümkün olurdu ve hangisinin doğru olduğu belli olmazdı.

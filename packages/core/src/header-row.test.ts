@@ -105,7 +105,7 @@ describe('ürün dosyası', () => {
     ])
     // Miktar sütunu sessizce yok sayılmıyor; uyarı envanter ekranını gösteriyor.
     expect(file.ignoredQtyColumns).toEqual(['Envanter Miktarı'])
-    expect(importNotices(file.ignoredQtyColumns ?? [])[0]).toContain('Envanteri güncelle')
+    expect(importNotices(file.ignoredQtyColumns ?? [], file.columns)[0]).toContain('Envanteri güncelle')
   })
 
   it('başlığı 1. satırda olan dosyada davranış aynı', async () => {

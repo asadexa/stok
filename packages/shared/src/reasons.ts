@@ -50,6 +50,13 @@ export interface MovementReasonMeta {
   /** Liste fiyatının kaynağı. Kural sebeple birlikte duruyor ki ikisi
       ayrı düşemesin — `direction` ile aynı gerekçe. */
   priceBasis: PriceBasis
+  /**
+   * Depo transferinin bir bacağı (T223). Toplam stok değişmiyor; mal yalnız
+   * yer değiştiriyor. Günlük giriş/çıkış göstergeleri bu sebepleri sayarsa
+   * her atama hem giriş hem çıkış olarak görünür ve işletmenin hareketini
+   * olduğundan büyük gösterirdi.
+   */
+  transfer?: true
 }
 
 export const MOVEMENT_REASONS = {
@@ -66,6 +73,16 @@ export const MOVEMENT_REASONS = {
     userSelectable: false,
     priceBasis: null,
   },
+  // Transfer bacakları yalnız `transferStock`'tan, çift olarak ve aynı
+  // `transfer_id` ile yazılıyor. Elle seçilebilseydi tek bacaklı "transfer"
+  // toplam stoğu sessizce değiştirirdi.
+  TRANSFER_IN: {
+    direction: 'IN',
+    tr: 'Depo transferi (giriş)',
+    userSelectable: false,
+    priceBasis: null,
+    transfer: true,
+  },
 
   // --- ÇIKIŞ ---
   SALE: { direction: 'OUT', tr: 'Satış', userSelectable: true, priceBasis: 'SALE' },
@@ -80,6 +97,13 @@ export const MOVEMENT_REASONS = {
     tr: 'Sayım düzeltmesi (-)',
     userSelectable: false,
     priceBasis: null,
+  },
+  TRANSFER_OUT: {
+    direction: 'OUT',
+    tr: 'Depo transferi (çıkış)',
+    userSelectable: false,
+    priceBasis: null,
+    transfer: true,
   },
 } as const satisfies Record<string, MovementReasonMeta>
 
@@ -114,6 +138,21 @@ export function selectableReasons(direction: MovementDirection): MovementReason[
  */
 export function toDelta(qty: number, reason: MovementReason): number {
   return reasonDirection(reason) === 'IN' ? qty : -qty
+}
+
+/** Transfer bacakları; günlük giriş/çıkış göstergelerinden dışlanır (T223). */
+export const TRANSFER_REASONS: readonly MovementReason[] = MOVEMENT_REASON_VALUES.filter(
+  (r) => (MOVEMENT_REASONS[r] as MovementReasonMeta).transfer === true,
+)
+
+/** SQL listesi: `('TRANSFER_IN', 'TRANSFER_OUT')`. Sorgular ve CHECK aynı kaynaktan (INV-9). */
+export function transferReasonsSqlList(): string {
+  return `(${TRANSFER_REASONS.map((r) => `'${r}'`).join(', ')})`
+}
+
+/** Transfer satırında `transfer_id` zorunlu, başka satırda yasak (DB CHECK, T223). */
+export function transferIdCheckConstraint(): string {
+  return `(reason IN ${transferReasonsSqlList()}) = (transfer_id IS NOT NULL)`
 }
 
 /**

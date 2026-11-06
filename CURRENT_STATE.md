@@ -4,23 +4,33 @@ Yalnız BUGÜNÜN gerçeği. Her merge'te ya da durum değiştiğinde güncellen
 satırlar silinir (tarihçe git'te). Ayrıntı yazılmaz: işler → `TODOS.md`,
 kararlar → `DECISIONS.md`, model → `PROJECT_BRAIN.md`.
 
-**Tarih:** 2026-11-03 · **Depo:** `KeremGerede/stok` (eski adres `asadexa/stok` GitHub'da
+**Tarih:** 2026-11-05 · **Depo:** `KeremGerede/stok` (eski adres `asadexa/stok` GitHub'da
 yönlendiriliyor) · **Çalışma branch'i:** `development` · **Kararlı dal:** `main` (varsayılan dal).
-`main` = `6ac17a7` (PR #16, squash); `development` bu commit'i merge ile içeriyor, uygulama kodu
-iki dalda aynı. Dal modeli `OPS-13`: `master` fast-forward ile ilerletilip `main` olarak yeniden
+`main` = `development` = `7f04c2d` (PR #19, merge commit; CI #116 ve #117 yeşil, üç iş). Dal modeli `OPS-13`: `master` fast-forward ile ilerletilip `main` olarak yeniden
 adlandırıldı; `development` → `main` PR'ları merge commit ile birleşir. Ruleset'ler: `main` PR, üç zorunlu CI işi, silme ve force-push yasağı; `development`
 silme ve force-push yasağı; `backup/*` silme ve force-push yasağı. Yedek dallar
 `backup/master-pre-migration` (`dac05ff`) ve `backup/development-pre-migration` (`5199069`).
 
 ## Deploy
 
-**AWS Lightsail staging/demo (kullanıcı bildirimi, 2026-11-03; `OPS-14`):** uygulama Lightsail'de
-çalışıyor; müşteri üretim ortamı değil. Sunucuda Git HEAD `f64e716`, yerel `development` dalında,
-`origin/development`'ı izliyor; detached değil (kullanıcının sunucu terminalinden doğrulaması).
-Çalışan Docker imajının kaynak commit'i **kanıtlanmadı** (imajda commit etiketi yok); sunucuda
-otomatik çekme ya da dağıtım olmadığı **kanıtlanmadı**. Kalan sunucu doğrulamaları GitHub
-geçişinden sonra. Bu repoda dağıtım kaydı, sürüm etiketi ya da deploy iş akışı yok. Otomatik şifreli S3 yedeği üzerinde çalışma sürüyor, tamamlanmadı. Üretim (gerçek
-müşteri verisi) yok; önkoşullar TODOS T42. Vercel/Supabase hesabı yok.
+**AWS Lightsail staging/demo (`OPS-14`):** müşteri üretim ortamı değil. Stok ve Dosya Sistemi
+aynı sunucuda.
+
+Dağıtım 2026-11-05 (kullanıcı bildirimi; sunucu bu repodan doğrulanamıyor):
+- Dağıtılan commit `7f04c2d`. Sunucunun Git HEAD'i bu commit'e detached olarak sabitlendi
+  (SSH üzerinden doğrulandı); runbook L.3'teki `git checkout <commit>` yoluyla aynı.
+- Çalışan imaj `stok-web:7f04c2d` (ID `8c8e6285cf2b`). Geri dönüş imajı
+  `stok-web:rollback-20261105` (ID `32114e6af428`).
+- Sunucudaki altı Docker konteyneri healthy.
+- Dağıtım öncesi şifreli S3 yedeği alındı. `f64e716..7f04c2d` arasında migration yok.
+- Canlı UAT: barkodlu ve barkodsuz iki ürün aktarıldı; açılış stoğu 2 adet. Aynı CSV ikinci kez
+  aktarıldı: yeni ürün ve mükerrer devir oluşmadı, stok 2 adette kaldı (T228).
+- **Canlı test ürünleri temizlenmedi** (T238).
+
+Açık kalanlar: ayrı S3 okuma hesabıyla kurtarma kontrolü ve ilk zamanlanmış günlük yedeğin
+(5 Kasım 04.30 TSİ) doğrulanması (T129); derlemenin Google Fonts bağımlılığı (T230). Sunucuda
+otomatik çekme ya da dağıtım olmadığı bu repoda kayıtlı değil. Repoda sürüm etiketi ya da deploy
+iş akışı yok. Üretim (gerçek müşteri verisi) yok; önkoşullar TODOS T42. Vercel/Supabase hesabı yok.
 
 **Docker staging hazırlığı (S1, 2026-10-28):** AWS Lightsail staging
 (T144) için `Dockerfile`, `compose.production.yml` ve `.env.production.example` hazır.
@@ -182,20 +192,21 @@ bekleyen yok. Çok depo ve Envanteri Güncelle (F-15) manuel kabul testinde kabu
   (kullanıcı bildirimi, 2026-11-03, yerel `stok_uat`): 2.000 satırda iptal ve yeniden yükleme
   mükerrer devirsiz tamamlandı; 20.000 devirli satır ~25 dk, hatasız (çekirdekte ölçüm ~23 dk).
   Sekme açık kalmalı; süre T235. Lightsail'de bellek ölçümü yok (T171 açık). Çok depolu işletmede
-  önizleme yazılamayacak devri yazılacak gibi gösteriyor (T234). T171 çalışmasında
+  önizleme devri "atlanacak" sayıyor, tek depoluda depo adını söylüyor (T234, `development`; manuel
+  kabul bekliyor). T171 çalışmasında
   yerel demo veritabanına migration uygulanmadı; ekran için 0013 gerekir (`pnpm demo` uygular). Devirde geçmiş tarihli fiyat yok (T172); birim değişimi sonrası eski veri denetlenmiyor (T170).
 - **Kuyruğa alınan büyük dışa aktarma**: cron'da işleyicisi yok, çalışmıyor (T216, kod okumasıyla).
 - **Çok depo ve Envanteri Güncelle** (`PRD-17`, `PRD-18`, F-15): Dilim 1–4 ve değer dürüstlüğü
   kodda; manuel kabul testi U0–U12 geçti (T218–T220 kapandı; T222'de kalan test notu). UAT
-  bulguları: girişte görünen Atanmamış Stok seçeneği (T236, sunucu reddediyor), eski depo uyarısı
-  (T237). Var: envanter dosyası (depo açan tek
+  bulguları girişte görünen Atanmamış Stok seçeneği (T236) ve eski depo uyarısı (T237)
+  `development`'ta düzeltildi; manuel kabul bekliyor. Var: envanter dosyası (depo açan tek
   yol), Envanteri Güncelle ekranı, ürün sayfasında depo dağılımı, harekette depo seçimi, Atanmamış
   Stok'tan çıkış, barkodsuz ürün formu ve ürün kimliğiyle hareket; panel ve kategori değeri fiyatı
-  bilinmeyen ürünü 0 saymıyor, sayısını gösteriyor. Yok: deposu bilinmeyen eski stoğun depoya
-  atanması (T223; envanter dosyası da böyle bir ürünün satırını atlıyor), tek ürün sayım
-  düzeltmesi (T232), depolar arası transfer (T233), "Depoya atama bekliyor" rozeti (T221), elle
-  depo açma/arşivleme (T226), fiyat geçmişi ve toplu
-  satış fiyatı (T224), toplu mal kabulü (T225).
+  bilinmeyen ürünü 0 saymıyor, sayısını gösteriyor. `development`'ta, `main`'de ve Lightsail'de
+  değil: tek ürün sayım düzeltmesi (T232, kabul edildi); depoya atama (T223), depolar arası
+  transfer (T233), stok listesinde "Depoya atama bekliyor" rozeti ve süzgeci (T221) (manuel kabul
+  bekliyor). Yok: elle depo açma/arşivleme (T226), fiyat geçmişi ve toplu satış fiyatı (T224),
+  toplu mal kabulü (T225).
 - **Ürün görseli**: yalnız URL; yükleme yok (T136).
 - **Kritik stok**: yalnız e-posta, push yok.
 - **Konum yönetimi**: arayüz yok.
@@ -299,16 +310,34 @@ workstream'i gelir. Kalan işler:
 - Kapanış: bu belge senkronunun `development` → `main` PR'ı (merge commit ile) ve ardından
   `development`'ın `main`'e fast-forward edilmesi.
 - Eski 8 Dependabot PR'ı için karar: `development`'a yönlendirme ya da kapatma (T140).
-- Bilinen sınırlar listesinin kullanıcı tarafından kabulü (kayıtlı değil): T221 rozeti, T223, T226, T227, T232, T233, T216, T208,
+- Bilinen sınırlar listesinin kullanıcı tarafından kabulü (kayıtlı değil): T221 rozeti, T223, T226, T227, T233, T216, T208,
   T234–T237.
 - Lightsail sunucu doğrulamaları (`OPS-14`, T171 bellek ölçümü), T222 test notu.
-Kullanıcı testinde bulunan eksikler T232 (tek ürün sayım düzeltmesi), T223 (eski stoğun depoya
-atanması) ve T233 (depolar arası transfer).
+Kullanıcı testinde bulunan eksikler T223 (eski stoğun depoya atanması) ve T233 (depolar arası
+transfer); T232 (tek ürün sayım düzeltmesi) kapandı.
 
 **Yol haritası sırası** (kullanıcı kararı 2026-10-27; 2026-10-22 sırasının üstüne):
 1. **Çok depo ve Envanteri Güncelle**: Dilim 1–4 ve T221'in değer kısmı kodda ve kabul testinde
    geçti (2026-11-03). T171 (20.000 satır; `ARC-15`, ADR-007, `DAT-20`, S21, F-02) kabul testinde
-   geçti; kalan Lightsail ölçümü. Sıradaki çok depo işleri T232, T223, T233 ve T221 rozeti.
+   geçti; kalan Lightsail ölçümü. Çok depo işleri T223, T233, T221 rozeti, T234, T236 ve T237
+   geliştirildi (aşağıda); toplu manuel kabul bekliyor.
+   T232 (tek ürün sayım düzeltmesi) `development`'ta; kullanıcı kabul testi geçti (2026-11-05,
+   izole veritabanı). `main`'de ve Lightsail'de yok.
+   T223 (atanmamış stoğu depoya atama; migration 0016) `development`'ta; geliştirme tamamlandı,
+   manuel kabul testi ertelendi (T233 ile birlikte yapılacak). `main`'de ve Lightsail'de yok.
+   Dağıtımda migrate adımı ve web geri dönüş sınırı var (runbook L.3).
+   T233 (depolar arası transfer; aynı kapı, yeni migration yok) `development`'ta; geliştirme
+   tamamlandı, manuel kabul testi T223'le birlikte yapılacak. `main`'de ve Lightsail'de yok.
+   T221 rozeti, T234, T236 ve T237 geliştirildi (`development`'ta; `main`'de ve Lightsail'de yok; şema
+   değişikliği yok). ERP ürün dosyasında fiyatın kuruşa yuvarlanması (T241, `PRC-15`) geliştirildi
+   (`development`'ta; `main`'de ve Lightsail'de yok). ERP toplam farkı kaynak dosya olmadan açıklanamıyor (T242).
+   Giriş / Çıkış formunda varsayılan sebep kaldırıldı (T243, `PRD-24`; `development`'ta, `main`'de
+   ve Lightsail'de yok). Kritik stok ve "Stok yok" ayrıldı, yeni ürün eşiği 3, çalışan eşiği dar
+   izinle değiştirir (T244, `PRD-25`; `development`'ta `bdf749d`, CI #127 başarılı; `main`'de ve
+   Lightsail'de yok; şema değişikliği yok). Ürün aktarımında sessiz kayıplar kapatıldı: boş hücre
+   kategori/marka/görseli silmiyor, okunmayan sütunlar ve barkod çakışması önizlemede (T247,
+   `DAT-28`; geliştirildi, commit edilmedi). Toplu manuel kabul (T223, T233, T221, T234, T236,
+   T237, T241, T243, T244, T247) bekliyor; başlatılmadı.
 2. **T201 gerçek tedarikçi API'si**: ilk hedef, erişimi sağlanabilen bir sağlayıcıyla uçtan uca.
    Sağlayıcı, kimlik doğrulama ve yaklaşım PLAN'da kanıtla seçilir; gerçek sağlayıcı seçilmeden genel
    entegrasyon iddia edilmez. Çok depo kritik yolunun dışında.

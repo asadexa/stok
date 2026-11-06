@@ -49,7 +49,7 @@ Katman kuralları `PROJECT_BRAIN` §5, ilkeler §12. Kayıtlarda yalnız özelli
 | F-14 | Windows tek tıkla başlatma (`BASLAT.bat`) | Uygulandı |
 | F-12 | B2B tedarikçi verisi V1 | **Geliştiriliyor** (Dilim 1 bitti, UAT kabul 2026-10-22; Dilim 2 T201'den sonra) |
 | F-13 | İnternetten erişilebilir test ortamı | **Geliştiriliyor** (S1 imajı ve compose kodda; Lightsail staging/demo'da çalışıyor (kullanıcı bildirimi, `OPS-14`); sunucu `development` dalında, Git HEAD `f64e716`; çalışan imajın commit'i ve otomatik dağıtım yokluğu kanıtlanmadı) |
-| F-15 | Envanteri Güncelle: depo bazlı envanter dosyası ve tek dosyayla ilk kurulum | **Geliştiriliyor** (Dilim 1–4 kabul edildi 2026-11-03; kalan T221 rozeti, T223, T232, T233) |
+| F-15 | Envanteri Güncelle: depo bazlı envanter dosyası ve tek dosyayla ilk kurulum | **Geliştiriliyor** (Dilim 1–4 kabul edildi 2026-11-03; T232 kabul edildi 2026-11-05; T223 ve T233 geliştirildi, manuel kabul bekliyor; kalan T221 rozeti) |
 
 ---
 
@@ -65,7 +65,7 @@ Katman kuralları `PROJECT_BRAIN` §5, ilkeler §12. Kayıtlarda yalnız özelli
   listeler tek kaynaktan (INV-9).
 - **Dosyalar:** `packages/core/src/products.ts`, `packages/db/src/schema.ts`, `apps/web/src/app/(panel)/urunler/`.
 - **Sınırlar:** ürün formu barkodsuz ürünü kabul ediyor ve son barkod da kaldırılabiliyor
-  (`LAST_BARCODE` kaldırıldı; T220, `1b759a6`, kabul testi bekliyor); ürün aktarımı yeni üründe hâlâ
+  (`LAST_BARCODE` kaldırıldı; T220, `1b759a6`, manuel kabul 2026-11-03); ürün aktarımı yeni üründe hâlâ
   barkod istiyor (T228). Stok listesi araması barkodu kapsamıyor (T211). Görsel yalnız URL (T136);
   birim değişimi sonrası eski veri denetlenmiyor (T170).
 
@@ -82,6 +82,23 @@ Katman kuralları `PROJECT_BRAIN` §5, ilkeler §12. Kayıtlarda yalnız özelli
     `GET /api/rapor/aktarim?kayit=`): hatalı, yazılamayan, çakışan, belirsiz, işlenmeyen satırlar
     ve devir notları.
   - Satır bazlı hata; güncellemede dosyada olmayan sütuna dokunulmaz.
+  - Boş hücre mevcut değeri değiştirmez: alış ve satış fiyatı (`PRC-14`), kritik seviye, kategori,
+    marka ve görsel (`DAT-28`, T247). `0` fiyatı sıfıra günceller. İlgili sütun varsa önizleme
+    hangi sütunlarda boş hücrenin korunduğunu söyler. Silmek ürün formundandır.
+  - Okunmayan sütunlar (eş ad listesinde olmayan başlıklar, ör. "Ortalama Değer") ve aynı alana
+    eşlenen ikinci başlık önizlemede adıyla söylenir; o zaman okunan sütunlar da listelenir.
+    Sunucuya yalnız başlıklar gider (T247).
+  - Barkod çakışması önizlemede satır hatası: barkod başka bir ürünün aktif barkoduysa ya da
+    dosyada iki farklı stok koduna verilmişse. Ürünün kendi barkodu ve arşivli barkod çakışma
+    değil. Önizlemeden sonra başkası barkodu alırsa: yeni ürün satırı yazılamaz; güncellemede ürün
+    bilgisi yazılmış olur, rapor "Ürün bilgisi güncellendi; barkod eklenemedi" der (kayıtlı
+    aktarımda `Çakışma`) ve devir denenmez (T247).
+  - İkiden fazla ondalıklı alış ve satış fiyatı kuruşa yarım yukarı yuvarlanır (`PRC-15`; metin ve
+    tamsayıyla, `roundTurkishPriceToCents`): önizleme değişecek fiyat hücresi sayısını, satırda
+    dosyadaki ve kaydedilecek değeri ve ERP toplamıyla fark olabileceğini söyler. Pozitif olup
+    0,00'a inen fiyat satır hatası; eksi, belirsiz ve üst sınırı aşan değer yuvarlanmadan reddedilir.
+    Devir yuvarlanmış alış fiyatıyla yazılır. Ürün ve hareket formları ile tedarikçi fiyatı
+    değişmedi (T241; manuel kabul bekliyor).
 - **Neden böyle:** dosyalar çoğu zaman sütunları kayık ve birimleri karışık gelir; önizleme
   zorunlu, hatalar satır bazlı (tek bozuk satır yüzlerce doğru satırı düşürmesin). Eksik sütun
   "temizle" değil "dokunma": yalnız ad ve kod içeren düzeltme dosyası fiyatları silmesin.
@@ -109,7 +126,7 @@ Katman kuralları `PROJECT_BRAIN` §5, ilkeler §12. Kayıtlarda yalnız özelli
   (`<x:workbook>`, .NET Open XML SDK ve ChatGPT çıktısı) okuyamıyor; bu parçaların öneki ExcelJS'ten
   önce JSZip ile atılıyor.
 - **Kararlar:** `ARC-15` (ADR-007), `DAT-18` (açılış stoğu), `DAT-20` (belirsiz sayı), `PRC-05`
-  (devirde fiyat zorunlu).
+  (devirde fiyat zorunlu), `PRC-14` ve `DAT-28` (boş hücre).
 - **Dosyalar:** `packages/core/src/product-file.ts`, `sheet.ts` (tarayıcıda da çalışır),
   `import.ts` (önizleme, `applyRow`), `import-runs.ts`; `packages/shared/src/import-runs.ts`;
   `packages/db/migrations/0013_import_runs.sql`; `apps/web/src/app/(panel)/urunler/aktar/`
@@ -125,8 +142,11 @@ Katman kuralları `PROJECT_BRAIN` §5, ilkeler §12. Kayıtlarda yalnız özelli
   Barkod isteğe bağlı (PRD-19, T228): barkodsuz ürün stok koduyla tanınır; tekli barkodu olmayan
   üründe devir ürün kimliğiyle yazılır (`DAT-22`), tekli barkod varsa barkodla. Barkodsuz satırda
   Barkod Türü ya da Koli İçi Adet doluysa satır hatadır.
-  Birden çok depolu işletmede devir `DEPOT_REQUIRED` ile yazılmaz (satır "devir yazılamadı"
-  gösterir; Envanteri Güncelle'ye yönlendirme T218); önizleme bunu önceden göstermiyor (T234).
+  Devrin deposu yazma kapısının kuralıyla (`implicitDepot`, `DAT-23`; `PRD-23`): deposuz işletmede
+  depo yok, tek depolu işletmede önizleme depo adını söyler, birden çok depolu işletmede önizleme
+  devri "atlanacak" sayar ve sonuç `SKIPPED` "devir atlandı" olur, Envanteri Güncelle'ye yönlendirir.
+  Karar yine yazma anında: önizlemeden sonra ikinci depo açılırsa devir yazılmaz (T234; manuel
+  kabul bekliyor).
   20.000 satır ~25 dk sürüyor (T235). Deftere bağlı aktarım kaydı 30 günde silinmez
   (`DAT-25`); bugün kayda bağlanan hareket yok.
 
@@ -140,12 +160,18 @@ Katman kuralları `PROJECT_BRAIN` §5, ilkeler §12. Kayıtlarda yalnız özelli
   kilit altında; sunucuya özel envanter seçeneği (`count:approve`; sebep ve işaret farktan,
   önizlemeden sonra değişen depo ya da atanmamış stok `STOCK_CHANGED`, `DAT-24`). Depo miktarı
   defterden türetilir, `current_stock` toplam kalır (`DAT-21`, ADR-008).
-- **Depo arayüzü (Dilim 4, `1b759a6`, T220; kabul testi bekliyor):** hareket formu depo soruyor
+- **Depo arayüzü (Dilim 4, `1b759a6`, T220; manuel kabul 2026-11-03):** hareket formu depo soruyor
   (depo yoksa eskisi gibi, tek depo önceden seçili, birden çok depoda zorunlu; seçenekte o depodaki
   miktar). Çıkışta Atanmamış Stok kaynağı (`fromUnassigned`; yalnız çıkış, yalnız mevcut atanmamış
-  miktardan, `allowNegative` aşamaz). Barkodsuz ürün stok koduyla ya da ürün sayfasından
-  `?urunId=` ile harekete geçer. Depolar arası transfer (T233), eski stoğun depoya atanması (T223)
-  ve tek ürün sayım düzeltmesi (T232) yok.
+  miktardan, `allowNegative` aşamaz). Çıkış sebebi seçilene kadar seçenek gizli ve `disabled`,
+  çıkıştan girişe geçince seçim temizlenir (`unassigned-option.tsx`; sunucu reddi
+  `UNASSIGNED_OUT_ONLY` yerinde; T236, manuel kabul bekliyor). Formda varsayılan sebep yok:
+  her okutmada hiçbir sebep seçili gelmez, sebep seçilmeden Enter ya da Kaydet hareket yazmaz;
+  hata dönüşünde seçim korunur, başarılı kayıttan sonra hatırlanmaz (`PRD-24`; T243, manuel kabul
+  bekliyor). Barkodsuz ürün stok koduyla ya da ürün sayfasından
+  `?urunId=` ile harekete geçer. Eski stoğun depoya atanması (T223) ve depolar arası transfer
+  (T233) ürün sayfasında, ikinci yazma kapısı `transferStock` ile (`DAT-26`, `DAT-27`, F-15); tek
+  ürün sayım düzeltmesi de ürün sayfasında (T232, `PRD-20`).
 - **Neden böyle:** stok bir sayı değil, değiştirilemez defterin toplamı; geçmiş ancak böyle
   sorgulanabilir. Tek yazma kapısı ve DB tetikleyicisi defter ile stoğun ayrışmasını önler;
   satır kilidi eşzamanlı çıkışların stoğu yetkisiz eksiye düşürmesini engeller.
@@ -156,10 +182,8 @@ Katman kuralları `PROJECT_BRAIN` §5, ilkeler §12. Kayıtlarda yalnız özelli
   başka kiracının depo ve ürün kimliği NOT_FOUND; toplam yetse de depo yetmiyorsa çıkış reddi;
   K1 örneği (10 + 20 → 5 + 20 = 25); `STOCK_CHANGED`; tekrar anahtarı ikinci hareket üretmiyor;
   defter = projeksiyon.
-- **Sınırlar:** düzeltme / ters hareket akışı yok (T127); sayım yok (T155). Hareket formunda depo
-  seçimi ve ürün kimliğiyle hareket yok (T220): depolar açılınca birden çok depolu işletmede manuel
-  hareket `DEPOT_REQUIRED` alır. Deposu bilinmeyen eski stoktan çıkış (A1, T220) ve depoya atama
-  (T223) yok. Bugün depo açan bir yol yok (ilk yol T218).
+- **Sınırlar:** düzeltme / ters hareket akışı yok (T127); sayım yok (T155). Depo yalnız envanter
+  dosyasıyla açılır (T218); elle açma, silme ve arşiv yok (T226).
 
 ### F-04 — Fiyat defteri ve kasa açığı
 - **İhtiyaç:** liste fiyatından sapmayı engellemek değil, gizlenemez yapmak.
@@ -192,12 +216,22 @@ Katman kuralları `PROJECT_BRAIN` §5, ilkeler §12. Kayıtlarda yalnız özelli
 ### F-07 — Panel, stok listesi, kritik stok ve bildirim
 - **İhtiyaç:** "bir sorun var mı?" sorusuna tek bakışta cevap.
 - **Akış:** panel uyarılar → bugün → son hareketler; ürün bazlı `min_stock` eşiği; bildirim zili ve e-posta.
+  Kritik: 0 < stok ≤ eşik; "Stok yok": stok ≤ 0, ayrı panel kartı ve "Sadece stok yok" süzgeci; zil,
+  kritik sayılar ve kritik stok e-postası stok yok ürünlerini saymaz. Kural tek kaynakta
+  (`packages/shared/src/stock-levels.ts`, `packages/core/src/stock-rules.ts`). Yeni ürünün eşiği 3
+  (yalnız yeni ürünler); çalışan eşiği ürün sayfasındaki dar formdan değiştirir (`PRD-25`; T244,
+  manuel kabul bekliyor).
 - **Neden böyle:** yönetici önce sorunu görmeli, sonra tabloyu; tasarım ilkeleri `PROJECT_BRAIN` §13.
-- **Dosyalar:** `apps/web/src/app/(panel)/panel/`, `stok/`, `apps/web/src/components/alert-bell.tsx`.
+- **Dosyalar:** `apps/web/src/app/(panel)/panel/`, `stok/`, `apps/web/src/components/alert-bell.tsx`,
+  `components/badge.tsx`, `urunler/[id]/` (eşik formu), `packages/core/src/products.ts`
+  (`setProductThreshold`).
 - **Sınırlar:** push bildirimi yok; tükenme tahmini ertelendi (T179). Panel ve kategori değeri
   yalnız alış fiyatı bilinen ürünleri topluyor, fiyatı olmayan stoklu ürün sayısını gösteriyor
   (`PRC-12`; `7fe8770`, T221). Stok listesi yalnız toplamı gösteriyor; depo dağılımı ürün
-  sayfasında (T219).
+  sayfasında (T219). Depolu işletmede artı atanmamış stoklu ürün listede "Depoya atama bekliyor"
+  rozeti alır, "Sadece depoya atama bekleyen" süzgeciyle bulunur; Excel aynı koşulu kullanır
+  (`awaitingAssignmentCondition`); açıklama yetkiye göre (`PRD-23`; T221, manuel kabul bekliyor).
+  Ölçüm (20.000 ürün, 98.000 hareket, 2026-11-05): ilk sayfa 66 → 84 ms, süzgeç ~160 ms.
 
 ### F-08 — Raporlar ve Excel dışa aktarma
 - **İhtiyaç:** muhasebeciye ve yöneticiye Excel.
@@ -392,6 +426,12 @@ Katman kuralları `PROJECT_BRAIN` §5, ilkeler §12. Kayıtlarda yalnız özelli
   güncelle ekranı ve ürün sayfasında salt okunur depo dağılımı (`f9a8bef`, T219;
   `apps/web/src/app/(panel)/stok/envanter/`); harekette depo seçimi ve Atanmamış Stok (`1b759a6`,
   T220, F-03). Depo bugün yalnız envanter dosyasıyla açılıyor (elle açma/arşiv T226).
+- **Uygulanan (T232, 2026-11-05, `development`; kullanıcı kabulü 2026-11-05; dağıtılmadı):** ürün sayfasında "Stoğu düzelt
+  (sayım)" bölümü (`PRD-20`): yönetici depo seçip sayılan miktarı girer, kaydetmeden önce
+  "mevcut → hedef, fark" görünür; kapı `DAT-24` (deposuz işletmede hedef toplam stok). Sayfa
+  açıldıktan sonra stok değiştiyse düzeltme yazılmaz; aynı form iki kez gönderilirse tek hareket.
+  Dosyalar `apps/web/src/app/(panel)/urunler/[id]/page.tsx`, `stock-adjust.tsx`; testler
+  `depots.test.ts` "deposuz envanter düzeltmesi", e2e `t232-stok-duzeltme.spec.ts`.
 - **Akış (onaylı PLAN 2026-10-27; Dilim 2–3'te uygulandı):** T171 hattı (`ARC-15`) ikinci aktarım türüyle →
   önizleme: değişecek (eski → yeni), değişmeyecek, yeni ürün, yeni depo, hata, belirsiz eşleşme,
   depoya atama bekliyor → onay (aynı içerikte "Bu yeni bir sayım", sunucuda zorunlu) → parça parça
@@ -404,15 +444,30 @@ Katman kuralları `PROJECT_BRAIN` §5, ilkeler §12. Kayıtlarda yalnız özelli
   tekrarı 0 yeni hareket yazar; aynı içerik uyarı verir; önizlemeden sonra değişen stok `Çakışma`
   olur; boş miktar, boş `Ambar` ve negatif miktar satır hatasıdır; çalışan ekranı açamaz; defter
   = projeksiyon.
-- **Sınırlar:** deposu bilinmeyen eski stoğu olan ürünün satırı yazılmaz (depoya atama T223);
+- **Uygulanan (T223, 2026-11-05, `development`; kullanıcı kabulü bekliyor; dağıtılmadı):** ürün
+  sayfasında "Atanmamış stoğu depoya ata" (`PRD-21`): yönetici hedef depoyu ve miktarı (varsayılan
+  tamamı) seçer, kaydetmeden önce iki kova ve değişmeyen toplam görünür. Kapı `transferStock`
+  (`DAT-26`, `DAT-27`; migration 0016). Tam atamadan sonra "Stoğu düzelt" açılır. Dosyalar
+  `urunler/[id]/page.tsx`, `assign-form.tsx`; testler `transfers.test.ts`, e2e
+  `t223-depoya-atama.spec.ts`. Manuel kabul ertelendi; T233'le birlikte yapılacak.
+- **Uygulanan (T233, 2026-11-05, `development`; manuel kabul bekliyor; dağıtılmadı):** ürün
+  sayfasında "Depolar arası transfer" (`PRD-22`): yönetici artı stoklu bir kaynak depo, ondan
+  farklı bir hedef depo ve miktarı seçer; kaydetmeden önce iki depo ve değişmeyen toplam görünür. Aynı kapı `transferStock` (`DAT-27`), yeni migration yok. Kaynak
+  yeterliliği yalnız kaynak depoda, ürün kilidi altında. Dosyalar `urunler/[id]/page.tsx`,
+  `transfer-form.tsx`, `packages/shared/src/schemas.ts` (not öneki ve payı form ile sunucu için tek
+  yerde); testler `transfers.test.ts` (T233 bölümü), e2e `t233-depo-transferi.spec.ts`.
+- **Sınırlar:** deposu bilinmeyen eski stoğu olan ürünün envanter satırı yazılmaz ve ürün
+  sayfasından düzeltilemez; önce depoya atanır (T223). Eksi atanmamış stok atanamaz (T239);
   dosyada olmayan stoklu ürün sayısı gösterilmez ve ERP çıktısının sıfır satırları atlama riski
   açık (T227); manuel sütun eşleştirme yok (T229); depo silme ya da arşivleme yok (T226); satış
   fiyatı güncellemesi yok (`PRC-13`, T224); sekme kapanırsa aktarım durur (`ARC-15`).
 - **Kabul durumu:** manuel kabul testi 2026-11-03, U0–U12 13/13 geçti (kullanıcının testi; izole
   `stok_uat`, taze sentetik kiracı; 22.006 üründe defter = projeksiyon). Sapmalar: girişte görünen
-  Atanmamış Stok seçeneği (T236, sunucu reddediyor), eski depo uyarısı (T237).
+  Atanmamış Stok seçeneği (T236) ve eski depo uyarısı (T237); ikisi de `development`'ta düzeltildi,
+  manuel kabul bekliyor.
 - **İşler ve sıra:** Dilim 1–4 (T217–T220) bitti; değer dürüstlüğü (T221'in değer kısmı) kodda.
-  Dilim 6 (T222) test notu bekliyor. Kalan: "Depoya atama bekliyor" rozeti
-  (T221), eski stoğun depoya atanması (T223), tek ürün sayım düzeltmesi (T232), depolar arası
-  transfer (T233), T224–T225.
+  Dilim 6 (T222) test notu bekliyor. Tek ürün sayım düzeltmesi (T232) kabul edildi. Eski stoğun
+  depoya atanması (T223), depolar arası transfer (T233), stok listesinde "Depoya atama bekliyor"
+  rozeti ve süzgeci (T221), aktarım önizlemesinde devrin deposu (T234) ve T236/T237 geliştirildi;
+  manuel kabulleri birlikte yapılacak. Kalan: T224–T225.
   Tehdit ve korumalar `SECURITY_MODEL` S22.

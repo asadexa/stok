@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import { depots, withTenant } from '@stok/db'
 import { type TestTenant, seedOpeningStock, seedTestTenant, testAdminDb, testAppDb } from '@stok/db/testing'
-import { AppError, errorText } from '@stok/shared'
+import { AppError, DEFAULT_MIN_STOCK, errorText } from '@stok/shared'
+import { sql } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { Actor } from './authz'
 import {
@@ -243,6 +244,12 @@ describe('ilk kurulum: tek dosyadan ürün, depo ve stok', () => {
     expect(await total(tenant, 'ILK-A')).toBe(12)
     expect(await qtyIn(tenant, 'ILK-B', 'Merkez Depo')).toBe(2.5)
     expect(await qtyIn(tenant, 'ILK-D', 'Merkez Depo')).toBe(3)
+    // Dosyayla açılan ürün yeni ürün varsayılan eşiğini alıyor (T244, PRD-25).
+    const [{ min } = { min: '' }] = await admin.db.execute<{ min: string }>(sql`
+      SELECT min_stock::text AS min FROM products
+       WHERE tenant_id = ${tenant.tenantId} AND sku = 'ILK-A'
+    `)
+    expect(Number(min)).toBe(DEFAULT_MIN_STOCK)
     expect(await total(tenant, 'ILK-C')).toBe(0)
 
     const products = await admin.client<{ sku: string; unit: string; purchase: string | null; sale: string | null }[]>`
@@ -650,12 +657,17 @@ describe('ürün sayfası ve ürün aktarımı (T219)', () => {
       opts,
     )
     await appendImportRows(boss, runId, { rows: file.rows }, opts)
-    await finalizeImportPreview(boss, runId, opts)
+    // Önizleme devri "yazılacak" değil "atlanacak" sayıyor (T234).
+    const preview = await finalizeImportPreview(boss, runId, opts)
+    expect(preview).toMatchObject({ openings: 0, skippedOpenings: 1 })
+    expect(preview.openingDepot).toBeUndefined()
+    expect(preview.warnings[0]!.message).toContain('Devir atlanacak: işletmede birden fazla depo var')
     let progress = await beginImportRun(boss, runId, opts)
     while (progress.status === 'RUNNING') progress = await processImportChunk(boss, runId, opts)
 
-    // Ürün açıldı, devir yazılmadı; stok sessizce bir depoya ya da atanmamışa düşmedi.
-    expect(progress).toMatchObject({ status: 'DONE', rows: { created: 1 }, openings: { failed: 1 } })
+    // Ürün açıldı, devir yazılmadı (önizlemeyle aynı: atlandı); stok sessizce
+    // bir depoya ya da atanmamışa düşmedi.
+    expect(progress).toMatchObject({ status: 'DONE', rows: { created: 1 }, openings: { skipped: 1, failed: 0 } })
     expect(await total(tenant, 'DV-1')).toBe(0)
     const report = await importRunReport(boss, runId, opts)
     expect(report[0]!.message).toContain('birden fazla depo var')

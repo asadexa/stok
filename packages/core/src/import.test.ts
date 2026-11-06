@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { type TestTenant, seedTestTenant, testAdminDb, testAppDb } from '@stok/db/testing'
+import { DEFAULT_MIN_STOCK } from '@stok/shared'
 import ExcelJS from 'exceljs'
 import JSZip from 'jszip'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -18,7 +19,7 @@ import {
   previewImport,
   templateRows,
 } from './import'
-import { getProductDetail, listBarcodes } from './products'
+import { archiveBarcode, getProductDetail, listBarcodes } from './products'
 import { listStock } from './stock'
 import { TEST_DB_NAME } from './test/db-name'
 
@@ -488,21 +489,211 @@ describe('uygulama', () => {
     expect(row.brand).toBe('Eski Marka')
   })
 
-  it('güncellemede BOŞ fiyat hücresi alanı temizliyor', async () => {
-    // Sütun dosyada VAR ama hücre boş: kullanıcı bilerek sildi.
+  it('güncellemede BOŞ fiyat hücresi mevcut alış ve satış fiyatını KORUYOR (PRC-14)', async () => {
+    // Sütun dosyada VAR ama hücre boş: ERP çıktısında olağan. Silinseydi
+    // dosyanın yeniden yüklenmesi fiyatları geri dönülmez biçimde kaybettirirdi.
     const sku = uniq('TEM-')
     await commitImport(
       boss,
-      await preview(['Stok Kodu,Ürün Adı,Barkod,Alış Fiyatı', `${sku},Ürün,${uniq('bc')},50`]),
+      await preview([
+        'Stok Kodu,Ürün Adı,Barkod,Alış Fiyatı,Satış Fiyatı',
+        `${sku},Ürün,${uniq('bc')},50,80`,
+      ]),
+      opts,
+    )
+    const second = await preview(['Stok Kodu,Ürün Adı,Alış Fiyatı,Satış Fiyatı', `${sku},Yeni Ad,,`])
+    expect(second.rows[0]?.data?.purchasePrice).toBeUndefined()
+    expect(second.rows[0]?.data?.salePrice).toBeUndefined()
+    await commitImport(boss, second, opts)
+
+    const row = (await listStock(boss, { search: sku }, opts)).rows[0]!
+    expect(row.name).toBe('Yeni Ad')
+    expect(row.purchasePrice).toBe(50)
+    expect(row.salePrice).toBe(80)
+  })
+
+  it('önizleme boş hücre kuralını yalnız ilgili sütun varsa ve o sütunları adlandırarak söylüyor', async () => {
+    const withPrice = await preview(['Stok Kodu,Ürün Adı,Satış Fiyatı,Kategori', `${uniq('NT-')},Ürün,,`])
+    const withoutPrice = await preview(['Stok Kodu,Ürün Adı', `${uniq('NT-')},Ürün`])
+
+    expect(withPrice.notices).toContain(
+      'Boş hücreler mevcut değerleri değiştirmez (Satış Fiyatı, Kategori). Bir değeri silmek ya da değiştirmek için ürün sayfasını kullanın.',
+    )
+    expect(withoutPrice.notices.some((n) => n.startsWith('Boş hücreler'))).toBe(false)
+  })
+
+  it('güncellemede BOŞ kategori, marka ve görsel hücresi mevcut değeri KORUYOR; dolu hücre değiştiriyor (DAT-28)', async () => {
+    const sku = uniq('BH-')
+    const keep = uniq('BH-')
+    const header = 'Stok Kodu,Ürün Adı,Kategori,Marka,Görsel URL'
+    await commitImport(
+      boss,
+      await preview([
+        header,
+        `${sku},İlk,Kırtasiye,Eski Marka,https://ornek.test/a.png`,
+        `${keep},İkinci,Defter,Marka B,https://ornek.test/b.png`,
+      ]),
+      opts,
+    )
+
+    const plan = await preview([header, `${sku},İlk,,,`, `${keep},İkinci,Kalem,Marka C,https://ornek.test/c.png`])
+    expect(plan.rows.map((r) => r.action)).toEqual(['update', 'update'])
+    await commitImport(boss, plan, opts)
+
+    const kept = (await listStock(boss, { search: sku }, opts)).rows[0]!
+    expect(kept.category).toBe('Kırtasiye')
+    expect(kept.brand).toBe('Eski Marka')
+    expect(kept.imageUrl).toBe('https://ornek.test/a.png')
+    const changed = (await listStock(boss, { search: keep }, opts)).rows[0]!
+    expect(changed.category).toBe('Kalem')
+    expect(changed.brand).toBe('Marka C')
+    expect(changed.imageUrl).toBe('https://ornek.test/c.png')
+  })
+
+  it('okunmayan ve tekrar eden başlıklar önizlemede söyleniyor; hepsi okunduysa okunan liste yok (T247)', async () => {
+    const file = await parse([
+      'Malzeme Kodu,Malzeme Açıklaması,Birim Fiyat,Barkod,Barkod,Ortalama Değer',
+      `${uniq('UN-')},Ürün,12,${uniq('bc')},${uniq('bc')},9`,
+    ])
+    expect(file.unreadColumns).toEqual(['Birim Fiyat', 'Ortalama Değer'])
+    expect(file.duplicateColumns).toEqual(['Barkod'])
+    const p = await previewImport(boss, file, opts)
+    expect(p.notices).toContain('Okunan sütunlar: Stok Kodu, Ürün Adı, Barkod.')
+    expect(p.notices.some((n) => n.startsWith('Okunmayan sütunlar: Birim Fiyat, Ortalama Değer.'))).toBe(true)
+
+    const clean = await preview(['Stok Kodu,Ürün Adı', `${uniq('UN-')},Ürün`])
+    expect(clean.notices.some((n) => n.startsWith('Okunan sütunlar'))).toBe(false)
+  })
+
+  it('başka ürüne ait aktif barkod ÖNİZLEMEDE hata; hiçbir şey yazılmıyor, diğer satırlar etkilenmiyor (T247)', async () => {
+    const taken = uniq('bc')
+    const owner = uniq('SAH-')
+    await commitImport(boss, await preview(['Stok Kodu,Ürün Adı,Barkod', `${owner},Sahibi,${taken}`]), opts)
+
+    const newSku = uniq('YB-')
+    const okSku = uniq('YB-')
+    const plan = await preview([
+      'Stok Kodu,Ürün Adı,Barkod',
+      `${newSku},Yeni,${taken}`,
+      `${okSku},Temiz,${uniq('bc')}`,
+    ])
+    expect(plan.rows.map((r) => r.action)).toEqual(['error', 'create'])
+    // Ürünün kendi barkodu çakışma değil.
+    const own = await preview(['Stok Kodu,Ürün Adı,Barkod', `${owner},Sahibi,${taken}`])
+    expect(own.rows[0]!.action).toBe('update')
+    expect(plan.rows[0]!.issues[0]).toEqual({
+      column: 'Barkod',
+      message: `Bu barkod başka bir üründe kayıtlı (stok kodu ${owner})`,
+    })
+
+    const result = await commitImport(boss, plan, opts)
+    expect(result.created).toBe(1)
+    expect((await listStock(boss, { search: newSku }, opts)).total).toBe(0)
+  })
+
+  it('güncellenen ürüne başka ürünün aktif barkodu verilmişse önizlemede hata; ürün değişmiyor (T247)', async () => {
+    const taken = uniq('bc')
+    const owner = uniq('SAH-')
+    const other = uniq('GB-')
+    await commitImport(
+      boss,
+      await preview(['Stok Kodu,Ürün Adı,Barkod', `${owner},Sahibi,${taken}`, `${other},Eski Ad,${uniq('bc')}`]),
+      opts,
+    )
+    const plan = await preview(['Stok Kodu,Ürün Adı,Barkod', `${other},Yeni Ad,${taken}`])
+    expect(plan.rows[0]!.action).toBe('error')
+    await commitImport(boss, plan, opts)
+    expect((await listStock(boss, { search: other }, opts)).rows[0]!.name).toBe('Eski Ad')
+  })
+
+  it('aynı barkod dosyada iki stok koduna verilmişse İKİ satır da hata; arşivli barkod çakışma değil (T247)', async () => {
+    const shared = uniq('bc')
+    const a = uniq('IB-')
+    const b = uniq('IB-')
+    const plan = await preview(['Stok Kodu,Ürün Adı,Barkod', `${a},A,${shared}`, `${b},B,${shared}`])
+    expect(plan.rows.map((r) => r.action)).toEqual(['error', 'error'])
+    for (const row of plan.rows) {
+      expect(row.issues).toContainEqual({ column: 'Barkod', message: 'Bu barkod dosyada başka bir stok koduna da verilmiş' })
+    }
+
+    // Arşivlenmiş barkod yeniden kullanılabilir (kısmi benzersizlik).
+    const archivedCode = uniq('bc')
+    const old = uniq('AR-')
+    await commitImport(boss, await preview(['Stok Kodu,Ürün Adı,Barkod', `${old},Eski,${archivedCode}`]), opts)
+    const oldId = (await listStock(boss, { search: old }, opts)).rows[0]!.productId
+    const [oldBarcode] = await listBarcodes(boss, oldId, opts)
+    await archiveBarcode(boss, oldBarcode!.id, opts)
+    const reuse = await preview(['Stok Kodu,Ürün Adı,Barkod', `${uniq('AR-')},Yeni,${archivedCode}`])
+    expect(reuse.rows[0]!.action).toBe('create')
+  })
+
+  it('güncellemede 0 fiyat boş sayılmıyor: mevcut fiyat sıfıra iniyor', async () => {
+    const sku = uniq('SIF-')
+    await commitImport(
+      boss,
+      await preview([
+        'Stok Kodu,Ürün Adı,Barkod,Alış Fiyatı,Satış Fiyatı',
+        `${sku},Ürün,${uniq('bc')},50,80`,
+      ]),
       opts,
     )
     await commitImport(
       boss,
-      await preview(['Stok Kodu,Ürün Adı,Alış Fiyatı', `${sku},Ürün,`]),
+      await preview(['Stok Kodu,Ürün Adı,Alış Fiyatı,Satış Fiyatı', `${sku},Ürün,0,0`]),
       opts,
     )
 
-    expect((await listStock(boss, { search: sku }, opts)).rows[0]?.purchasePrice).toBeNull()
+    const row = (await listStock(boss, { search: sku }, opts)).rows[0]!
+    expect(row.purchasePrice).toBe(0)
+    expect(row.salePrice).toBe(0)
+  })
+
+  it('yeni üründe fiyat sütunları var, hücreler boş: iki fiyat da boş kalıyor', async () => {
+    const sku = uniq('YBF-')
+    const result = await commitImport(
+      boss,
+      await preview(['Stok Kodu,Ürün Adı,Barkod,Alış Fiyatı,Satış Fiyatı', `${sku},Ürün,${uniq('bc')},,`]),
+      opts,
+    )
+    expect(result.created).toBe(1)
+
+    const row = (await listStock(boss, { search: sku }, opts)).rows[0]!
+    expect(row.purchasePrice).toBeNull()
+    expect(row.salePrice).toBeNull()
+    // "Kritik Seviye" sütunu yok: yeni ürün varsayılan eşiği alıyor (T244).
+    expect(row.minStock).toBe(DEFAULT_MIN_STOCK)
+  })
+
+  it('yeni üründe Kritik Seviye boş: varsayılan eşik; açıkça 0: takip yok (T244)', async () => {
+    const empty = uniq('KSB-')
+    const zero = uniq('KS0-')
+    const result = await commitImport(
+      boss,
+      await preview([
+        'Stok Kodu,Ürün Adı,Barkod,Kritik Seviye',
+        `${empty},Boş Eşik,${uniq('bc')},`,
+        `${zero},Sıfır Eşik,${uniq('bc')},0`,
+      ]),
+      opts,
+    )
+    expect(result.created).toBe(2)
+    expect((await listStock(boss, { search: empty }, opts)).rows[0]!.minStock).toBe(DEFAULT_MIN_STOCK)
+    expect((await listStock(boss, { search: zero }, opts)).rows[0]!.minStock).toBe(0)
+  })
+
+  it('mevcut ürünün eşiği boş Kritik Seviye hücresiyle değişmiyor (T244)', async () => {
+    const sku = uniq('KSM-')
+    await commitImport(
+      boss,
+      await preview(['Stok Kodu,Ürün Adı,Barkod,Kritik Seviye', `${sku},Ürün,${uniq('bc')},7`]),
+      opts,
+    )
+    await commitImport(
+      boss,
+      await preview(['Stok Kodu,Ürün Adı,Kritik Seviye', `${sku},Ürün Yeni Ad,`]),
+      opts,
+    )
+    expect((await listStock(boss, { search: sku }, opts)).rows[0]!.minStock).toBe(7)
   })
 
   it('güncellemede yeni barkod ekleniyor, mevcut olan iki kez eklenmiyor', async () => {
@@ -536,24 +727,51 @@ describe('uygulama', () => {
   })
 
   it('kayıt sırasında çıkan çakışma rapora düşüyor, aktarım durmuyor', async () => {
-    // Önizlemeden sonra başka bir admin aynı barkodu kullanmış olabilir.
+    // Önizlemeden SONRA başka bir admin aynı barkodu kullanmış: önizleme
+    // bunu göremez (T247'den beri önizlemeden önceki çakışma önizlemede hata).
     const taken = uniq('bc')
-    await commitImport(
-      boss,
-      await preview(['Stok Kodu,Ürün Adı,Barkod', `${uniq('ONC-')},Önce,${taken}`]),
-      opts,
-    )
-
     const plan = await preview([
       'Stok Kodu,Ürün Adı,Barkod',
       `${uniq('CAK-')},Çakışan,${taken}`,
       `${uniq('SON-')},Sonraki,${uniq('bc')}`,
     ])
+    expect(plan.rows.map((r) => r.action)).toEqual(['create', 'create'])
+    await commitImport(
+      boss,
+      await preview(['Stok Kodu,Ürün Adı,Barkod', `${uniq('ONC-')},Araya Giren,${taken}`]),
+      opts,
+    )
     const result = await commitImport(boss, plan, opts)
 
     expect(result.created).toBe(1)
     expect(result.failed).toBe(1)
     expect(result.errors[0]?.issues[0]?.message).toContain('barkodu')
+  })
+
+  it('güncellemede ürün yazılıp barkod eklenemezse rapor bunu SÖYLÜYOR, devir denenmiyor (T247)', async () => {
+    const sku = uniq('KY-')
+    await commitImport(boss, await preview(['Stok Kodu,Ürün Adı', `${sku},Eski Ad`]), opts)
+    const taken = uniq('bc')
+    const plan = await preview([
+      'Stok Kodu,Ürün Adı,Barkod,Alış Fiyatı,Açılış Stoğu',
+      `${sku},Yeni Ad,${taken},5,10`,
+    ])
+    expect(plan.rows[0]!.action).toBe('update')
+    // Önizlemeden sonra barkod başka ürüne veriliyor.
+    await commitImport(boss, await preview(['Stok Kodu,Ürün Adı,Barkod', `${uniq('KY-')},Araya Giren,${taken}`]), opts)
+
+    const result = await commitImport(boss, plan, opts)
+    expect(result.updated).toBe(0)
+    expect(result.failed).toBe(1)
+    const message = result.errors[0]!.issues[0]!.message
+    expect(message.startsWith('Ürün bilgisi güncellendi; barkod eklenemedi:')).toBe(true)
+    expect(message.endsWith('Devir yazılmadı.')).toBe(true)
+
+    const row = (await listStock(boss, { search: sku }, opts)).rows[0]!
+    expect(row.name).toBe('Yeni Ad')
+    // Devir yazılmadı: stok yok, barkodu alan ürüne de girmedi.
+    expect(row.qty).toBe(0)
+    expect(result.openings.written).toBe(0)
   })
 
   it('çalışan uygulayamıyor', async () => {
@@ -617,12 +835,12 @@ describe('T84 - görsel URL sütunu', () => {
     expect(row?.data).toBeUndefined()
   })
 
-  it('boş hücre sorun değil, görsel yok demek', async () => {
+  it('boş hücre sorun değil: yeni üründe görsel yok, güncellemede dokunma (DAT-28)', async () => {
     const result = await preview([
       'Stok Kodu;Ürün Adı;Barkod;Görsel URL',
       `${uniq('GRS')};Görselsiz;${uniq('869')};`,
     ])
     expect(result.rows[0]?.issues).toEqual([])
-    expect(result.rows[0]?.data?.imageUrl).toBeNull()
+    expect(result.rows[0]?.data?.imageUrl).toBeUndefined()
   })
 })

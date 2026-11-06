@@ -107,15 +107,16 @@ function parseInWorker(kind: ParseKind, file: File): Promise<ParseResult | null>
 
 /**
  * Aktarım kaydını açan özet: dosyanın kendisi değil, tarayıcının okuduğu
- * sütunlar. Envanterde okunmayan sütunların yalnız BAŞLIKLARI gidiyor.
+ * sütunlar. Okunmayan sütunların yalnız BAŞLIKLARI gidiyor (envanter; ürün
+ * aktarımında T247).
  */
 function startMeta(parsed: ParsedOk, fileName: string, fileBytes: number) {
   if (parsed.kind === 'INVENTORY') {
     const { rows, columns, unreadColumns } = parsed.file
     return { fileName, fileBytes, totalRows: rows.length, columns, unreadColumns }
   }
-  const { rows, columns, ignoredQtyColumns } = parsed.file
-  return { fileName, fileBytes, totalRows: rows.length, columns, ignoredQtyColumns }
+  const { rows, columns, ignoredQtyColumns, unreadColumns, duplicateColumns } = parsed.file
+  return { fileName, fileBytes, totalRows: rows.length, columns, ignoredQtyColumns, unreadColumns, duplicateColumns }
 }
 
 const NO_ROWS: Record<ParseKind, string> = {
@@ -464,9 +465,27 @@ function PreviewPanel({
       {preview.openings > 0 || preview.skippedOpenings > 0 ? (
         <p className="text-sm">
           Açılış stoğu: <span className="font-semibold">{formatCount(preview.openings)}</span> üründe yazılacak
+          {/* Tek depolu işletmede devir sessizce o depoya gidiyor (DAT-23); söyleniyor (T234). */}
+          {preview.openingDepot && preview.openings > 0 ? ` (depo: ${preview.openingDepot})` : ''}
           {preview.skippedOpenings > 0 ? `, ${formatCount(preview.skippedOpenings)} üründe atlanacak` : ''}. Her
           devir ayrı bir “Devir / açılış” hareketi olarak, alış fiyatıyla yazılır.
         </p>
+      ) : null}
+
+      {/* PRC-15: kaç fiyat HÜCRESİNİN değişeceği (ürün sayısı değil) ve her
+          satırda dosyadaki ile kaydedilecek değer. Fark ERP toplamına yansıyabilir. */}
+      {preview.roundedPriceCells > 0 ? (
+        <>
+          <p className="text-sm">
+            <span className="font-semibold">{formatCount(preview.roundedPriceCells)}</span> fiyat hücresi kuruşa
+            (2 ondalık) yuvarlanacak. Yuvarlama nedeniyle stok değeri ERP’deki tutardan farklı olabilir.
+          </p>
+          <NoteTable
+            title="Yuvarlanacak fiyatlar"
+            rows={preview.roundings}
+            more={preview.roundedPriceRows - preview.roundings.length}
+          />
+        </>
       ) : null}
 
       {preview.warnings.length > 0 ? (

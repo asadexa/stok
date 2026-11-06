@@ -28,6 +28,7 @@ import {
 } from '@/server/form'
 import { currentActor } from '@/server/session'
 import { readSoundEnabled } from '@/server/theme'
+import { UnassignedOption } from './unassigned-option'
 import { PhoneScanPanel } from './phone-scan-panel'
 
 /**
@@ -428,8 +429,9 @@ export default async function MovementEntryPage({
 
               {/* DEPO (T220). Her seçeneğin yanında o depodaki miktar: "depoda
                   yetmiyor" hatasını kaydetmeden önce görmek mümkün. Atanmamış
-                  Stok yalnız üründe öyle bir miktar varsa ve yalnız çıkış için
-                  (A1); girişte sunucu reddediyor (UNASSIGNED_OUT_ONLY). */}
+                  Stok yalnız üründe öyle bir miktar varsa ve yalnız çıkış
+                  sebebi seçiliyken seçilebiliyor (A1, `UnassignedOption`);
+                  sunucu girişi yine reddediyor (UNASSIGNED_OUT_ONLY). */}
               {depotList.length > 0 ? (
                 <fieldset>
                   <legend className="text-sm font-medium">Depo</legend>
@@ -451,15 +453,12 @@ export default async function MovementEntryPage({
                       </label>
                     ))}
                     {unassignedQty > 0 ? (
-                      <label className="flex min-h-[2.75rem] items-center gap-2 border-t border-line pt-1">
-                        <input
-                          type="radio"
-                          name="depo"
-                          value="atanmamis"
-                          required
-                          defaultChecked={selectedDepot === 'atanmamis'}
-                          className="size-5 shrink-0"
-                        />
+                      <UnassignedOption
+                        outReasons={selectableReasons('OUT')}
+                        // Sebep seçili değilse çıkış da değil: seçenek gizli (T243).
+                        initialOut={selectableReasons('OUT').includes(params.sebep as MovementReason)}
+                        defaultChecked={selectedDepot === 'atanmamis'}
+                      >
                         <span>
                           Atanmamış Stok{' '}
                           <span className="text-sm text-ink-2">(yalnız çıkış; deposu bilinmeyen eski stok)</span>
@@ -467,7 +466,7 @@ export default async function MovementEntryPage({
                         <span className="tabular ml-auto text-sm text-ink-2">
                           {formatQty(unassignedQty, found.unit as Unit)}
                         </span>
-                      </label>
+                      </UnassignedOption>
                     ) : null}
                   </div>
                   {depotList.length > 1 ? (
@@ -645,7 +644,7 @@ function ReasonGroup({
   title: string
   tone: 'giris' | 'cikis'
   reasons: MovementReason[]
-  /** Hatadan sonra geri gelen seçim; yoksa ilk giriş sebebi. */
+  /** Hatadan sonra geri gelen seçim; yoksa hiçbir sebep seçili değil (T243). */
   selected?: string
 }) {
   const color = tone === 'giris' ? 'text-giris' : 'text-cikis'
@@ -656,21 +655,21 @@ function ReasonGroup({
         {title}
       </p>
       <div className="mt-2 space-y-1">
-        {reasons.map((reason, index) => (
+        {reasons.map((reason) => (
           <label key={reason} className="flex min-h-[2.75rem] items-center gap-2">
             <input
               type="radio"
               name="sebep"
               value={reason}
-              // İlk giriş sebebi varsayılan: mal kabulü en sık yapılan iş.
-              // Hata dönüşünde kullanıcının seçtiği sebep korunuyor —
-              // yoksa "sapma sebebi seçin" uyarısından sonra işlem
-              // sessizce "Satın alma"ya döner ve satış kaydı kaybolurdu.
-              defaultChecked={
-                selected === undefined || selected === ''
-                  ? tone === 'giris' && index === 0
-                  : selected === reason
-              }
+              // VARSAYILAN SEBEP YOK (T243, PRD-24). "Satın alma" hazır
+              // seçiliyken odak miktardaydı: miktar yazıp Enter'a basan
+              // kullanıcı çıkışı giriş olarak kaydedebiliyordu (satışta 5
+              // adet stoğu 5 artırır, fark 10) ve defterde düzeltme yok
+              // (T127). `required` grup, sebep seçilmeden göndermeyi
+              // tarayıcıda durduruyor; sunucu da sebepsiz isteği reddediyor.
+              // Hata dönüşünde kullanıcının seçtiği sebep korunuyor;
+              // başarılı kayıttan sonra hatırlanmıyor (K1).
+              defaultChecked={selected === reason}
               required
               className="size-5"
             />

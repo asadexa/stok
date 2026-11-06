@@ -81,8 +81,8 @@ export default async function InventoryPage() {
           </li>
         </ul>
         <p className="rounded-control border border-warn bg-warn-soft p-3 text-warn-soft-ink">
-          ⚠ İşletmede birden fazla depo açıldığında, depo seçimi eklenene kadar Giriş / Çıkış ekranından el ile
-          hareket girilemez; ürün aktarımı da açılış stoğu yazmaz.
+          ⚠ İşletmede birden fazla depo varsa ürün aktarımı açılış stoğu yazmaz; depo bazında stok bu ekrandan
+          girilir.
         </p>
       </section>
 

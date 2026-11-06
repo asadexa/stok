@@ -12,6 +12,7 @@ import {
   priceOverrideReasonsCheckConstraint,
   priceSourcesCheckConstraint,
   reasonsCheckConstraint,
+  transferIdCheckConstraint,
   rolesCheckConstraint,
   supplierMatchLinkCheckConstraint,
   supplierMatchStateCheckConstraint,
@@ -402,6 +403,14 @@ export const stockMovements = pgTable(
      * günlük temizlik bu aktarımları atlıyor (`pruneImportRuns`).
      */
     importRunId: uuid('import_run_id'),
+    /**
+     * Depo transferinin iki bacağını bağlar (T223, T233): kaynaktan −q ve
+     * hedefe +q aynı kimliği taşır. Yalnız TRANSFER_* sebeplerinde dolu,
+     * diğerlerinde boş (`movements_transfer_id_ck`). `reverses_id` ya da
+     * `count_session_id` BİLEREK kullanılmıyor: ikisinin de başka anlamı var
+     * ve append-only defterde yanlış anlamlı bir bağlantı sonradan düzeltilemez.
+     */
+    transferId: uuid('transfer_id'),
     /** Bu hareket bir düzeltme ise, hangi hareketi ters çeviriyor. */
     reversesId: uuid('reverses_id').references((): AnyPgColumn => stockMovements.id),
     createdAt: createdAt(),
@@ -429,7 +438,12 @@ export const stockMovements = pgTable(
     index('movements_import_run_idx')
       .on(t.tenantId, t.importRunId)
       .where(sql`import_run_id IS NOT NULL`),
+    // Transfer çiftinin iki satırını bulmak için; satırların çoğu transfer değil.
+    index('movements_transfer_idx')
+      .on(t.tenantId, t.transferId)
+      .where(sql`transfer_id IS NOT NULL`),
     check('movements_reason_ck', sql.raw(reasonsCheckConstraint('reason'))),
+    check('movements_transfer_id_ck', sql.raw(transferIdCheckConstraint())),
     // Hiçbir şeyi değiştirmeyen hareket olmamalı: ya veri hatası ya da hata ayıklama artığı.
     check('movements_delta_nonzero_ck', sql`delta <> 0`),
     check(

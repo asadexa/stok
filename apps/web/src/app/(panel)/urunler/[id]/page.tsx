@@ -1,26 +1,35 @@
+import { randomUUID } from 'node:crypto'
 import {
+  AppError,
   BARCODE_KINDS,
   BARCODE_KIND_VALUES,
   UNITS,
   UNIT_VALUES,
   type Unit,
   formatQty,
+  isOutOfStock,
+  transferNoteRoom,
 } from '@stok/shared'
 import {
   actorCan,
   addBarcode,
   archiveBarcode,
   archiveProduct,
+  createMovement,
   getProductDepotStock,
   getProductDetail,
+  listDepots,
   listLocations,
   listProductOffers,
   restoreProduct,
+  setProductThreshold,
+  transferStock,
   updateProduct,
 } from '@stok/core'
 import { appDb } from '@stok/db'
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
+import { MIN_STOCK_HINT } from '@/components/badge'
 import { Alert, Notice, SelectField, SubmitButton, TextField } from '@/components/field'
 import { formatDate, formatMoney } from '@/lib/format'
 import {
@@ -29,11 +38,37 @@ import {
   nullableNumber,
   nullableText,
   numberOr,
+  optionalNumber,
+  optionalText,
   text,
   type FormParams,
 } from '@/server/form'
 import { currentActor } from '@/server/session'
+import { type AssignDepot, AssignForm } from './assign-form'
+import { type AdjustOption, StockAdjustForm } from './stock-adjust'
 import { SupplierOffers } from './supplier-offers'
+import { TransferForm } from './transfer-form'
+
+/**
+ * Sayım düzeltmesinin defterdeki sabit açıklaması (T232, K5). Kullanıcı notu
+ * bunun arkasına ekleniyor; toplam, hareket notunun 500 karakter sınırına
+ * (`inventoryAdjustmentSchema.note`) sığmalı. Sığmasaydı kapı bütün düzeltmeyi
+ * reddederdi.
+ */
+const ADJUST_NOTE_PREFIX = 'Ürün sayfasından sayım düzeltmesi'
+const ADJUST_NOTE_SEPARATOR = ': '
+const ADJUST_NOTE_MAX = 500 - ADJUST_NOTE_PREFIX.length - ADJUST_NOTE_SEPARATOR.length
+/** K6: görev kodu yok; kullanıcıya ne yapması gerektiği söyleniyor. */
+const UNASSIGNED_TEXT =
+  'Bu üründe henüz bir depoya atanmamış stok var. Stoğu düzeltmeden önce bu stoğun bir depoya atanması gerekiyor.'
+/**
+ * Eksi atanmamış stok (eski, eksiye izin verilmiş bir çıkış). Çözüm önerilmiyor:
+ * atama eksi miktarı taşıyamaz, depolu işletmede normal giriş de atanmamış
+ * kovaya değil bir depoya yazılır. Yanlış yol göstermek kullanıcıyı stoğu
+ * ikinci kez girmeye götürürdü (T223 ek koşul 1, T239).
+ */
+const NEGATIVE_UNASSIGNED_TEXT =
+  'Bu üründe depoya atanmamış stok eksi görünüyor. Eksi miktar bir depoya atanamaz ve bu ekrandan düzeltilemiyor; stok düzeltmesi ve depoya atama bu ürün için kapalı.'
 
 /**
  * ============================================================================
@@ -60,6 +95,10 @@ interface UrunParams extends FormParams {
   kaydedildi?: string
   barkod?: string
   arsiv?: string
+  sayim?: string
+  atama?: string
+  transfer?: string
+  esik?: string
 }
 
 export default async function ProductPage({
@@ -81,6 +120,11 @@ export default async function ProductPage({
   if (!product) notFound()
 
   const canEdit = actor.role === 'ADMIN'
+  // Çalışanın dar eşik formu (T244, PRD-25). Yönetici eşiği tam ürün
+  // formundan yazıyor; ikinci bir form ona aynı alanı iki kez gösterirdi.
+  // Arşivli ürün uyarı üretmediği için form orada yok.
+  const canSetThreshold =
+    !canEdit && actorCan(actor, 'product:setThreshold') && !product.archivedAt
   const locations = canEdit ? await listLocations(actor, { db }) : []
   // Depo kullanmayan işletmede `null`: bölüm hiç basılmıyor (T219).
   const depotStock = await getProductDepotStock(actor, product.productId, { db })
@@ -90,6 +134,40 @@ export default async function ProductPage({
   const offers = actorCan(actor, 'supplier:read')
     ? await listProductOffers(actor, product.productId, { db })
     : null
+
+  // STOK DÜZELTMESİ (T232). Deposuz işletmede tek seçenek toplam stok. Depolu
+  // işletmede her depo, ürün orada hiç hareket görmediyse 0 ile; üründe
+  // depoya atanmamış stok varsa form yerine açıklama (K6): kapı bu düzeltmeyi
+  // zaten reddeder (çift sayım olurdu).
+  const canAdjust = actorCan(actor, 'count:approve') && !product.archivedAt
+  const adjustBlocked = canAdjust && depotStock !== null && depotStock.unassigned !== 0
+  // DEPOYA ATAMA (T223): yalnız depolu işletmede ve atanmamış stok artıyken
+  // (K7). Eksi atanmamış stok bir depoya taşınamaz; depolu işletmede normal
+  // giriş de onu düzeltmez (giriş bir depoya yazılır). Bu yüzden yanlış bir
+  // yol önerilmiyor, yalnız durum anlatılıyor (T239).
+  const negativeUnassigned = depotStock !== null && depotStock.unassigned < 0
+  const tenantDepots = canAdjust && depotStock ? await listDepots(actor, { db }) : []
+  const depotQty = (depotId: string) => depotStock?.depots.find((s) => s.depotId === depotId)?.qty ?? 0
+  const canAssign = canAdjust && depotStock !== null && depotStock.unassigned > 0
+  const assignDepots: AssignDepot[] = canAssign
+    ? tenantDepots.map((d) => ({
+        id: d.id,
+        name: d.name,
+        qty: depotQty(d.id),
+        noteMax: transferNoteRoom(null, d.name),
+      }))
+    : []
+  // DEPOLAR ARASI TRANSFER (T233): yalnız yönetici, en az iki depolu
+  // işletmede ve ürünün artı stoğu olan bir depo varken. Eksi ya da sıfır
+  // depo kaynak olarak listelenmiyor; kapı aynı kuralı kilit altında zorluyor.
+  const transferDepots = canAdjust && depotStock ? tenantDepots.map((d) => ({ id: d.id, name: d.name, qty: depotQty(d.id) })) : []
+  const canTransfer = transferDepots.length >= 2 && transferDepots.some((d) => d.qty > 0)
+  let adjustOptions: AdjustOption[] = []
+  if (canAdjust && !adjustBlocked) {
+    adjustOptions = depotStock
+      ? tenantDepots.map((d) => ({ value: d.id, label: d.name, qty: depotQty(d.id) }))
+      : [{ value: '', label: 'Toplam stok', qty: product.qty }]
+  }
 
   // -------------------------------------------------------------------------
   // Sunucu eylemleri. Yetki kontrolü servislerde; buradaki `canEdit` sadece
@@ -165,6 +243,118 @@ export default async function ProductPage({
     redirect(`/urunler/${id}?barkod=kaldirildi`)
   }
 
+  async function adjustStock(form: FormData) {
+    'use server'
+    const owner = await currentActor()
+    if (!owner) redirect('/giris')
+
+    const userNote = optionalText(form, 'not')
+    if (userNote && userNote.length > ADJUST_NOTE_MAX) {
+      redirect(`/urunler/${id}?sayim=not`)
+    }
+    const depo = text(form, 'depo')
+    try {
+      // Yetki (`count:approve`), fark, kilit altındaki karşılaştırma ve
+      // idempotency yazma kapısında (DAT-24); burada yalnız form çevrimi.
+      await createMovement(
+        owner,
+        {
+          idempotencyKey: text(form, 'anahtar'),
+          productId: id,
+          depotId: depo === '' ? null : depo,
+          expectedQty: optionalNumber(form, 'beklenen'),
+          targetQty: optionalNumber(form, 'hedef'),
+          note: userNote ? `${ADJUST_NOTE_PREFIX}${ADJUST_NOTE_SEPARATOR}${userNote}` : ADJUST_NOTE_PREFIX,
+          clientCreatedAt: new Date().toISOString(),
+        },
+        { db: appDb(), inventory: true },
+      )
+    } catch (err) {
+      // Ortak STOCK_CHANGED metni dosya akışını anlatıyor ("önizleme", "dosya");
+      // bu ekranın kendi cümlesi var.
+      if (err instanceof AppError && err.code === 'STOCK_CHANGED') {
+        redirect(`/urunler/${id}?sayim=${err.details.reason === 'UNASSIGNED' ? 'atanmamis' : 'degisti'}`)
+      }
+      redirect(`/urunler/${id}?${errorQuery(err)}`)
+    }
+    redirect(`/urunler/${id}?sayim=kaydedildi`)
+  }
+
+  async function assignStock(form: FormData) {
+    'use server'
+    const owner = await currentActor()
+    if (!owner) redirect('/giris')
+
+    try {
+      // Yetki, kiracı, birim, not sınırı ve kilit altındaki kaynak kontrolü
+      // `transferStock`'ta (T223); burada yalnız form çevrimi.
+      await transferStock(
+        owner,
+        {
+          idempotencyKey: text(form, 'anahtar'),
+          productId: id,
+          fromDepotId: null,
+          toDepotId: text(form, 'depo'),
+          qty: optionalNumber(form, 'miktar'),
+          note: optionalText(form, 'not'),
+          clientCreatedAt: new Date().toISOString(),
+        },
+        { db: appDb() },
+      )
+    } catch (err) {
+      if (err instanceof AppError && err.code === 'INSUFFICIENT_STOCK') {
+        redirect(`/urunler/${id}?atama=yetersiz`)
+      }
+      redirect(`/urunler/${id}?${errorQuery(err)}`)
+    }
+    redirect(`/urunler/${id}?atama=kaydedildi`)
+  }
+
+  async function moveStock(form: FormData) {
+    'use server'
+    const owner = await currentActor()
+    if (!owner) redirect('/giris')
+
+    try {
+      // Yetki, kiracı, kaynak ≠ hedef, birim, not sınırı ve kilit altındaki
+      // kaynak depo kontrolü `transferStock`'ta (T233); burada yalnız form çevrimi.
+      await transferStock(
+        owner,
+        {
+          idempotencyKey: text(form, 'anahtar'),
+          productId: id,
+          fromDepotId: text(form, 'kaynak'),
+          toDepotId: text(form, 'hedef'),
+          qty: optionalNumber(form, 'miktar'),
+          note: optionalText(form, 'not'),
+          clientCreatedAt: new Date().toISOString(),
+        },
+        { db: appDb() },
+      )
+    } catch (err) {
+      if (err instanceof AppError && err.code === 'INSUFFICIENT_STOCK') {
+        redirect(`/urunler/${id}?transfer=yetersiz`)
+      }
+      redirect(`/urunler/${id}?${errorQuery(err)}`)
+    }
+    redirect(`/urunler/${id}?transfer=kaydedildi`)
+  }
+
+  async function saveThreshold(form: FormData) {
+    'use server'
+    const owner = await currentActor()
+    if (!owner) redirect('/giris')
+
+    try {
+      // Yalnız eşik gidiyor; servis başka alanı reddediyor (`strict`).
+      // Boş alan 0 = "takip yok", yöneticinin ürün formuyla aynı.
+      await setProductThreshold(owner, id, { minStock: numberOr(form, 'minStok', 0) }, { db: appDb() })
+    } catch (err) {
+      redirect(`/urunler/${id}?${errorQuery(err)}`)
+    }
+    redirect(`/urunler/${id}?esik=kaydedildi`)
+  }
+
   async function toggleArchive(form: FormData) {
     'use server'
     const owner = await currentActor()
@@ -208,6 +398,21 @@ export default async function ProductPage({
         {query.barkod === 'kaldirildi' ? <Notice>Barkod kaldırıldı.</Notice> : null}
         {query.arsiv === 'alindi' ? <Notice>Ürün arşive alındı.</Notice> : null}
         {query.arsiv === 'geri' ? <Notice>Ürün arşivden çıkarıldı.</Notice> : null}
+        {query.sayim === 'kaydedildi' ? <Notice>Sayım düzeltmesi kaydedildi.</Notice> : null}
+        {query.atama === 'kaydedildi' ? <Notice>Stok depoya atandı.</Notice> : null}
+        {query.atama === 'yetersiz' ? (
+          <Alert>Atanmamış stok bu arada azaldı; atama yazılmadı. Güncel miktara bakıp yeniden deneyin.</Alert>
+        ) : null}
+        {query.transfer === 'kaydedildi' ? <Notice>Stok depolar arasında taşındı.</Notice> : null}
+        {query.esik === 'kaydedildi' ? <Notice>Kritik eşik kaydedildi.</Notice> : null}
+        {query.transfer === 'yetersiz' ? (
+          <Alert>Kaynak depodaki stok bu arada azaldı; transfer yazılmadı. Güncel miktara bakıp yeniden deneyin.</Alert>
+        ) : null}
+        {query.sayim === 'degisti' ? (
+          <Alert>Stok, sayfa açıldıktan sonra değişti; düzeltme yazılmadı. Güncel miktara bakıp yeniden girin.</Alert>
+        ) : null}
+        {query.sayim === 'atanmamis' ? <Alert>{UNASSIGNED_TEXT} Düzeltme yazılmadı.</Alert> : null}
+        {query.sayim === 'not' ? <Alert>Not en fazla {ADJUST_NOTE_MAX} karakter olabilir; düzeltme yazılmadı.</Alert> : null}
 
         {product.archivedAt ? (
           <p className="flex gap-2 rounded-control border border-line-control bg-surface-2 p-3 text-sm text-ink-2">
@@ -229,8 +434,10 @@ export default async function ProductPage({
         <Stat
           label="Eldeki stok"
           value={formatQty(product.qty, product.unit as Unit)}
-          tone={product.critical ? 'kritik' : 'normal'}
-          suffix={product.critical ? '⚠ kritik' : undefined}
+          tone={product.critical || isOutOfStock(product.qty) ? 'kritik' : 'normal'}
+          suffix={
+            isOutOfStock(product.qty) ? '⚠ stok yok' : product.critical ? '⚠ kritik' : undefined
+          }
         />
         <Stat label="Kritik eşik" value={formatQty(product.minStock, product.unit as Unit)} />
         <Stat
@@ -238,6 +445,24 @@ export default async function ProductPage({
           value={product.lastMovementAt ? formatDate(product.lastMovementAt) : 'Hiç'}
         />
       </section>
+
+      {canSetThreshold ? (
+        <form
+          action={saveThreshold}
+          aria-label="Kritik eşik"
+          className="mb-6 max-w-2xl space-y-4 rounded-card border border-line bg-surface shadow-card p-5"
+        >
+          <h2 className="font-semibold">Kritik eşik</h2>
+          <TextField
+            name="minStok"
+            label="Kritik eşik"
+            type="number"
+            defaultValue={String(product.minStock)}
+            hint={MIN_STOCK_HINT}
+          />
+          <SubmitButton>Eşiği kaydet</SubmitButton>
+        </form>
+      ) : null}
 
       {/* DEPO DAĞILIMI (T219, PRD-17) — salt okunur. Depoya atanmamış eski
           stok ayrı satırda: gizlenseydi depoların toplamı ürünün toplamını
@@ -285,6 +510,72 @@ export default async function ProductPage({
         </section>
       ) : null}
 
+      {canAssign && depotStock ? (
+        <section
+          aria-label="Depoya ata"
+          className="mb-6 max-w-2xl rounded-card border border-line bg-surface shadow-card"
+        >
+          <h2 className="border-b border-line px-4 py-3 font-semibold">Atanmamış stoğu depoya ata</h2>
+          <p className="px-4 pt-3 text-sm text-ink-2">
+            Deposu bilinmeyen eski stoğu bir depoya taşıyın. Toplam stok ve fiyatlar değişmez.
+          </p>
+          <AssignForm
+            action={assignStock}
+            depots={assignDepots}
+            unassigned={depotStock.unassigned}
+            total={depotStock.total}
+            unit={product.unit as Unit}
+            idempotencyKey={randomUUID()}
+          />
+        </section>
+      ) : null}
+
+      {canTransfer && depotStock ? (
+        <section
+          aria-label="Depolar arası transfer"
+          className="mb-6 max-w-2xl rounded-card border border-line bg-surface shadow-card"
+        >
+          <h2 className="border-b border-line px-4 py-3 font-semibold">Depolar arası transfer</h2>
+          <p className="px-4 pt-3 text-sm text-ink-2">
+            Malı bir depodan ötekine taşıyın. Toplam stok ve fiyatlar değişmez.
+          </p>
+          <TransferForm
+            action={moveStock}
+            depots={transferDepots}
+            total={depotStock.total}
+            unit={product.unit as Unit}
+            idempotencyKey={randomUUID()}
+          />
+        </section>
+      ) : null}
+
+      {canAdjust ? (
+        <section
+          aria-label="Stoğu düzelt"
+          className="mb-6 max-w-2xl rounded-card border border-line bg-surface shadow-card"
+        >
+          <h2 className="border-b border-line px-4 py-3 font-semibold">Stoğu düzelt (sayım)</h2>
+          {adjustBlocked ? (
+            <p className="px-4 py-3 text-sm text-ink-2">
+              {negativeUnassigned ? NEGATIVE_UNASSIGNED_TEXT : UNASSIGNED_TEXT}
+            </p>
+          ) : (
+            <>
+              <p className="px-4 pt-3 text-sm text-ink-2">
+                Saydığınız miktarı girin. Fark kadar sayım düzeltmesi hareketi yazılır; fiyatlar değişmez.
+              </p>
+              <StockAdjustForm
+                action={adjustStock}
+                options={adjustOptions}
+                unit={product.unit as Unit}
+                idempotencyKey={randomUUID()}
+                noteMax={ADJUST_NOTE_MAX}
+              />
+            </>
+          )}
+        </section>
+      ) : null}
+
       {/* Masaüstünde iki sütun: solda var olan formlar (max-w-2xl), sağda
           yöneticiye tedarikçi fiyatları (T200 1b). Mobilde tek sütun; sıra
           formlar → barkodlar → tedarikçi fiyatları → arşiv. Sağ sütun yoksa
@@ -327,6 +618,7 @@ export default async function ProductPage({
               label="Kritik eşik"
               type="number"
               defaultValue={String(product.minStock)}
+              hint={MIN_STOCK_HINT}
             />
             <SelectField
               name="konum"

@@ -460,7 +460,7 @@ export async function previewInventory(
       rows.push({
         ...base,
         action: 'unassigned',
-        message: `Depoya atama bekliyor: üründe deposu bilinmeyen ${formatQty(scaledToNumber(unassigned), product.unit)} stok var; bu satır yazılmadı. Önce depoya atanmalı.`,
+        message: `Depoya atama bekliyor: üründe deposu bilinmeyen ${formatQty(scaledToNumber(unassigned), product.unit)} stok var; bu satır yazılmadı. Önce ürün sayfasındaki "Atanmamış stoğu depoya ata" bölümünden depoya atayın.`,
       })
     } else {
       rows.push({ ...base, action: target === expected ? 'unchanged' : 'update' })

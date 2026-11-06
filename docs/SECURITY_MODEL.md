@@ -70,9 +70,14 @@ güncellenir. Yeni tehdit yeni ID alır; ID yeniden kullanılmaz.
 - **Koruma:** rol matrisi tek kaynak (`packages/shared/src/roles.ts`), her yazma
   yolunda sunucuda `requirePermission`; sayfalar da yetkisiz rolü yönlendirir;
   çalışanın `userId` filtresi yok sayılır; `allowNegative` yalnız yöneticide.
-  Yönetici kendini düşüremez, son aktif yönetici korunur.
+  Yönetici kendini düşüremez, son aktif yönetici korunur. Çalışanın tek ürün
+  yazma yetkisi kritik eşik (`product:setThreshold`, `PRD-25`): ayrı servis
+  (`setProductThreshold`) yalnız `min_stock` kolonunu yazar, şema fazla alanı
+  reddeder (`strict`); `product:update` çalışana kapalı. Eşik değişikliğinin
+  kaydı yok (T245).
 - **Katman:** `packages/core/src/authz.ts`, `users.ts`, `apps/web` sayfaları.
 - **Test:** `role-matrix.test.ts`, `route-authz.test.ts`, `users.test.ts`,
+  `stock-levels.test.ts` (eşik izni: genel güncelleme reddi, fazla alan, kiracı),
   `e2e/t38-kritik-akislar.spec.ts` (çalışan yönetim ekranlarına giremiyor).
 
 ### S7 — Alış fiyatının çalışana görünmesi
@@ -391,6 +396,12 @@ güncellenir. Yeni tehdit yeni ID alır; ID yeniden kullanılmaz.
     hareket yazılmıyor.
   - Depo adı anahtarı kırpılmış, iç boşlukları teklenmiş `tr_norm` (üretilmiş sütun, kiracı içinde
     tekil); ad 1–100 karakter, kontrol karakteri yok (CHECK).
+  - Depo transferi (atama T223, depodan depoya T233; `DAT-27`): yalnız `transferStock`, `count:approve`
+    istiyor (çalışan FORBIDDEN). Kaynak ve hedef depo kimlikleri kapıda kiracı içinde aranıyor,
+    yoksa NOT_FOUND. `TRANSFER_*` normal hareket şemasından seçilemiyor; "transfer sebebi ⇔
+    `transfer_id` dolu" DB CHECK'i tek bacaklı transferi veritabanında reddediyor. Test:
+    `transfers.test.ts`; `dogrula` (2026-11-05): kaynak depo kiracı araması kaldırılınca başka
+    kiracının deposu NOT_FOUND yerine INSUFFICIENT_STOCK aldı (kırmızı).
 - **Katman:** `packages/core/src/movements.ts`; `packages/shared/src/schemas.ts`, `roles.ts`;
   `packages/db/migrations/0014_depots.sql`.
 - **Test:** `depots.test.ts` (başka kiracının depo, ürün ve aktarım kimliği; çalışan reddi; normal

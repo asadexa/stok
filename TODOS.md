@@ -7,7 +7,7 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
 **Kurallar**
 
 - ID `T<n>`. Arşivdeki görevler numaralarını korur. Yeni görev en büyük
-  numaradan devam eder — **sıradaki boş numara: T238**. Numara yeniden
+  numaradan devam eder — **sıradaki boş numara: T248**. Numara yeniden
   kullanılmaz.
 - Biçim: `- [ ] **T<n> (P0–P3)** - <alan> - **Başlık**`. Altında kısa
   **Neden / Kanıt / Bağlı / Doğrula / Kaynak** satırları.
@@ -37,11 +37,56 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
 
 ## P1
 
+- [ ] **T244 (P1)** - core - **Stoğu 0 olan ürün kritik sayılıyordu; "Stok yok" ayrı değildi, çalışan eşiği değiştiremiyordu**
+  - Neden: kritik kuralı `COALESCE(qty, 0) <= min_stock` dokuz yerde ayrı yazılıydı. Eşiği 0
+    olan ve stoğu biten her ürün kritik sayılıyordu; zil, panel ve kritik stok e-postası tükenmiş
+    ürünlerle doluyordu. Yeni ürünün varsayılan eşiği 0'dı. Eşiği yalnız yönetici
+    (`product:update`) değiştirebiliyordu.
+  - Kanıt: kullanıcı geri bildirimi; kod okuması (`stock.ts`, `exports.ts`, `cron.ts`,
+    `badge.tsx`, `roles.ts`).
+  - Durum (2026-11-06): geliştirildi, commit edilmedi; `PRD-25`; şema değişikliği yok. Kural tek
+    kaynakta (`stock-levels.ts`, `stock-rules.ts`): stok ≤ 0 "Stok yok", 0 < stok ≤ eşik "Kritik".
+    Panelde "Stok yok" kartı, stok listesinde "Sadece stok yok" süzgeci (Excel aynı koşul). Yeni
+    ürün eşiği 3 (form, API, ürün dosyası, envanter dosyası). Çalışan ürün sayfasındaki dar formla
+    eşiği değiştirir (`product:setThreshold`, `setProductThreshold`). Kanıt: `stock-levels.test.ts`
+    (örnek tablosu; liste, satır bayrağı, zil, panel, kategori, Excel, gün sonu raporu ve e-posta
+    aynı küme; stok yok kümesi; sıralama; varsayılan; çalışan izni, fazla alan, kiracı);
+    `import.test.ts` ve `inventory-runs.test.ts` varsayılan eşik; `role-matrix.test.ts` satır 13;
+    e2e `t244-kritik-stok.spec.ts` (izole, 3/3) ve tam izole e2e 51/51. `dogrula`: "stok > 0"
+    kaldırılınca 6 test, zil eski kurala dönünce 2, varsayılan 0'a dönünce 4, STAFF izni kapanınca
+    7, `.strict()` kaldırılınca 1, STAFF `product:update` açılınca 2 test kırmızı; hepsi geri kondu.
+  - Kalan (açık tutma gerekçesi): toplu manuel kabul testi.
+  - Kapsam dışı: mevcut ürünlere toplu eşik yazma, birime göre varsayılan, eşik değişiklik kaydı
+    (T245), T170.
+  - Bağlı: `PRD-25`, S6, F-07, T245.
+  - Kaynak: kullanıcı geri bildirimi ve T244 PLAN v3 onayı (K1: yalnız yeni ürünler; K2: dar
+    izin; K3: kayıt yok), 2026-11-06.
+
+- [ ] **T243 (P1)** - web - **Giriş / Çıkış formunda "Satın alma" varsayılan seçili; çıkış yanlışlıkla giriş yazılabiliyordu**
+  - Neden: `ReasonGroup` ilk giriş sebebini seçili getiriyordu, odak miktardaydı ve "Satın alma"
+    fiyatsız da kaydediliyor (`resolvePrice` yalnız devirde fiyat ister). Miktar + Enter, satışı
+    giriş olarak yazabiliyordu: 5 adet satış stoğu 5 artırır, fark 10. Başarılı kayıttan sonra form
+    her okutmada yine "Satın alma" ile açılıyordu. Defterde düzeltme akışı yok (T127).
+  - Kanıt: kullanıcı geri bildirimi; kod okuması (`hareket/page.tsx` `ReasonGroup`, `save`
+    yönlendirmesi yalnız `urun/onceki/yeni` taşıyor; `movements.ts` `resolvePrice`).
+  - Durum (2026-11-06): geliştirildi, `development`'a commit edildi; dağıtılmadı; `PRD-24`. Varsayılan
+    seçim kaldırıldı; `required` radyo grubu sebepsiz gönderimi tarayıcıda durduruyor; hata
+    dönüşünde seçim korunuyor; başarılı kayıttan sonra hatırlanmıyor (K1); Atanmamış Stok seçeneği
+    çıkış seçilene kadar gizli. Kanıt: e2e `t243-sebep-secimi.spec.ts` (boş açılış, Enter ve Kaydet
+    stok değiştirmiyor, hata dönüşü SALE ve 999'u koruyor, satış 10 → 7, yeni okutma boş);
+    `movements.test.ts` sebepsiz istek (boş ve hiç olmayan) reddi, stok aynı; `dogrula`: varsayılan
+    geri konunca e2e kırmızı. `t220-depo-hareket.spec.ts` Atanmamış Stok davranışı yeşil.
+  - Kalan (açık tutma gerekçesi): toplu manuel kabul testi.
+  - Kapsam dışı: T127 (ters hareket), T137 (güvenlik başlıkları), adres çubuğundan hata metni
+    üretilmesi bulgusu (kayıtlı değil; ayrı ele alınacak).
+  - Bağlı: `PRD-24`, T236, T220, `PRC-05`.
+  - Kaynak: kullanıcı geri bildirimi ve T243 PLAN/BUILD onayı, 2026-11-06.
+
 Yol haritasının üstü (kullanıcı kararı 2026-10-27, A2 ve CEO-8; 2026-10-22 sırasının üstüne):
 (1) **çok depolu stok ve Envanteri Güncelle** (`PRD-17`, `PRD-18`; F-15): Dilim 1–4 bitti
 (T217–T220); manuel kabul testi U0–U12 geçti (kullanıcı bildirimi, 2026-11-03; T222). T221'in
 değer kısmı kodda, rozeti açık. T171 kabul testi geçti; kalan Lightsail ölçümü. UAT bulguları
-T234–T237. (2) Kullanıcı testinde bulunan eksikler: tek ürün sayım düzeltmesi (T232), eski stoğun depoya
+T234–T237. (2) Kullanıcı testinde bulunan eksikler: tek ürün sayım düzeltmesi (T232, kapandı 2026-11-05), eski stoğun depoya
 atanması (T223) ve depolar arası transfer (T233); Dilim 5'in kalanı (T221 rozeti). (3) Bu kritik yolun dışında
 ve sıraları korunarak: T201 gerçek tedarikçi API'si, sonra T200 Dilim 2; UX iyileştirmeleri uygun
 ürün dilimlerinde (T212–T215, T210, T211), tek bir yeniden tasarım olarak değil. T200 PLAN ve
@@ -60,8 +105,14 @@ işler ve güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
   - Bağlı: `PRC-12`; rozet T217 ve T219'a bağlı. Fiyat gizliliği (INV-10) korunur.
   - Doğrula: fiyatsız stoklu ürün toplamı 0 yapmıyor ve sayıda görünüyor; çalışan alış fiyatı
     türevi bir değer görmüyor.
-  - Durum (2026-11-02): değer kısmı kodda: `7fe8770`, CI #92 yeşil. Kalan: ürün sayfasında
-    "Depoya atama bekliyor" rozeti.
+  - Durum (2026-11-02): değer kısmı kodda: `7fe8770`, CI #92 yeşil.
+  - Durum (2026-11-05): rozet geliştirildi, `development`'a commit edildi; dağıtılmadı. Ürün sayfasında
+    depo dağılımı satırı ve T223 formu zaten vardı; eksik olan listede bulmaktı. Stok listesinde
+    rozet ve süzgeç (`PRD-23` K1), Excel aynı koşulla (`awaitingAssignmentCondition`). Kanıt:
+    `awaiting-assignment.test.ts` 7 test; `dogrula`: deposuz koşulu ve "yalnız artı" koşulu
+    kaldırılınca kırmızı; e2e `t221-atama-bekleyen.spec.ts`. Ölçüm 20.000 ürün / 98.000 hareket:
+    ilk sayfa medyan 66 → 84 ms, süzgeç ~160 ms, süzgeç + kritik + arama ~200 ms.
+  - Kalan (açık tutma gerekçesi): toplu manuel kabul testi (T223/T233 ile).
   - Kaynak: K5, CEO-1, CEO-2, 2026-10-27.
 - [ ] **T222 (P1)** - doküman - **Çok depo Dilim 6: Cuma senaryosu, tam kapılar ve belge senkronu**
   - Kapsam: T171 kabul testiyle birlikte; taze sentetik kiracıda Cuma senaryosu (iki depolu
@@ -77,21 +128,6 @@ işler ve güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
     Kalan, kapanmasını engelleyen tek madde: kullanıcıya yönelik test notu (bilinen sınırlar,
     yanlış dosya düzeltme yolu) yazılmadı.
   - Kaynak: depo bazlı envanter PLAN'ı ve CEO-8, 2026-10-27.
-- [ ] **T232 (P1)** - web - **Ürün detayından manuel stok/sayım düzeltmesi yok; tek ürünün miktarı yalnız dosyayla düzeltilebiliyor**
-  - Neden: sayılan miktarı tek bir ürün için girmenin yolu yok. Sayım düzeltmesi (`COUNT_ADJUST`)
-    yalnız envanter dosyasından yazılıyor: `createMovement`'ın `inventory` seçeneğinin tek çağıranı
-    `packages/core/src/inventory-import.ts`. Kullanıcı ya dosya hazırlıyor ya da "Diğer giriş/çıkış"
-    kullanıyor; ikincisi sayım farkını sıradan harekete karıştırıyor.
-  - Kanıt: kod okuması 2026-10-31 (`movements.ts` `inventory` seçeneği, `reasons.ts` `COUNT_ADJUST_*`
-    elle seçilemiyor); kullanıcı testi bildirimi ("ürünün mevcut stok miktarı kolayca düzeltilemiyor").
-  - Yapılacak (onaylanmadı): ürün sayfasında depo bazında yeni miktar girişi; mevcut `inventory`
-    kapısı (`DAT-24`): beklenen miktar, hedef, `count:approve`, kilit altında `STOCK_CHANGED`.
-    Atanmamış stoklu üründe davranış T223 ile birlikte kararlaştırılır.
-  - Bağlı: `DAT-24`, `PRD-18`, T223, T233, T127, T155.
-  - Doğrula: fark kadar tek `COUNT_ADJUST` hareketi; fark 0'da hareket yok; önizlemeden sonra
-    değişen stokta red (`dogrula`); çalışan düzeltme yapamıyor; defter = projeksiyon.
-  - Kaynak: Faz 0 durum analizi ve kullanıcı testi, 2026-10-31.
-
 - [ ] **T171 (P1)** - import - **Büyük içe aktarma tek istekte uzun sürüyor (2.000 satır devirli 47 sn); kullanıcı hedefi 20.000 satır**
   - Neden: satırlar tek tek, her devir kendi `createMovement` transaction'ında yazılıyor
     (bilinçli: tek yazma kapısı ve satır bazlı hata). Yerel `next start`'ta sorun değil;
@@ -189,8 +225,8 @@ işler ve güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
   - İlerleme (2026-10-28): S4.0 (log döndürme) ve S4.1 (`citech-infra` Caddy yapılandırması,
     yerelde doğrulandı) tamam; sunucuya kurulmadı. Kalan: genel DNS delegasyonunun düzelmesi,
     sunucuda Caddy kurulumu ve XFF'in sunucuda yeniden doğrulanması (runbook L.4).
-  - Durum (2026-11-02, kullanıcı bildirimi): uygulama AWS Lightsail'de çalışıyor; sunucuda çalışan
-    commit doğrulanmadı. Otomatik şifreli S3 yedeği üzerinde çalışma sürüyor; tamamlanmadı.
+  - Durum (2026-11-05, kullanıcı bildirimi): Lightsail'de `7f04c2d` (`stok-web:7f04c2d`) çalışıyor;
+    dağıtım ve canlı UAT `CURRENT_STATE` "Deploy"da. Yedek ve kurtarma kalanı T129'da.
   - Kanıt (ölçüm, ortak Stok + Dosya Sistemi benchmarkı 2026-10-27; Linux container, ortak 2 vCPU,
     `3db7d81`): Stok boşta app ~100–150 MB, PG ~50–130 MB; 3 kullanıcılı normal kullanımda app
     ≤ 370 MB; 3 eşzamanlı Excel'de app kernel bellek tepesi 864 MB; aktarımda PG ≤ 407 MB. İki ürünün
@@ -326,6 +362,9 @@ işler ve güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
     platform loglarında; hata takibi (Sentry vb.) yok. HEALTH_ALARM SMTP'ye bağlı:
     SMTP bozuksa onu haber verecek alarm da gidemiyor. Geri yükleme tatbikatı hiç
     yapılmadı (runbook §7).
+  - Durum (2026-11-05, kullanıcı bildirimi): Lightsail'de şifreli S3 yedeği alınıyor; izole
+    ortamda geri yükleme testleri geçti. Kalan: ayrı S3 okuma hesabıyla kurtarma kontrolü; ilk
+    zamanlanmış günlük yedeğin (5 Kasım 04.30 TSİ) doğrulanması; uptime izleme ve hata takibi.
   - Bağlı: T42.
 
 - [ ] **T167 (P1)** - güvenlik - **Telefon tarama pilotunun tüneli bütün uygulamayı internete açıyor**
@@ -368,7 +407,79 @@ işler ve güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
   - Bağlı: T218, T171, `DAT-23`, F-02.
   - Doğrula: birden çok depolu kiracıda devirli ürün dosyasının önizlemesi devrin yazılmayacağını ve
     Envanteri Güncelle yolunu gösteriyor; tek depolu ve depolu olmayan kiracıda önizleme değişmiyor.
+  - Durum (2026-11-05): geliştirildi, `development`'a commit edildi; dağıtılmadı. Önizleme depo kuralını
+    yazma kapısından alıyor (`implicitDepot` → `resolveDepot`); çok depoda satır uyarısı ve
+    "atlanacak", sonuç `SKIPPED` (yalnız `DEPOT_REQUIRED`); tek depoda depo adı (`PRD-23` K2, K3).
+    Kanıt: `opening-import.test.ts` (çok depo, tek depo, önizlemeden sonra açılan ikinci depo,
+    deposuz kiracı değişmiyor), `inventory-runs.test.ts`; `dogrula`: uyarı ve SKIPPED kaldırılınca
+    kırmızı; e2e `t221-atama-bekleyen.spec.ts`.
+  - Kalan (açık tutma gerekçesi): toplu manuel kabul testi.
   - Kaynak: Faz 0.3.6, UAT bulgusu, 2026-11-03.
+- [ ] **T247 (P2)** - import - **Ürün aktarımı sessiz kayıplar: boş hücre değeri siliyor, okunmayan sütun ve barkod çakışması önizlemede görünmüyor**
+  - Neden: (1) güncellemede boş Kategori, Marka ve Görsel hücresi mevcut değeri siliyordu
+    (`raw.cells.category || null` → `updatePatch`); fiyat ve eşikte boş hücre "dokunma" idi.
+    (2) Eş ad listesinde olmayan sütunlar (ör. "Birim Fiyat", "Ortalama Değer") ve aynı alana
+    eşlenen ikinci başlık sessizce atlanıyordu; önizleme okunan ve okunmayan sütunları
+    göstermiyordu. (3) Başka ürüne ait aktif barkod ve dosyada iki stok koduna verilmiş aynı
+    barkod önizlemeden "eklenecek" diye geçiyor, kayıtta başarısız oluyordu. (4) Güncellemede
+    ürün yazılıp barkod eklenemeyince satır "yazılamadı" görünüyordu; ürün değişmiş oluyordu.
+  - Kanıt: kod okuması (`import.ts` `evaluateRow`, `updatePatch`, `applyRow`;
+    `product-file.ts` `mapColumns`); `import.test.ts` "kayıt sırasında çıkan çakışma" testi
+    önizlemeden önce var olan barkodu kayıtta yakalıyordu. Toplu ürün aktarımı PLAN'ı, 2026-11-06.
+  - Durum (2026-11-06): geliştirildi, commit edilmedi; şema değişikliği yok; K1 kararı: boş hücre
+    korunur (`DAT-28`). (1) Boş Kategori, Marka ve Görsel hücresi güncellemede dokunulmuyor.
+    (2) Okunmayan ve tekrar eden başlıklar önizleme notu; o zaman okunan sütunlar da yazılıyor;
+    yalnız başlıklar sunucuya gidiyor. (3) Başka ürüne ait aktif barkod ve dosyada iki stok koduna
+    verilmiş barkod önizlemede satır hatası (iki yol: tek istek ve kayıtlı aktarım). (4)
+    Güncellemede barkod önizlemeden sonra başkasına geçerse rapor "Ürün bilgisi güncellendi; barkod
+    eklenemedi …" (kayıtlı aktarımda `Çakışma`), devir denenmiyor. Kanıt: `import.test.ts` ve
+    `import-runs.test.ts` yeni testler (K1 iki yolda, sütun notları iki yolda, barkod sahibi,
+    dosya içi aynı barkod, arşivli barkod, kısmi yazım iki yolda); e2e
+    `t247-aktarim-sessiz-kayip.spec.ts` (izole, 3/3); `t171-toplu-aktarim.spec.ts` yeni not metni.
+    `dogrula`: barkod sahibi denetimi kaldırılınca 3, dosya içi barkod denetimi kaldırılınca 1,
+    boş kategori eski davranışa dönünce 2, okunmayan sütun listesi boşalınca 2, kısmi yazım
+    açıklaması kaldırılınca 2 test kırmızı; hepsi geri kondu (`cmp`).
+  - Kalan riskler (bilerek bırakıldı): (a) tek istekli yolda (`commitImport`) kısmi yazım satırı
+    "yazılamadı" sayılıyor, doğru bilgi yalnız mesajda; kayıtlı aktarım "Çakışma" diyor. Ayrı satır
+    durumu migration gerektirirdi. (b) Önizleme ile kayıt arasında başkası barkodu alabilir: önizleme
+    bunu göremez; satır kayıtta başarısız olur ve rapor dürüstçe söyler, ama önizleme sayıları o
+    satır için yanlış kalır.
+  - Kalan (açık tutma gerekçesi): toplu manuel kabul testi.
+  - Kapsam dışı: birim değişikliği (K2), ABD sayı biçimi, çok sayfalı dosya, güncelleme
+    ayrıntısı, performans (T235), ERP fiyatı ve mutabakat (K3, T242), T244–T246.
+  - Bağlı: `PRC-14`, `DAT-28`, F-02, T242, T213.
+  - Kaynak: kullanıcı kararı K1 ve BUILD onayı, 2026-11-06.
+
+- [ ] **T241 (P2)** - import - **ERP ürün dosyasında ikiden fazla ondalıklı fiyat satırı reddediyordu**
+  - Neden: `9,5049` gibi fiyatlar `moneySchema`'nın 2 ondalık kuralına takılıp bütün satırı hata
+    yapıyordu; ürün ne açılıyor ne güncelleniyordu.
+  - Kanıt: kod okuması (`schemas.ts:82–86`, `import.ts` `evaluateRow`); geçmiş kullanıcı bildirimi
+    (30 Ekim ERP testi, 1.268 ürün atlandı; kaynak dosya görülmedi, sayı doğrulanmadı).
+  - Durum (2026-11-06): geliştirildi, `development`'a commit edildi; dağıtılmadı; `PRC-15`. Ürün dosyasında
+    alış ve satış fiyatı kuruşa yarım yukarı (metin/tamsayı, `roundTurkishPriceToCents`); önizlemede
+    hücre sayısı, kaynak → kaydedilecek değer ve ERP farkı notu; 0,00'a inen pozitif fiyat satır
+    hatası. Kanıt: `price-rounding.test.ts` 8, `price-rounding-import.test.ts` 7 test (tek istek ve
+    kayıtlı aktarım yolu; kullanıcı örnekleri, boş hücre, `0`, üst sınır, eksi, belirsiz, devir);
+    `dogrula`: kayan noktalı yuvarlama, sıfır reddi ve hücre sayımı kaldırılınca kırmızı; e2e
+    `birim-ve-devir.spec.ts` PRC-15 senaryosu.
+  - Kalan (açık tutma gerekçesi): toplu manuel kabul testi.
+  - Bağlı: `PRC-12`, `PRC-14`, `PRD-18`, T242.
+  - Kaynak: ERP aktarımı PLAN'ı ve BUILD onayı (B seçeneği), 2026-11-06.
+- [ ] **T242 (P2)** - import - **ERP toplam maliyeti ile uygulamadaki stok değeri farkı açıklanmadı**
+  - Neden: 30 Ekim ERP testinde ERP toplam maliyeti 1.515.714,46 ₺, uygulamadaki değer 40,00 ₺
+    bildirildi. Kaynak dosya ve test anının verisi olmadan neden kesinleştirilemiyor.
+  - Kanıt: geçmiş kullanıcı bildirimi (doğrulanmadı). Kodla doğrulanan mekanizmalar: değer =
+    stok × güncel alış fiyatı, yalnız fiyatı bilinen arşivsiz ürünler (`PRC-12`, `stock.ts:445`);
+    envanter dosyası fiyat yazmaz (`PRD-18`); reddedilen fiyatlı satırlar fiyatsız kalır (T241).
+  - Olası nedenler (kanıt düzeyine göre): fiyatsız ürünler; tanım farkı (ERP büyük olasılıkla
+    Σ `Envanter Tutarı` = miktar × `Ortalama Değer`; maliyet yöntemi `DAT-15` Open); kapsam
+    (malzeme türü, depo, atlanan satır, eksi stok); `Envanter Tutarı (RD)` döviz ve KDV belirsizliği.
+  - Yapılacak: aynı ERP dosyası ve rapor parametreleri (tarih, depo, döviz, değerleme yöntemi)
+    gelince salt okunur mutabakat: dosyada Σ `Envanter Tutarı` depo ve malzeme türüne göre;
+    atlanan satır sayısı; uygulamada fiyatlı/fiyatsız stoklu ürün; örnek ürünlerde miktar ve fiyat.
+    Gerçek veri repoya, fixture'a ve loglara girmez.
+  - Bağlı: T241, `PRC-12`, `DAT-15`, `PRD-18`.
+  - Kaynak: ERP aktarımı PLAN'ı, 2026-11-06.
 - [ ] **T235 (P2)** - import - **20.000 satırlık devirli aktarım ~25 dk sürüyor; sekme bu süre boyunca açık kalmalı**
   - Neden: satırlar tek yazma kapısından (`createMovement`) birer birer yazılıyor (`ARC-15`); süre
     satır sayısıyla doğrusal. Sekme kapanırsa aktarım durur (yeniden yükleme güvenli, `DAT-18`).
@@ -392,6 +503,12 @@ işler ve güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
   - Bağlı: T220, `PRD-17`, `DAT-23`.
   - Doğrula: girişte seçenek yok; çıkışta var; sunucu reddi korunuyor (koruma kaldırılmadan yalnız
     arayüz değişiyor).
+  - Durum (2026-11-05): geliştirildi, `development`'a commit edildi; dağıtılmadı. `unassigned-option.tsx`:
+    giriş sebebinde gizli ve `disabled`, çıkıştan girişe geçince seçim temizleniyor; sunucu reddi
+    yerinde (`depots.test.ts`). Kanıt: e2e `t220-depo-hareket.spec.ts` (arayüzden giriş + Atanmamış
+    yolu artık yok; test "girişte seçilemiyor, çıkışta çalışıyor"a döndü); `dogrula`: gizleme ve
+    temizleme kaldırılınca e2e kırmızı.
+  - Kalan (açık tutma gerekçesi): toplu manuel kabul testi.
   - Kaynak: Faz 0.3.6, UAT bulgusu, 2026-11-03.
 - [ ] **T237 (P2)** - web - **Depo seçiminden önceki davranışı anlatan uyarı metinleri güncel değil**
   - Neden: Envanteri Güncelle ekranı "depo seçimi eklenene kadar Giriş / Çıkış ekranından el ile
@@ -403,7 +520,23 @@ işler ve güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
     yalnız eskiyen cümleleri düzeltmek.
   - Bağlı: T219, T220, T234.
   - Doğrula: tarama listesi; düzeltilen ekranlar tarayıcıda (`demo-testi`).
+  - Durum (2026-11-05): geliştirildi, `development`'a commit edildi; dağıtılmadı. Tarama (arayüz metinleri
+    ve kod yorumları, `apps/web/src`, `packages/*/src`): eskiyen 3 metin. Envanter ekranı uyarısı
+    (depo seçimi cümlesi kalktı), envanter satırı notu ve `STOCK_CHANGED` metni (ikisi yalnız
+    yöneticiye; ürün sayfasından depoya atama yolu eklendi, `PRD-23` K4). Kod yorumlarında eskiyen
+    yok. Tarayıcı kontrolü izole e2e ile (envanter ekranı t219/t221 akışlarında açılıyor).
+  - Kalan (açık tutma gerekçesi): toplu manuel kabul testi.
   - Kaynak: Faz 0.3.6, UAT bulgusu, 2026-11-03.
+- [ ] **T238 (P3)** - operasyon - **Lightsail'deki canlı UAT test ürünleri temizlenmedi**
+  - Neden: 2026-11-05 canlı UAT'ında barkodlu ve barkodsuz iki test ürünü ve açılış devirleri
+    (2 adet) yazıldı. Ortam staging/demo (`OPS-14`), ama sentetik veri birikirse gerçek veriyle
+    karışabilir.
+  - Sınır: defter append-only (INV-1); hareket silinmez. Temizlik yöntemi (ürünü pasifleştirme,
+    düzeltme hareketi ya da ortamı sıfırlama) kullanıcı kararıdır. Sıfırlama veri siler: onaysız
+    yapılmaz.
+  - Bağlı: T228, T144.
+  - Doğrula: seçilen yöntemden sonra test ürünleri listede yok ya da pasif; defter = projeksiyon.
+  - Kaynak: canlı UAT, 2026-11-05.
 - [ ] **T230 (P2)** - altyapı - **`next build` derleme anında Google Fonts'a bağımlı; ağ aksarsa derleme düşüyor**
   - Neden: `apps/web/src/app/layout.tsx` yazı tiplerini `next/font/google` ile alıyor; Next
     derlemede dosyaları fonts.gstatic.com'dan indiriyor. İndirme aksayınca Turbopack yanıltıcı
@@ -419,6 +552,11 @@ işler ve güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
     CI #102 (`3297af9`, `development` push, 2026-11-03): ilk denemede bu kez Windows işinin "Web
     derlemesi" adımı düştü, diğer iki iş geçti; yeniden çalıştırmada yeşil. Commit uygulama kodunu
     değiştirmiyordu. Hata metni okunamadı; bu sorunla aynı olduğu kanıtlanmadı.
+    CI #128 (`d72e7f4`, `development` push, 2026-11-06): ilk denemede yalnız "typecheck + test"
+    işinin "Web derlemesi" adımı düştü; aynı denemede demo ve Windows işleri derledi, aynı işte
+    lint, typecheck ve testler geçti. Yeniden çalıştırmada (deneme 2) üç iş de yeşil; kaynak
+    değişmedi. Hata notu yalnız "exit code 1"; günlük kimlik doğrulamasız okunamadı (HTTP 403).
+    Bu sorunla aynı olduğu kanıtlanmadı.
   - Yapılacak: seçenekleri değerlendir: yazı tiplerini depoya alıp `next/font/local` kullanmak
     (ağ bağımlılığı kalkar, görünüm aynı kalmalı) ya da derlemeyi yeniden denemek. Görsel
     değişiklik olduğu için tarayıcıyla kontrol gerekir.
@@ -439,26 +577,54 @@ işler ve güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
     görüldü: "depoya atanmamış eski stok depoya taşınamıyor" (2026-10-31).
   - Doğrula: atama sonrası `current_stock` aynı, depolar doğru; atanmamışı aşan atama reddi
     (`dogrula`); defter = projeksiyon.
+  - Durum (2026-11-05): geliştirme tamamlandı, `development`'a commit edildi; dağıtılmadı. Kararlar
+    `DAT-26` (iki yazma kapısı, DAT-02'nin yerine), `DAT-27` (transfer modeli), `PRD-21` (arayüz);
+    migration 0016. Kanıt: `transfers.test.ts` 13 test (kısmi/tam atama, yetersiz ve eksi kaynak,
+    yetki, kiracı, kilit altında araya giren çıkış, sıralı ve eşzamanlı çift gönderim, atomiklik,
+    DB CHECK, göstergeler, tam atamadan sonra T232); `dogrula` 7 korumada kırmızı; izole E2E 44/44
+    (`t223-depoya-atama.spec.ts` dahil). Eski sürüm uyumluluğu ölçüldü: transfer satırından sonra
+    0016 öncesi web imajı panel/hareketler/Excel'de hata veriyor (runbook L.3 geri dönüş sınırı).
+  - Kalan (açık tutma gerekçesi): manuel kabul testi (K1–K10, izole `stok_test_e2e_t223`);
+    kullanıcı kararıyla ertelendi, T233'le birlikte yapılacak (2026-11-05).
   - Kaynak: depo bazlı envanter PLAN'ı (S2), 2026-10-27.
 - [ ] **T233 (P2)** - core - **Depolar arası stok transferi yok**
   - Neden: malı bir depodan ötekine tek işlemde taşımanın yolu yok. Bugün iki ayrı hareket
     gerekiyor (çıkış + giriş); aralarında toplam stok yanlış görünür ve iki satır birbirine bağlı
     değil. Sebep listesinde transfer yok (`packages/shared/src/reasons.ts`).
   - Kanıt: kod okuması 2026-10-31 (`movements.ts`, `reasons.ts`); kullanıcı testi bildirimi.
-  - Yapılacak (onaylanmadı): T223'ün onaylı deseni (tek transaction'da kaynaktan −q, hedefe +q;
-    elle seçilemeyen sebep çifti; toplam değişmez, INV-1). T223 ve T233 tek çekirdekle
-    tasarlanmalı: atama, atanmamıştan bir depoya transferdir. Belge/not alanı kullanıcı kararı.
+  - Kapsam (onaylı, 2026-11-05): T223'ün `transferStock` çekirdeği genişletildi (kaynak depo
+    kimliği; kaynak ≠ hedef; hedef her zaman gerçek depo; kaynak yeterliliği yalnız kaynak depoda,
+    kilit altında). Arayüz ürün sayfasında, yalnız yönetici; not isteğe bağlı, belge no yok (`PRD-22`).
   - Bağlı: T223, T232, `PRD-17`, `DAT-21`, `DAT-23`, INV-9 (yeni sebepler tek kaynaktan).
   - Doğrula: kaynak depo yetmezse red; toplam `current_stock` aynı, iki depo doğru; iki satır
     aynı transfer kimliğiyle bağlı; yarıda kalan transfer yok (`dogrula`).
+  - Durum (2026-11-05): geliştirme tamamlandı, `development`'a commit edildi; dağıtılmadı; yeni
+    migration yok. Kanıt: `transfers.test.ts` T233 bölümü 12 test (kısmi/tam, aynı kaynak-hedef
+    reddi, toplam yetse de kaynak depo yetersiz ve eksi kaynak, yetki ve kiracı, sıralı ve eşzamanlı
+    çift gönderim, aynı kaynaktan eşzamanlı iki transfer, kilit altında araya giren çıkış,
+    atomiklik ve defter = projeksiyon, T223 atamasıyla birlikte, göstergeler); `dogrula` 4
+    korumada kırmızı; e2e `t233-depo-transferi.spec.ts` (izole `stok_test_e2e_t233`, tüm paket 45/45).
+  - Kalan (açık tutma gerekçesi): manuel kabul testi; kullanıcı kararıyla ertelendi, T223'le
+    birlikte yapılacak.
   - Kaynak: Faz 0 durum analizi ve kullanıcı testi, 2026-10-31.
+- [ ] **T239 (P3)** - core - **Eksi atanmamış stok depoya atanamıyor ve düzeltilemiyor**
+  - Neden: eski, eksiye izin verilmiş bir çıkış (`allowNegative`) depolu işletmede atanmamış kovayı
+    eksiye düşürmüş olabilir. Atama eksi miktarı taşıyamaz (`DAT-27`); sayım düzeltmesi atanmamış
+    stok varken kapalı (`DAT-24`); normal giriş depolu işletmede bir depoya yazılır, kovayı
+    düzeltmez. Ürün sayfası yalnız durumu anlatıyor (`PRD-21`).
+  - Kanıt: kod okuması ve `transfers.test.ts` "yetersiz ve eksi kaynak" (2026-11-05). Gerçek veride
+    var olup olmadığı ölçülmedi.
+  - Yapılacak (onaylanmadı): önce gerçek veride ölçmek; sonra çözüm için ürün kararı (ör. kovayı
+    sıfırlayan, elle seçilemeyen bir düzeltme). Çözüm T223 kapsamında değil.
+  - Bağlı: T223, T232, `DAT-08`, `DAT-23`, INV-1.
+  - Kaynak: T223 BUILD onayı, ek koşul 1, 2026-11-05.
 - [ ] **T224 (P2)** - core - **Çok depo Dilim 8: fiyat geçmişi, ardından isteğe bağlı toplu satış fiyatı güncellemesi**
   - Neden: `PRC-13` onaylı ama ürün fiyatı yerinde güncelleniyor, geçmiş yok; geçmiş olmadan
     toplu değişiklik eski fiyatları geri dönülmez biçimde kaybettirir.
   - Kapsam: önce yalnız ekleme yapılan fiyat değişikliği kaydı (ürün, alan, eski, yeni,
     kullanıcı, zaman, kaynak), `patchProduct` içinde yazılır; sonra toplu satış fiyatı (`PRC-13`).
-    Aynı dilimde karar: ürün aktarımında boş satış/alış fiyatı hücresi bugün mevcut fiyatı
-    siliyor (`import.ts:307-308`); `PRC-13`'ün "boş satır fiyatı silmez" kuralıyla çelişiyor.
+    Boş fiyat hücresi kararı verildi ve ayrı uygulandı (2026-11-05, `PRC-14`): boş hücre mevcut
+    fiyatı silmiyor. Bu iş açık: fiyat geçmişi ve toplu satış fiyatı kalıyor.
   - Bağlı: `PRC-13`, F-02, F-04. Cuma için zorunlu değil.
   - Kaynak: depo bazlı envanter PLAN'ı §3.6, 2026-10-27.
 - [ ] **T225 (P2)** - core - **Çok depo Dilim 9: dosyayla toplu mal kabulü (Stoğa Ekle)**
@@ -746,6 +912,39 @@ işler ve güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
 
 ## P3
 
+- [ ] **T246 (P3)** - db - **Demo seed çıktısındaki "Kritik seviyedeki ürün" sayısı uygulamanın kuralından farklı**
+  - Neden: `packages/db/src/seed.ts:583` `cs.qty < p.min_stock` sayıyor; uygulama `PRD-25` ile
+    0 < stok ≤ eşik sayıyor (eşiğe eşit ürün kritik, stoğu biten değil). Yalnız kurulum konsol
+    çıktısı; ekran ve e-posta etkilenmiyor. `@stok/db` core'daki kuralı içe aktaramıyor (katman yönü).
+  - Kanıt: kod okuması, T244 BUILD sırasında (2026-11-06).
+  - Doğrula: seed çıktısındaki sayı, aynı veride paneldeki "Kritik seviyede" sayısına eşit olmalı.
+  - Kaynak: T244 BUILD, 2026-11-06.
+
+- [ ] **T245 (P3)** - core - **Ürün alanlarındaki değişikliklerin (kritik eşik dahil) kim/ne zaman kaydı yok**
+  - Neden: şemada ürün değişiklik geçmişi (audit) tablosu yok. T244 ile çalışan da kritik eşiği
+    değiştirebiliyor; eşiği kimin ne zaman değiştirdiği izlenemiyor. Yönetici düzenlemeleri de
+    bugün kaydedilmiyor. Eşik stok defterini değiştirmez, yalnız uyarıyı etkiler; bu yüzden P3.
+  - Kanıt: `packages/db/src/schema.ts` içinde audit tablosu yok; `patchProduct` ve
+    `setProductThreshold` yalnız `products` satırını güncelliyor.
+  - Bağlı: T244 (K3: kayıt tutulmasın kararı), `PRD-25`.
+  - Doğrula: değişiklik kaydı eklenirse çalışan eşik değişikliği kullanıcı ve zamanla görünmeli.
+  - Kaynak: T244 PLAN v3, K3 kararı, 2026-11-06.
+
+- [ ] **T240 (P3)** - ci - **`db-reset.test.ts` dry-run senaryoları yük altında bir kez kırmızı yandı; nedeni bilinmiyor**
+  - Neden: yerel kapıda iki "dry-run reddeder ve kesinti yapmaz" senaryosu (large object; demo
+    dışı kiracı) kırmızı yandı. Tekrarlanırsa ve nedeni test değil koruma ise, `db:reset`'in
+    reddetmesi gereken bir durumu yük altında kaçırması anlamına gelir (veri kaybı yolu); bu
+    yüzden "kararsız test" diye geçilmiyor (T109 dersi).
+  - Kanıt: 2026-11-06 ~00:35, tam `pnpm test` koşusu, izole tam E2E'nin hemen ardından (yük
+    altında). Tek başına `db-reset.test.ts` 33/33, `@stok/db` paketi yeniden 327/327 yeşil. Hata
+    mesajı yakalanmadı; neden doğrulanmadı (tahmini: Docker izole projesinin süre/kaynak sınırı).
+    Senaryo `packages/db/src/db-reset.test.ts:298`.
+  - Bağlı: T207 (yük altında core invariant zaman aşımı), T122 (aynı koşudaki cron kırmızısı,
+    saat dilimi; bununla ilgisiz).
+  - Doğrula: tekrar görülürse tam hata çıktısını sakla; zaman aşımı mı, beklenmeyen kabul mü
+    ayır. Beklenmeyen kabul ise P0'a yükselt.
+  - Kaynak: T221/T234/T236/T237 BUILD kapıları, 2026-11-06.
+
 - [ ] **T226 (P3)** - core - **Depo arşivleme ve yeniden adlandırma yok; depoyu kimin açtığı izlenmiyor**
   - Neden: dosyadaki yanlış bir `Ambar` değeri kalıcı bir depo açar; Dilim 1–3'te depo silme,
     arşivleme ve yeniden adlandırma yok (`DAT-21`). Depo satırında açan kullanıcı tutulmuyor.
@@ -973,7 +1172,8 @@ değil. Kayıtlarda "Ürün kararı" onaylı kapsamdır; "Teknik not" henüz ona
   eşik `products.min_stock` (`packages/db/src/schema.ts:157-158`, ürün formunda "Kritik eşik"),
   kritik liste `/stok?kritik=1`, panel uyarısı ve "Kritik stok" listesi
   (`apps/web/src/app/(panel)/panel/page.tsx:65-80,286-297`), bildirim zili (`alert-bell.tsx`),
-  kritik stok e-postası (`packages/core/src/cron.ts:283`). Açık kalan: T170.
+  kritik stok e-postası (`packages/core/src/cron.ts:283`). Açık kalan: T170. Not (2026-11-06):
+  kritik kuralı T244 ile değişti; stoğu biten ürün "Stok yok" bölümünde, kritik sayılmıyor (`PRD-25`).
 - Değerlendirilecek: T178 (seri barkod okutma). Mevcut hâli yeterli, iş açılmadı: barkoddan
   hızlı ürün tanımlama.
 - Ertelendi: T179 (tükenme tahmini), T180 (geçmiş tarihli stok), T181 (web'de PIN geçişi), T156
@@ -1077,6 +1277,20 @@ FIFO maliyet.
 
 _(Bu dosyada açılıp kapanan görevler buraya iner. T1–T119'un kapanış kayıtları arşivde.)_
 
+- [x] **T232 (P1)** - web - **Ürün detayından manuel stok/sayım düzeltmesi yok; tek ürünün miktarı yalnız dosyayla düzeltilebiliyor**
+  - Neden: sayılan miktarı tek ürün için girmenin yolu yoktu; `COUNT_ADJUST` yalnız envanter
+    dosyasından yazılıyordu, kullanıcı "Diğer giriş/çıkış"la sayım farkını sıradan harekete karıştırıyordu.
+  - Kapandı (2026-11-05, kullanıcı kabulü): ürün sayfasında "Stoğu düzelt (sayım)" (`PRD-20`); kapı
+    `DAT-24`, deposuz işletmede hedef toplam stok. Kanıt: `depots.test.ts` "deposuz envanter düzeltmesi"
+    (eski miktarla red, çift gönderimde tek hareket, fark 0 ve çalışan reddi, depolu işletmede boş depo
+    reddi, depo oluşturmayla yarışta çift sayım yok); `dogrula`: boş depo koruması, atanmamış stok
+    kontrolü ve beklenen miktar karşılaştırması kaldırılınca ilgili testler kırmızı; E2E
+    `t232-stok-duzeltme.spec.ts` (depolu kısım izole veritabanında ve CI'da). Manuel kabul testi
+    (kullanıcı, izole `stok_test_e2e_t232`, 2026-11-05): U1–U6 ve U8–U10 geçti; isteğe bağlı U7
+    (hızlı çift tıklama) yapılmadı, çift gönderim yalnız otomatik testle kanıtlı.
+  - Açık kalan: depolu işletmede atanmamış stoklu üründe düzeltme kapalı; depoya atama T223.
+  - Kaynak: Faz 0 durum analizi ve kullanıcı testi, 2026-10-31.
+
 - [x] **T195 (P3)** - altyapı - **`wait-for-db.mjs` imajın geçici init sunucusunu "hazır" sayabilir**
   - Neden: Docker kipinde betik kapsayıcının içinden `pg_isready` (Unix soketi) ve host'tan TCP
     portuna bakıyor. Taze volume'de imajın `docker-entrypoint.sh`'ı `db/init/*.sql`'i
@@ -1097,6 +1311,9 @@ _(Bu dosyada açılıp kapanan görevler buraya iner. T1–T119'un kapanış kay
     up`, Windows Docker Desktop'ta da). Bilerek değişmeyenler (kullanıcı kararı): `backup.test.ts`'teki
     `waitForQuery` korunuyor; geliştirme `docker-compose.yml` sağlık kontrolü hâlâ soketten soruyor
     (hiçbir betik o durumu beklemiyor, bugün etkisiz; hizalanması ayrı iş).
+  - Canlı (2026-11-05, kullanıcı bildirimi): düzeltme `7f04c2d` ile Lightsail'de; konteynerler
+    healthy. Değişen betik yalnız geliştirme ve CI yolunda koşuyor; üretim compose kendi sağlık
+    kontrolünü kullanıyor. Bu yüzden canlıda ayrıca doğrulanacak davranış yok.
   - Kaynak: WS-1.3a CI #72 analizi, 2026-10-16; CI #113, 2026-11-04.
 
 - [x] **T228 (P2)** - import - **Ürün aktarımında barkodu isteğe bağlı yapmak: barkodsuz yeni satırın Açılış Stoğu sessizce düşüyor**
@@ -1115,6 +1332,9 @@ _(Bu dosyada açılıp kapanan görevler buraya iner. T1–T119'un kapanış kay
     ve XLSX dahil); `dogrula` üç korumayı kaldırınca 8, 8 ve 2 test kırmızı. Manuel kabul testi
     (kullanıcı, yerel demo, 2026-11-04): barkodsuz ürün oluştu, devir 7 adet yazıldı, aynı dosyanın
     tekrarı ikinci devir yazmadı, stok koduyla 2 adet çıkış 7 → 5.
+  - Canlı UAT (kullanıcı, Lightsail, `7f04c2d`, 2026-11-05): barkodlu ve barkodsuz iki ürün
+    aktarıldı, açılış stoğu 2 adet. Aynı CSV'nin tekrarı yeni ürün ve mükerrer devir üretmedi; stok
+    2 adette kaldı. Test ürünleri temizlenmedi (T238).
   - Kaynak: CEO Review bulgu 4 ve CEO-4, 2026-10-27; 30 Ekim 2026 ERP testi (3.541 barkodsuz satır).
 
 - [x] **T218 (P1)** - core - **Çok depo Dilim 2: envanter dosyası aktarımı ve ilk kurulum (arayüz yok)**

@@ -1,6 +1,12 @@
-import { AppError, type Unit, listStockSchema } from '@stok/shared'
+import {
+  AppError,
+  type Unit,
+  isCriticalStock,
+  listStockSchema,
+  transferReasonsSqlList,
+} from '@stok/shared'
 import { type Db, currentStock, depots, locations, products, stockMovements, withTenant } from '@stok/db'
-import { and, asc, eq, isNull, or, sql } from 'drizzle-orm'
+import { and, asc, eq, inArray, isNull, or, sql } from 'drizzle-orm'
 import {
   type Actor,
   actorCan,
@@ -10,6 +16,7 @@ import {
 } from './authz'
 import { lookupBarcode } from './movements'
 import { parseScaled, scaledToNumber } from './numeric'
+import { criticalStockCondition, outOfStockCondition } from './stock-rules'
 import { parseOrThrow } from './validate'
 
 /**
@@ -43,18 +50,27 @@ export interface StockRow {
   unit: Unit
   qty: number
   minStock: number
-  /** Miktar kritik eşiğin altında mı. Sunucu hesaplıyor: iki ayrı yerde
-   *  hesaplanırsa tablo ile uyarı sayacı ayrışır. */
+  /** Stok 0'dan büyük ve kritik eşiğe eşit ya da altında mı (T244). Sunucu
+   *  hesaplıyor: iki ayrı yerde hesaplanırsa tablo ile uyarı sayacı ayrışır. */
   critical: boolean
   locationCode: string | null
   lastMovementAt: Date | null
   purchasePrice?: number | null
   salePrice?: number | null
   archivedAt: Date | null
+  /**
+   * Depolu işletmede üründe deposu bilinmeyen ARTI eski stok var: "Depoya atama
+   * bekliyor" (T221, PRD-17). Deposuz işletmede her zaman `false`: orada bütün
+   * stok depo bilgisi olmadan tutuluyor ve bu bir bekleyen iş değil. Eksi
+   * atanmamış stok atanamıyor (T239); rozet de çıkmıyor.
+   */
+  awaitingAssignment: boolean
 }
 
 export interface StockPage {
   rows: StockRow[]
+  /** İşletmede en az bir depo var mı; atama süzgeci yalnız o zaman anlamlı (T221). */
+  usesDepots: boolean
   /** Toplam eşleşen satır. Sayfalama arayüzü bunu gösteriyor. */
   total: number
   limit: number
@@ -65,6 +81,24 @@ export interface StockOptions {
   db?: Db
 }
 
+/**
+ * "Depoya atama bekliyor" süzgeci (T221): depolu işletmede deposu bilinmeyen
+ * ARTI eski stoğu olan ürünler. Stok listesi ve Excel dışa aktarımı BU koşulu
+ * kullanıyor; iki yerde ayrı yazılsaydı ekranda 12 ürün görüp Excel'de 13 almak
+ * mümkün olurdu. Deposuz işletmede hiçbir ürün eşleşmiyor: orada atanmamış stok
+ * normal stok, bekleyen bir iş değil. Alt sorgu ilişkisiz ve adları elle
+ * nitelenmiş: ilişkili alt sorguda nitelenmemiş sütun alt sorgunun kendi
+ * tablosuna çözülüyordu (`import.ts`, findExistingProducts notu).
+ */
+export function awaitingAssignmentCondition(tenantId: string) {
+  return sql`EXISTS (SELECT 1 FROM depots WHERE depots.tenant_id = ${tenantId})
+    AND ${products.id} IN (
+      SELECT stock_movements.product_id FROM stock_movements
+       WHERE stock_movements.tenant_id = ${tenantId} AND stock_movements.depot_id IS NULL
+       GROUP BY stock_movements.product_id
+      HAVING SUM(stock_movements.delta) > 0)`
+}
+
 function whereClause(actor: Actor, q: ReturnType<typeof parseListStock>) {
   const search = q.search?.trim()
   return and(
@@ -72,7 +106,10 @@ function whereClause(actor: Actor, q: ReturnType<typeof parseListStock>) {
     q.productId ? eq(products.id, q.productId) : undefined,
     q.includeArchived ? undefined : isNull(products.archivedAt),
     q.category ? eq(products.category, q.category) : undefined,
-    q.onlyCritical ? sql`COALESCE(${currentStock.qty}, 0) <= ${products.minStock}` : undefined,
+    q.onlyCritical ? criticalStockCondition() : undefined,
+    q.onlyOutOfStock ? outOfStockCondition() : undefined,
+    // Sayım ve sayfa aynı koşulu kullanıyor (bu fonksiyon); süzgeç sayfalamadan önce.
+    q.awaitingAssignment ? awaitingAssignmentCondition(actor.tenantId) : undefined,
     // Arama HEM ada HEM stok koduna bakıyor: admin barkod okuyucuyu klavye
     // gibi kullanıyor ve okuttuğu şey çoğu zaman koddur.
     search
@@ -132,7 +169,8 @@ export async function listStock(
         .leftJoin(locations, eq(locations.id, products.locationId))
         .where(whereClause(actor, q))
         // Kritik olanlar önce: patronun ekrana bakınca sorduğu ilk soru
-        // "bir sorun var mı" (PLAN.md Bölüm 11).
+        // "bir sorun var mı" (PLAN.md Bölüm 11). Stoğu bitenler hemen ardından
+        // (T244): kritik sayılmıyorlar ama sipariş listesinin parçası.
         //
         // İkincil sıra `name` değil `name_norm`: veritabanı collation'ı
         // `C.UTF-8` (CI ve yerel container) ve orada sıralama BAYT
@@ -141,11 +179,35 @@ export async function listStock(
         // `name_norm` zaten `tr_norm(name)` ile üretilmiş stored generated
         // column, yani bedava ve collation'dan bağımsız.
         .orderBy(
-          sql`(COALESCE(${currentStock.qty}, 0) <= ${products.minStock}) DESC`,
+          sql`${criticalStockCondition()} DESC`,
+          sql`${outOfStockCondition()} DESC`,
           asc(products.nameNorm),
         )
         .limit(q.limit)
         .offset(q.offset)
+
+      // Rozet yalnız bu sayfanın ürünleri için, tek sorguyla (T221). Deposuz
+      // işletmede sorgu hiç çalışmıyor.
+      const [anyDepot] = await tx.select({ id: depots.id }).from(depots).where(eq(depots.tenantId, actor.tenantId)).limit(1)
+      const awaiting = new Set<string>()
+      if (anyDepot && rows.length > 0) {
+        const pending = await tx
+          .select({ productId: stockMovements.productId })
+          .from(stockMovements)
+          .where(
+            and(
+              eq(stockMovements.tenantId, actor.tenantId),
+              isNull(stockMovements.depotId),
+              inArray(
+                stockMovements.productId,
+                rows.map((r) => r.productId),
+              ),
+            ),
+          )
+          .groupBy(stockMovements.productId)
+          .having(sql`SUM(${stockMovements.delta}) > 0`)
+        for (const p of pending) awaiting.add(p.productId)
+      }
 
       const mapped: StockRow[] = rows.map((r) => {
         const qty = r.qty === null ? 0 : scaledToNumber(parseScaled(r.qty))
@@ -160,10 +222,11 @@ export async function listStock(
           unit: r.unit as Unit,
           qty,
           minStock,
-          critical: qty <= minStock,
+          critical: isCriticalStock(qty, minStock),
           locationCode: r.locationCode,
           lastMovementAt: r.lastMovementAt,
           archivedAt: r.archivedAt,
+          awaitingAssignment: awaiting.has(r.productId),
         }
         if (canSeePrices(actor.role)) {
           row.purchasePrice = r.purchasePrice === null ? null : Number(r.purchasePrice)
@@ -172,7 +235,13 @@ export async function listStock(
         return row
       })
 
-      return { rows: mapped, total: Number(countRow?.n ?? 0), limit: q.limit, offset: q.offset }
+      return {
+        rows: mapped,
+        usesDepots: anyDepot !== undefined,
+        total: Number(countRow?.n ?? 0),
+        limit: q.limit,
+        offset: q.offset,
+      }
     },
     options.db,
   )
@@ -332,8 +401,8 @@ export interface AlertSummary {
  * sorgularını koşturmak olurdu.
  *
  * Kritik sayımı `listStock(onlyCritical)` ve `dashboardSummary` ile AYNI
- * karşılaştırmayı kullanıyor (`COALESCE(qty,0) <= min_stock`). Üçü ayrı
- * yazılsaydı zil "3" derken tablo iki satır gösterebilirdi.
+ * koşulu kullanıyor (`criticalStockCondition`, T244). Üçü ayrı yazılsaydı zil
+ * "3" derken tablo iki satır gösterebilirdi. Stoğu biten ürün zile girmiyor.
  */
 export async function alertSummary(
   actor: Actor,
@@ -351,7 +420,7 @@ export async function alertSummary(
           LEFT JOIN current_stock cs
                  ON cs.tenant_id = p.tenant_id AND cs.product_id = p.id
          WHERE p.archived_at IS NULL
-           AND COALESCE(cs.qty, 0) <= p.min_stock
+           AND ${criticalStockCondition(sql`cs.qty`, sql`p.min_stock`)}
       `)
 
       const summary: AlertSummary = { criticalCount: Number(critical?.n ?? 0) }
@@ -445,7 +514,7 @@ export async function categorySummary(
         SELECT NULLIF(btrim(p.category), '')                          AS value,
                count(*)::text                                          AS products,
                count(*) FILTER (
-                 WHERE COALESCE(cs.qty, 0) <= p.min_stock
+                 WHERE ${criticalStockCondition(sql`cs.qty`, sql`p.min_stock`)}
                )::text                                                 AS critical,
                COALESCE(SUM(COALESCE(cs.qty, 0)), 0)::text             AS qty,
                ${VALUE_SQL}::text                                      AS value_sum,
@@ -591,7 +660,7 @@ export async function dashboardSummary(
           and(
             eq(products.tenantId, actor.tenantId),
             isNull(products.archivedAt),
-            sql`COALESCE(${currentStock.qty}, 0) <= ${products.minStock}`,
+            criticalStockCondition(),
           ),
         )
 
@@ -605,6 +674,8 @@ export async function dashboardSummary(
                SUM(abs(delta))::text                        AS total
           FROM stock_movements
          WHERE created_at >= ${since.toISOString()}::timestamptz
+           -- Depo transferi giriş/çıkış değil, yer değişikliği (T223).
+           AND reason NOT IN ${sql.raw(transferReasonsSqlList())}
            ${scopedUserId ? sql`AND user_id = ${scopedUserId}` : sql``}
          GROUP BY 1
       `)
@@ -686,6 +757,7 @@ export async function dashboardSummary(
           LEFT JOIN stock_movements m
                  ON m.created_at >= g.day
                 AND m.created_at <  g.day + interval '1 day'
+                AND m.reason NOT IN ${sql.raw(transferReasonsSqlList())}
                 ${scopedUserId ? sql`AND m.user_id = ${scopedUserId}` : sql``}
          GROUP BY g.day
          ORDER BY g.day

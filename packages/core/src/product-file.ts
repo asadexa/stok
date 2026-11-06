@@ -161,6 +161,49 @@ export interface ParsedFile {
   columns: ImportField[]
   /** Açılış stoğu sanılabilecek ama okunmayan başlıklar (dosyadaki yazımıyla). */
   ignoredQtyColumns?: string[]
+  /**
+   * Hiçbir alana eşlenmeyen başlıklar, dosyadaki yazımıyla (T247). Yalnız
+   * BAŞLIK gidiyor, hücre değeri değil (envanter dosyasındaki gibi).
+   * `ignoredQtyColumns` bunlara dahil değil: o sütunların kendi uyarısı var.
+   */
+  unreadColumns?: string[]
+  /** Daha önceki bir sütunla aynı alana eşlenen, bu yüzden okunmayan başlıklar (T247). */
+  duplicateColumns?: string[]
+}
+
+/** Önizlemeye gidecek başlık listelerinin sınırı; aktarım kaydı şeması da bunu bekliyor. */
+export const IMPORT_HEADER_LIST_LIMIT = 50
+export const IMPORT_HEADER_TEXT_LIMIT = 200
+
+/**
+ * Okunmayan başlıklar (T247). Eskiden eş ad listesinde olmayan sütun SESSİZCE
+ * atlanıyordu: "Birim Fiyat" ya da "Ortalama Değer" adlı fiyat sütunu olan ERP
+ * dosyası ürünleri fiyatsız açıyor, kullanıcı fiyatın aktarıldığını sanıyordu.
+ * Aynı alana eşlenen ikinci başlık da (iki "Barkod") ilk sütun kazandığı için
+ * okunmuyor; ayrıca listeleniyor ki hangi sütunun alındığı belli olsun.
+ */
+function unmappedHeaders(
+  headers: string[],
+  strict: boolean,
+  columns: Partial<Record<ImportField, number>>,
+  ignoredQty: string[],
+): { unread: string[]; duplicate: string[] } {
+  const used = new Set(Object.values(columns))
+  const unread: string[] = []
+  const duplicate: string[] = []
+  headers.forEach((header, index) => {
+    const text = header.trim()
+    if (text === '' || used.has(index) || ignoredQty.includes(text)) return
+    const key = headerKey(header, strict)
+    const field = (Object.entries(COLUMN_ALIASES) as [ImportField, string[]][]).find(([, aliases]) =>
+      aliases.includes(key),
+    )?.[0]
+    ;(field ? duplicate : unread).push(text.slice(0, IMPORT_HEADER_TEXT_LIMIT))
+  })
+  return {
+    unread: unread.slice(0, IMPORT_HEADER_LIST_LIMIT),
+    duplicate: duplicate.slice(0, IMPORT_HEADER_LIST_LIMIT),
+  }
 }
 
 export interface ProductFileOptions {
@@ -233,11 +276,14 @@ export async function parseProductFile(
   const ignoredQtyColumns = headerRow
     .map((h) => h.trim())
     .filter((h) => AMBIGUOUS_QTY_HEADERS.includes(normalizeHeader(h)))
+  const { unread, duplicate } = unmappedHeaders(headerRow, header.index > 0, columns, ignoredQtyColumns)
 
   return {
     rows,
     headerRowNumber: header.index + 1,
     columns: Object.keys(columns) as ImportField[],
     ignoredQtyColumns,
+    unreadColumns: unread,
+    duplicateColumns: duplicate,
   }
 }

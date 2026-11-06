@@ -54,6 +54,8 @@ import {
   COLUMN_LABELS,
   IMPORT_FIELDS,
   IMPORT_FILE_BYTES_LIMIT,
+  IMPORT_HEADER_LIST_LIMIT,
+  IMPORT_HEADER_TEXT_LIMIT,
   IMPORT_ROW_LIMIT,
   type ImportField,
   type ParsedRow,
@@ -235,6 +237,10 @@ const startSchema = z
     totalRows: z.number().int().min(1).max(IMPORT_ROW_LIMIT),
     columns: z.array(z.enum(IMPORT_FIELDS as [ImportField, ...ImportField[]])).max(IMPORT_FIELDS.length),
     ignoredQtyColumns: z.array(z.string().max(200)).max(50).default([]),
+    // T247: okunmayan ve tekrar eden başlıklar; yalnız BAŞLIK, hücre değeri değil.
+    // Eski istemci göndermiyor: varsayılan boş, not çıkmıyor.
+    unreadColumns: z.array(z.string().max(IMPORT_HEADER_TEXT_LIMIT)).max(IMPORT_HEADER_LIST_LIMIT).default([]),
+    duplicateColumns: z.array(z.string().max(IMPORT_HEADER_TEXT_LIMIT)).max(IMPORT_HEADER_LIST_LIMIT).default([]),
   })
   .refine((v) => v.columns.includes('sku') && v.columns.includes('name'), {
     message: 'Stok Kodu ve Ürün Adı sütunları gerekli',
@@ -266,7 +272,7 @@ export async function startImportRun(
           fileBytes: input.fileBytes,
           totalRows: input.totalRows,
           columns: input.columns,
-          notices: importNotices(input.ignoredQtyColumns),
+          notices: importNotices(input.ignoredQtyColumns, input.columns, input.unreadColumns, input.duplicateColumns),
         })
         .returning({ id: importRuns.id })
       return row!.id
@@ -359,9 +365,23 @@ export interface ImportRunPreview {
   counts: { create: number; update: number; error: number }
   /** Yazılacak açılış stoğu sayısı (devir atlanacak satırlar hariç). */
   openings: number
-  /** Devri atlanacak satır sayısı (üründe hareket var); `warnings` yalnız ilk satırlar. */
+  /**
+   * Devri atlanacak satır sayısı (üründe hareket var ya da işletmede birden
+   * fazla depo var, T234); `warnings` yalnız ilk satırlar.
+   */
   skippedOpenings: number
   notices: string[]
+  /** Tek depolu işletmede devrin yazılacağı depo (T234). */
+  openingDepot?: string
+  /**
+   * Kuruşa yuvarlanacak fiyat HÜCRESİ sayısı (PRC-15). Ürün sayısı değil: aynı
+   * satırda alış ve satış fiyatı birlikte yuvarlanıyorsa iki sayılıyor. Yalnız
+   * yazılacak (hatasız) satırlar; `roundings` ilk satırlar.
+   */
+  roundedPriceCells: number
+  /** Yuvarlanan fiyatı olan satır sayısı; "…ve N satır daha" için (hücre sayısıyla karışmasın). */
+  roundedPriceRows: number
+  roundings: { rowNumber: number; sku: string; name: string; message: string }[]
   /** İlk `IMPORT_SAMPLE_SIZE` hatalı satır; tamamı raporda. */
   errors: { rowNumber: number; sku: string; name: string; issues: { column: string; message: string }[] }[]
   /** Hata olmayan ama söylenmesi gereken satırlar ("devir atlanacak"). */
@@ -459,12 +479,22 @@ export async function finalizeImportPreview(
 
   const errorRows = preview.rows.filter((r) => r.action === 'error')
   const warned = preview.rows.filter((r) => r.warnings?.length)
+  const rounded = preview.rows.filter((r) => r.action !== 'error' && r.roundedPrices?.length)
   return {
     runId,
     counts: preview.counts,
     openings: preview.rows.filter((r) => r.opening && !r.warnings?.length).length,
     skippedOpenings: warned.length,
     notices: run.notices,
+    ...(preview.openingDepot ? { openingDepot: preview.openingDepot } : {}),
+    roundedPriceCells: rounded.reduce((n, r) => n + r.roundedPrices!.length, 0),
+    roundedPriceRows: rounded.length,
+    roundings: rounded.slice(0, IMPORT_SAMPLE_SIZE).map((r) => ({
+      rowNumber: r.rowNumber,
+      sku: r.sku,
+      name: r.name,
+      message: r.roundedPrices!.map((p) => `${p.column}: ${p.from} → ${p.to}`).join('; '),
+    })),
     errors: errorRows.slice(0, IMPORT_SAMPLE_SIZE).map((r) => ({
       rowNumber: r.rowNumber,
       sku: r.sku,

@@ -111,3 +111,22 @@ test('adetli ürüne 0,5 girilemiyor: sebep Türkçe, miktar korunuyor, stok de�
   await expect(page.locator('input[name="miktar"]')).toHaveValue('0,5')
   await expect(page.locator('main')).toContainText('Mevcut stok: 10 adet')
 })
+
+test('4 ondalıklı alış ve satış fiyatı kuruşa yuvarlanıyor; önizleme hücre sayısını ve değerleri gösteriyor (PRC-15)', async ({
+  page,
+}) => {
+  const n = ek()
+  await girisYap(page)
+  await onizle(page, ['Stok Kodu;Ürün Adı;Alış Fiyatı;Satış Fiyatı', `YVR-${n};Yuvarlanan Ürün ${n};9,5049;12,3456`])
+
+  const onizleme = page.locator('section[aria-label="Önizleme"]')
+  await expect(onizleme).toContainText('2 fiyat hücresi kuruşa (2 ondalık) yuvarlanacak')
+  await expect(onizleme).toContainText('Yuvarlama nedeniyle stok değeri ERP’deki tutardan farklı olabilir.')
+  await expect(onizleme).toContainText('Alış Fiyatı: 9,5049 → 9,50; Satış Fiyatı: 12,3456 → 12,35')
+
+  await aktar(page)
+  await page.goto(`/stok?ara=YVR-${n}`)
+  await page.locator('table a[href^="/urunler/"]').first().click()
+  await expect(page.locator('input[name="alis"]')).toHaveValue('9,50')
+  await expect(page.locator('input[name="satis"]')).toHaveValue('12,35')
+})
