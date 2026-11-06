@@ -552,6 +552,11 @@ işler ve güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
     CI #102 (`3297af9`, `development` push, 2026-11-03): ilk denemede bu kez Windows işinin "Web
     derlemesi" adımı düştü, diğer iki iş geçti; yeniden çalıştırmada yeşil. Commit uygulama kodunu
     değiştirmiyordu. Hata metni okunamadı; bu sorunla aynı olduğu kanıtlanmadı.
+    CI #128 (`d72e7f4`, `development` push, 2026-11-06): ilk denemede yalnız "typecheck + test"
+    işinin "Web derlemesi" adımı düştü; aynı denemede demo ve Windows işleri derledi, aynı işte
+    lint, typecheck ve testler geçti. Yeniden çalıştırmada (deneme 2) üç iş de yeşil; kaynak
+    değişmedi. Hata notu yalnız "exit code 1"; günlük kimlik doğrulamasız okunamadı (HTTP 403).
+    Bu sorunla aynı olduğu kanıtlanmadı.
   - Yapılacak: seçenekleri değerlendir: yazı tiplerini depoya alıp `next/font/local` kullanmak
     (ağ bağımlılığı kalkar, görünüm aynı kalmalı) ya da derlemeyi yeniden denemek. Görsel
     değişiklik olduğu için tarayıcıyla kontrol gerekir.
