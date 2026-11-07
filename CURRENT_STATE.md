@@ -4,9 +4,10 @@ Yalnız BUGÜNÜN gerçeği. Her merge'te ya da durum değiştiğinde güncellen
 satırlar silinir (tarihçe git'te). Ayrıntı yazılmaz: işler → `TODOS.md`,
 kararlar → `DECISIONS.md`, model → `PROJECT_BRAIN.md`.
 
-**Tarih:** 2026-11-05 · **Depo:** `KeremGerede/stok` (eski adres `asadexa/stok` GitHub'da
+**Tarih:** 2026-11-06 · **Depo:** `KeremGerede/stok` (eski adres `asadexa/stok` GitHub'da
 yönlendiriliyor) · **Çalışma branch'i:** `development` · **Kararlı dal:** `main` (varsayılan dal).
-`main` = `development` = `7f04c2d` (PR #19, merge commit; CI #116 ve #117 yeşil, üç iş). Dal modeli `OPS-13`: `master` fast-forward ile ilerletilip `main` olarak yeniden
+`main` = `afbf870` (PR #20, merge commit; CI #131 yeşil, üç iş); `development` buna fast-forward
+edildi. Dal modeli `OPS-13`: `master` fast-forward ile ilerletilip `main` olarak yeniden
 adlandırıldı; `development` → `main` PR'ları merge commit ile birleşir. Ruleset'ler: `main` PR, üç zorunlu CI işi, silme ve force-push yasağı; `development`
 silme ve force-push yasağı; `backup/*` silme ve force-push yasağı. Yedek dallar
 `backup/master-pre-migration` (`dac05ff`) ve `backup/development-pre-migration` (`5199069`).
@@ -26,6 +27,10 @@ Dağıtım 2026-11-05 (kullanıcı bildirimi; sunucu bu repodan doğrulanamıyor
 - Canlı UAT: barkodlu ve barkodsuz iki ürün aktarıldı; açılış stoğu 2 adet. Aynı CSV ikinci kez
   aktarıldı: yeni ürün ve mükerrer devir oluşmadı, stok 2 adette kaldı (T228).
 - **Canlı test ürünleri temizlenmedi** (T238).
+- **Sunucuda kayıtlı commit `7f04c2d`, repodaki kilidinde `next@16.3.4` ve `sharp@0.35.4`
+  var:** kritik/yüksek Next.js açıkları (T248). Bu bilgi kullanıcı raporundan ve `7f04c2d` kilit
+  dosyasından geliyor; canlı sunucudaki Next.js ve sharp sürümleri doğrulanmadı. Düzeltme
+  `next@16.4.5`; `afbf870` (0016 dahil) tek başına dağıtılmamalı, T248 ile birlikte dağıtılmalı.
 
 Açık kalanlar: ayrı S3 okuma hesabıyla kurtarma kontrolü ve ilk zamanlanmış günlük yedeğin
 (5 Kasım 04.30 TSİ) doğrulanması (T129); derlemenin Google Fonts bağımlılığı (T230). Sunucuda
