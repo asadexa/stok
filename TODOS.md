@@ -7,7 +7,7 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
 **Kurallar**
 
 - ID `T<n>`. Arşivdeki görevler numaralarını korur. Yeni görev en büyük
-  numaradan devam eder — **sıradaki boş numara: T248**. Numara yeniden
+  numaradan devam eder — **sıradaki boş numara: T250**. Numara yeniden
   kullanılmaz.
 - Biçim: `- [ ] **T<n> (P0–P3)** - <alan> - **Başlık**`. Altında kısa
   **Neden / Kanıt / Bağlı / Doğrula / Kaynak** satırları.
@@ -36,6 +36,30 @@ Gerçek iş listesi. **Güncel durum burada değil** (→ `CURRENT_STATE.md`),
   - Bağlı: T140. Kaynak: devralma denetimi 2026-10-08.
 
 ## P1
+
+- [ ] **T248 (P1)** - güvenlik - **Next.js 16.3.4'teki kritik ve yüksek açıklar: `next@16.4.5`'e yükselt**
+  - Neden: `next@16.3.4` 11 advisory'nin etkilenen sürüm aralığında; uygulamaya etkileri farklı
+    düzeylerde doğrulandı. Bu uygulamada kesin geçerli olan GHSA-p3m5-59mp-jv5r
+    (Server Actions DoS, geçici çözümü yok; 18 dosyada `'use server'`). Dışlanamayan GHSA-2464-fhr4-w9xw
+    (Image Optimization RCE: glibc imaj + `sharp` 0.35.4 + self-hosted `/_next/image`; GHSA-7qx7-33qx-rqx2
+    SVG reddinin aşılabildiğini gösteriyor). `use cache`, `next/og` ve `remotePatterns` kullanılmadığı için
+    GHSA-673q, GHSA-vcvr ve GHSA-cjq9 bu uygulamaya uygulanmıyor. GHSA-7qx7'yi yalnız 16.4.5 kapatıyor.
+  - Kapsam: yalnız `apps/web` `next` `^16.4.5` ve kilit. Kilitte değişen: `next` ve `@next/*` 16.4.5,
+    `sharp` 0.35.5 (`@img/sharp-*`, libvips 1.3.4). React, TypeScript, vitest değişmedi; yapılandırma
+    değişmedi. Diğer bağımlılık açıkları T249'da.
+  - Durum (2026-11-06): geliştirildi, commit edilmedi. Yerel kapılar: lint (izlenen yollar, T206) 268
+    dosya 0 tanı; typecheck (4 paket); test shared 84, db 327, web 191, core 853/854 (tek kırmızı T207,
+    120 sn sınırla 34,4 sn'de geçti); drift "No schema changes"; `next build` 16.4.5 PASS, 29/29 sayfa,
+    `zxing_reader.wasm` çıktıda; Playwright **52/52** (izole `stok_test_e2e_n165`, port 4100). Yerel
+    `docker build --target runtime` (temiz bağlam: `HEAD` + iki dosya) PASS; imajda yalnız
+    `next@16.4.5` ve `sharp@0.35.5`, sharp linux/x64'te yükleniyor (libvips 8.18.7).
+  - Manuel kabul (2026-11-07, kullanıcı bildirimi): M1–M7 geçti; izole `stok_uat_n165`, 16.4.5 derlemesi
+    port 4300. Aktarım ve tedarikçi dosyalarının satır bazında beklentisi `previewImport` ve
+    `previewSupplierRefresh` ile hesaplandı.
+  - Doğrula: CI üç iş yeşil ve "Bağımlılık denetimi" çıktısında `next` ile `sharp` satırları yok;
+    Lightsail'e dağıtım ayrı onayla (runbook L.3; 0016
+    geri dönüş sınırı geçerli). Lightsail 16.3.4 çalıştırıyor (CURRENT_STATE, kullanıcı bildirimi).
+  - Kaynak: GitHub Advisory Database ve `vercel/next.js` depo advisory'leri, 2026-11-06.
 
 - [ ] **T244 (P1)** - core - **Stoğu 0 olan ürün kritik sayılıyordu; "Stok yok" ayrı değildi, çalışan eşiği değiştiremiyordu**
   - Neden: kritik kuralı `COALESCE(qty, 0) <= min_stock` dokuz yerde ayrı yazılıydı. Eşiği 0
@@ -395,6 +419,19 @@ işler ve güvenlik/veri koruma gereklilikleri olduğu gibi geçerli.
     T90'dan önce yapılmalı.
 
 ## P2
+
+- [ ] **T249 (P2)** - güvenlik - **Next.js dışındaki yüksek/kritik bağımlılık açıkları (`pnpm audit`)**
+  - Neden: CI #131 (`afbf870`) "Bağımlılık denetimi" adımı 51 bulgu raporluyor (5 critical, 14 high);
+    adım `continue-on-error`, kimse görmüyor. T248 yalnız `next` ve `sharp` satırlarını kapatıyor.
+  - Çalışma zamanı (`packages/core`): `nodemailer` <9.1.0 (high), `zod` (high),
+    `exceljs > archiver > … > brace-expansion` (high, DoS). Dependabot PR #7 (`nodemailer` 10) ve #8
+    (`zod` 4) büyük sürüm; davranış değişikliği ayrıca incelenmeli.
+  - Yalnız geliştirme (vitest/coverage üzerinden; üretim imajına girdiği doğrulanmadı): `tinypool`
+    (critical ×2), `vite`, `source-map-js`, `brace-expansion`.
+  - Yapılacak: her paket için uygulanabilirlik ve yamalı sürüm; en küçük güvenli yükseltme ya da
+    gerekçeli kabul. Denetim adımının bloklayıcı olup olmayacağı ayrı karar.
+  - Doğrula: CI denetim çıktısında ilgili satırlar yok ya da kabul gerekçesi kayıtlı.
+  - Bağlı: T248, T140. Kaynak: T248 PLAN incelemesi, 2026-11-06.
 
 - [ ] **T234 (P2)** - import - **Ürün aktarımı önizlemesi, çok depolu işletmede yazılamayacak açılış stoğunu yazılacak gibi gösteriyor**
   - Neden: birden çok depolu işletmede devrin deposu bilinmiyor; satır ancak uygulamada
